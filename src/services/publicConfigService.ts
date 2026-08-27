@@ -27,8 +27,8 @@ export interface PublicAppConfig {
 
 const DEFAULT_OFFICIAL_CONFIG: PublicAppConfig = {
   appName: 'HIKMAT TANI',
-  slogan: 'Bijak Bertani, Cerdas Bertani',
-  logoUrl: '/icon.svg',
+  slogan: 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.',
+  logoUrl: '/logo-hikmat-tani-1024.png',
   description: 'Sistem Rekomendasi Budidaya Padi & Catatan Lapang Mandiri 100% Offline untuk Petani Nusantara.',
   supportTitle: 'Dukung HIKMAT TANI',
   supportDescription: 'Inisiatif Mandiri Teknologi Pertanian Padi Nusantara',

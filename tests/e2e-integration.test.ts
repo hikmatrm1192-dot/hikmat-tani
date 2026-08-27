@@ -1,6 +1,6 @@
 /**
  * HIKMAT TANI - END-TO-END INTEGRATION TEST SUITE (LANGKAH 16)
- * Slogan Resmi: "Bijak Bertani, Cerdas Bertani"
+ * Tagline Resmi: "CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN."
  * 
  * Pengujian komprehensif menguji seluruh keterhubungan modul:
  * 1. First-Use Flow (Petani baru lokal -> Lahan -> Musim -> Beranda Context)
@@ -596,7 +596,7 @@ export async function runE2EIntegrationTests(): Promise<{
   // 11. DONATION & OFFICIAL ADMIN CONFIG FLOW
   // =========================================================================
   await test('11. Donation Flow: Konfigurasi resmi oleh Pengelola -> Terpapar aman di publik -> Proteksi Petani', async () => {
-    const superAdminLogin = adminService.authenticateAdmin('superadmin', 'AdminHikmat2026!');
+    const superAdminLogin = adminService.authenticateAdmin('pappizee', 'HikmatTani2026!');
     if (!superAdminLogin.success || !superAdminLogin.token) {
       throw new Error('Login superadmin gagal');
     }
@@ -678,11 +678,11 @@ export async function runE2EIntegrationTests(): Promise<{
   // 13. RESPONSIVE & ACCESSIBILITY STANDARDS
   // =========================================================================
   await test('13. Responsive & Accessibility: Target Sentuh >= 48px, Slogan Resmi, Kontras & Bebas Horizontal Overflow', async () => {
-    const OFFICIAL_SLOGAN = 'Bijak Bertani, Cerdas Bertani';
+    const OFFICIAL_SLOGAN = 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.';
     const APP_NAME = 'HIKMAT TANI';
     const MIN_TOUCH_TARGET_PX = 48;
 
-    if (OFFICIAL_SLOGAN !== 'Bijak Bertani, Cerdas Bertani') {
+    if (OFFICIAL_SLOGAN !== 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.') {
       throw new Error('Slogan resmi tidak sesuai');
     }
     if (APP_NAME !== 'HIKMAT TANI') {

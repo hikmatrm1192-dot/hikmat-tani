@@ -247,10 +247,10 @@ export function SayaView({
 
   // Handler: Bagikan ke WhatsApp
   const handleShareApp = () => {
-    const text = `Aplikasi HIKMAT TANI — Bijak Bertani, Cerdas Bertani.\nPanduan budidaya padi cerdas, kalkulator pupuk berimbang, dan diagnosis hama PHT 100% offline tanpa kuota. Coba di: ${window.location.origin}`;
+    const text = `Aplikasi HIKMAT TANI — CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.\nPanduan budidaya padi cerdas, kalkulator pupuk berimbang, dan diagnosis hama PHT 100% offline tanpa kuota. Coba di: ${window.location.origin}`;
     if (navigator.share) {
       navigator.share({
-        title: 'HIKMAT TANI — Bijak Bertani, Cerdas Bertani',
+        title: 'HIKMAT TANI — CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.',
         text,
         url: window.location.origin,
       }).catch(() => {});
@@ -664,7 +664,7 @@ export function SayaView({
         {/* Footer Versi & Catatan Ilmiah */}
         <div className="pt-2 border-t border-emerald-800/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px] text-emerald-400">
           <span>Versi 1.0.0 • Offline Agronomy Engine</span>
-          <span className="italic">"Bijak Bertani, Cerdas Bertani"</span>
+          <span className="italic">"CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN."</span>
         </div>
       </div>
 

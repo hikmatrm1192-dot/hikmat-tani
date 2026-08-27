@@ -1,6 +1,6 @@
 # PANDUAN DEPLOYMENT PRODUCTION & OPERASIONAL
 ## HIKMAT TANI
-**Slogan Resmi: "Bijak Bertani, Cerdas Bertani"**
+**Tagline Resmi: "CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN."**
 
 Dokumen ini menjelaskan tata cara deployment, konfigurasi environment, migrasi database PostgreSQL, pengoperasian server Express, dan pemantauan sistem HIKMAT TANI di lingkungan production (Cloud Run, Docker Container, VPS, atau PaaS).
 

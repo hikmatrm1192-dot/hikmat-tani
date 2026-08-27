@@ -5,7 +5,7 @@
  * - Dukungan murni sukarela dari hati petani / komunitas peduli pangan.
  * - Tidak ada fitur yang dikunci atau disembunyikan di balik paywall.
  * - Menggunakan VITE_DONATION_URL jika tersedia, atau panduan donasi sukarela.
- * - Identitas & Slogan Resmi: "Bijak Bertani, Cerdas Bertani"
+ * - Identitas & Tagline Resmi: "CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN."
  */
 
 import { useEffect, useState } from 'react';
@@ -50,10 +50,10 @@ export function SupportModal({ isOpen, onClose }: SupportModalProps) {
   }, [isOpen]);
 
   const handleShareWa = () => {
-    const text = `Aplikasi HIKMAT TANI — Bijak Bertani, Cerdas Bertani.\nKalkulator pupuk berimbang, rekomendasi OPT PHT, dan catatan budidaya 100% offline gratis tanpa iklan.\nKunjungi: ${window.location.origin}`;
+    const text = `Aplikasi HIKMAT TANI — CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.\nKalkulator pupuk berimbang, rekomendasi OPT PHT, dan catatan budidaya 100% offline gratis tanpa iklan.\nKunjungi: ${window.location.origin}`;
     if (navigator.share) {
       navigator.share({
-        title: 'HIKMAT TANI — Bijak Bertani, Cerdas Bertani',
+        title: 'HIKMAT TANI — CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.',
         text,
         url: window.location.origin,
       }).catch(() => {});
@@ -262,7 +262,7 @@ export function SupportModal({ isOpen, onClose }: SupportModalProps) {
         {/* Footer Modal */}
         <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
           <span className="text-[11px] text-slate-400 italic">
-            "Bijak Bertani, Cerdas Bertani"
+            "CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN."
           </span>
           <button
             type="button"

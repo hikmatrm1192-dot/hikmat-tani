@@ -1,5 +1,5 @@
 {
-  "name": "HIKMAT TANI — Bijak Bertani, Cerdas Bertani",
+  "name": "HIKMAT TANI — CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.",
   "short_name": "HIKMAT TANI",
   "description": "Sistem Rekomendasi Budidaya Padi & Catatan Lapang Mandiri 100% Offline untuk Petani Indonesia",
   "start_url": "/",
@@ -10,10 +10,22 @@
   "categories": ["productivity", "utilities", "agriculture"],
   "icons": [
     {
-      "src": "/icon.svg",
-      "sizes": "192x192 512x512",
-      "type": "image/svg+xml",
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-hikmat-tani-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }

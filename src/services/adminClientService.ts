@@ -12,6 +12,7 @@
 export interface AdminProfile {
   id: string;
   username: string;
+  email?: string;
   fullName: string;
   role: 'MANAGER' | 'SUPER_ADMIN';
 }
@@ -140,6 +141,37 @@ export class AdminClientService {
         success: false,
         error: err?.message || 'Gagal terhubung ke server pengelola.',
       };
+    }
+  }
+
+  /**
+   * Mengubah Kata Sandi Akun Pengelola Sendiri
+   */
+  public async changePassword(
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+      const res = await fetch('/api/v1/admin/auth/change-password', {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        return {
+          success: false,
+          error: json?.error?.message || 'Gagal mengubah kata sandi.',
+        };
+      }
+
+      return {
+        success: true,
+        message: json.message || 'Kata sandi berhasil diperbarui dengan aman.',
+      };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Koneksi ke server gagal.' };
     }
   }
 

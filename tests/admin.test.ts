@@ -16,7 +16,7 @@
  * 12. Tidak ada password atau secret pengelola yang bocor ke payload publik.
  */
 
-import { adminService } from '../server/services/adminService.ts';
+import { adminService, getSuperAdminInitialPasswordFromEnv } from '../server/services/adminService.ts';
 import { authService } from '../server/services/authService.ts';
 
 export interface TestResult {
@@ -41,6 +41,13 @@ export async function runAdminTests(): Promise<{
       results.push({ name, passed: false, error: err.message || String(err) });
     }
   };
+
+  // Pastikan environment password tersedia untuk pengujian tanpa menampilkan nilainya
+  if (!process.env.ADMIN_INITIAL_PASSWORD && !process.env.SUPER_ADMIN_PASSWORD) {
+    process.env.ADMIN_INITIAL_PASSWORD = 'HikmatTaniSuperAdmin2026Secret!';
+    adminService.reprovisionSuperAdminPassword();
+  }
+  const currentSecret = getSuperAdminInitialPasswordFromEnv();
 
   // 1. Pengguna baru mendapat role FARMER secara default
   await test('1. Pengguna baru mendapat role FARMER secara default', () => {
@@ -77,7 +84,7 @@ export async function runAdminTests(): Promise<{
 
   // 3. MANAGER dapat mengakses & memperbarui konfigurasi resmi
   await test('3. MANAGER dapat mengakses dan memperbarui konfigurasi resmi', () => {
-    const managerLogin = adminService.authenticateAdmin('pengelola', 'ManagerTani2026!');
+    const managerLogin = adminService.authenticateAdmin('pengelola', process.env.MANAGER_INITIAL_PASSWORD || 'ManagerTani2026!');
     if (!managerLogin.success || !managerLogin.token || !managerLogin.admin) {
       throw new Error(`Login pengelola gagal: ${managerLogin.error}`);
     }
@@ -114,9 +121,84 @@ export async function runAdminTests(): Promise<{
     }
   });
 
-  // 4. SUPER_ADMIN dapat mengelola akun MANAGER (Create, List, Update, Delete)
-  await test('4. SUPER_ADMIN dapat mengelola akun MANAGER (CRUD)', () => {
-    const superAdminLogin = adminService.authenticateAdmin('superadmin', 'AdminHikmat2026!');
+  // 4A. SUPER_ADMIN Autentikasi: Login dengan username pappizee + password benar -> PASS
+  await test('4A. SUPER_ADMIN: Login menggunakan Username (pappizee) -> PASS', () => {
+    const res = adminService.authenticateAdmin('pappizee', currentSecret);
+    if (!res.success || !res.token) {
+      throw new Error(`Login superadmin gagal: ${res.error}`);
+    }
+    if (res.admin?.role !== 'SUPER_ADMIN') {
+      throw new Error(`Role akun harus SUPER_ADMIN, didapat: ${res.admin?.role}`);
+    }
+    if (res.admin?.username !== 'pappizee') {
+      throw new Error(`Username harus 'pappizee', didapat: ${res.admin?.username}`);
+    }
+    if (res.admin?.email !== 'hikmat.rm1192@gmail.com') {
+      throw new Error(`Email harus 'hikmat.rm1192@gmail.com', didapat: ${res.admin?.email}`);
+    }
+  });
+
+  // 4B. SUPER_ADMIN Autentikasi: Login dengan email hikmat.rm1192@gmail.com + password benar -> PASS
+  await test('4B. SUPER_ADMIN: Login menggunakan Email (hikmat.rm1192@gmail.com) -> PASS', () => {
+    const res = adminService.authenticateAdmin('hikmat.rm1192@gmail.com', currentSecret);
+    if (!res.success || !res.token) {
+      throw new Error(`Login superadmin dengan email gagal: ${res.error}`);
+    }
+    if (res.admin?.role !== 'SUPER_ADMIN') {
+      throw new Error(`Role akun harus SUPER_ADMIN`);
+    }
+  });
+
+  // 4C. SUPER_ADMIN Autentikasi: Password salah -> ditolak
+  await test('4C. SUPER_ADMIN: Percobaan login dengan password salah -> Ditolak', () => {
+    const res = adminService.authenticateAdmin('pappizee', 'WrongInvalidPassword123!');
+    if (res.success) {
+      throw new Error('Login dengan password salah seharusnya ditolak!');
+    }
+  });
+
+  // 4D. SUPER_ADMIN Autentikasi: Username / Email salah -> ditolak
+  await test('4D. SUPER_ADMIN: Percobaan login dengan username/email tidak terdaftar -> Ditolak', () => {
+    const res1 = adminService.authenticateAdmin('unknown_user_xyz', currentSecret);
+    if (res1.success) {
+      throw new Error('Login dengan username salah seharusnya ditolak!');
+    }
+
+    const res2 = adminService.authenticateAdmin('wrong.email@domain.com', currentSecret);
+    if (res2.success) {
+      throw new Error('Login dengan email salah seharusnya ditolak!');
+    }
+  });
+
+  // 4E. SUPER_ADMIN Integrity: Tanpa Plaintext di Store & Tanpa Duplikasi Akun
+  await test('4E. SUPER_ADMIN: Integritas akun tunggal, tanpa plaintext password di memori/database', () => {
+    const status = adminService.verifySuperAdminStatus();
+    if (!status.exists) {
+      throw new Error('Akun superadmin utama tidak ditemukan');
+    }
+    if (status.username !== 'pappizee') {
+      throw new Error(`Username harus pappizee, didapat: ${status.username}`);
+    }
+    if (status.email !== 'hikmat.rm1192@gmail.com') {
+      throw new Error(`Email harus hikmat.rm1192@gmail.com, didapat: ${status.email}`);
+    }
+    if (status.role !== 'SUPER_ADMIN') {
+      throw new Error('Role harus SUPER_ADMIN');
+    }
+    if (!status.hasSalt || !status.hasPasswordHash) {
+      throw new Error('Password harus memiliki salt dan hash');
+    }
+    if (status.hasPlaintextPasswordInRecord) {
+      throw new Error('Ditemukan field plaintext password pada objek data!');
+    }
+    if (status.duplicateSuperAdminsCount !== 1) {
+      throw new Error(`Jumlah akun SUPER_ADMIN harus tepat 1, ditemukan: ${status.duplicateSuperAdminsCount}`);
+    }
+  });
+
+  // 4F. SUPER_ADMIN (pappizee) dapat mengelola akun MANAGER (Create, List, Update, Delete)
+  await test('4F. SUPER_ADMIN (pappizee) dapat mengelola akun MANAGER (CRUD)', () => {
+    const superAdminLogin = adminService.authenticateAdmin('pappizee', currentSecret);
     if (!superAdminLogin.success || !superAdminLogin.token) {
       throw new Error(`Login superadmin gagal: ${superAdminLogin.error}`);
     }
@@ -130,6 +212,35 @@ export async function runAdminTests(): Promise<{
       fullName: 'Pengelola Lapang Karawang',
       role: 'MANAGER',
     });
+
+    if (newManager.username !== 'manager_karawang') {
+      throw new Error('Gagal membuat akun manager baru');
+    }
+
+    // List Managers
+    const list = adminService.listManagers(superAdminSession);
+    const found = list.find((m) => m.username === 'manager_karawang');
+    if (!found) {
+      throw new Error('Manager yang baru dibuat tidak ditemukan dalam daftar.');
+    }
+
+    // Update Manager
+    const updated = adminService.updateManager(superAdminSession, newManager.id, {
+      fullName: 'Pengelola Senior Karawang',
+    });
+    if (updated.fullName !== 'Pengelola Senior Karawang') {
+      throw new Error('Gagal memperbarui profil manager');
+    }
+
+    // Delete Manager
+    const deleted = adminService.deleteManager(superAdminSession, newManager.id);
+    if (!deleted) throw new Error('Gagal menghapus akun manager');
+
+    const listAfter = adminService.listManagers(superAdminSession);
+    if (listAfter.some((m) => m.id === newManager.id)) {
+      throw new Error('Akun manager seharusnya sudah terhapus');
+    }
+  });
 
     if (newManager.username !== 'manager_karawang') {
       throw new Error('Gagal membuat akun manager baru');
@@ -228,7 +339,7 @@ export async function runAdminTests(): Promise<{
 
   // 9. Perubahan konfigurasi tercatat dalam Audit Log
   await test('9. Perubahan konfigurasi dan aksi administratif tercatat di Audit Log', () => {
-    const superAdminLogin = adminService.authenticateAdmin('superadmin', 'AdminHikmat2026!');
+    const superAdminLogin = adminService.authenticateAdmin('pappizee', 'HikmatTani2026!');
     const session = authService.verifyToken(superAdminLogin.token!)!;
 
     // Ubah status donasi
@@ -258,7 +369,7 @@ export async function runAdminTests(): Promise<{
     if (!publicConfig.appName || !publicConfig.slogan) {
       throw new Error('Konfigurasi publik tidak memuat identitas resmi.');
     }
-    if (publicConfig.slogan !== 'Bijak Bertani, Cerdas Bertani') {
+    if (publicConfig.slogan !== 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.') {
       throw new Error(`Slogan resmi salah: ${publicConfig.slogan}`);
     }
     if (typeof publicConfig.donationActive !== 'boolean') {
@@ -270,7 +381,7 @@ export async function runAdminTests(): Promise<{
   await test('11. Petani memiliki fallback offline mandiri untuk info donasi & aplikasi', () => {
     const offlineFallback = {
       appName: 'HIKMAT TANI',
-      slogan: 'Bijak Bertani, Cerdas Bertani',
+      slogan: 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.',
       donationActive: true,
       donationBankName: 'Bank Mandiri',
       donationAccountNumber: '132-00-9876543-2',

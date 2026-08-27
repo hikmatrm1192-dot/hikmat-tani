@@ -6,7 +6,7 @@
  * - Hapus permanen memerlukan konfirmasi sadar dan melakukan cascade audit bersih.
  */
 
-import { useState } from 'react';
+import React, { useState, type FormEvent } from 'react';
 import {
   AlertTriangle,
   Archive,

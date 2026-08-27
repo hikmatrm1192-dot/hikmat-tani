@@ -15,6 +15,9 @@ export type SyncEntityType =
   | 'ACTIVITY'
   | 'FERTILIZER_APPLICATION'
   | 'OPT_OBSERVATION'
+  | 'SEEDBED'
+  | 'EXPENSE'
+  | 'RECOMMENDATION'
   | 'FARMER_DECISION'
   | 'ACTUAL_ACTION'
   | 'FERTILIZER'
@@ -33,7 +36,7 @@ export interface SyncOutboxItem {
   entityType: SyncEntityType;
   entityId: EntityId;
   action: SyncAction;
-  payload: Record<string, unknown>; // Snapshot payload data
+  payload: Record<string, any>; // Snapshot payload data
   createdAt: ISODateString;
   retryCount: number;
   status: SyncStatus;

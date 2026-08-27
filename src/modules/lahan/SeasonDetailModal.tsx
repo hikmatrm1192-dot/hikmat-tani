@@ -6,13 +6,31 @@
  * - HST dan fase pertumbuhan fenologi terperinci
  */
 
-import React, { useState } from 'react';
-import { Calendar, CheckCircle2, CheckSquare, Layers, MapPin, Sparkles, Sprout, Wheat } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import {
+  Calendar,
+  CheckCircle2,
+  Coins,
+  DollarSign,
+  Leaf,
+  MapPin,
+  Scale,
+  Sparkles,
+  Sprout,
+  Wheat,
+} from 'lucide-react';
 import { Modal } from '../../components/common/Modal.tsx';
 import { cropSeasonRepository } from '../../db/repositories/cropSeasonRepository.ts';
+import { expenseRepository } from '../../db/repositories/expenseRepository.ts';
+import { seedbedRepository } from '../../db/repositories/seedbedRepository.ts';
 import { determineGrowthPhase } from '../../engine/growthPhase.ts';
 import { calculateHST } from '../../engine/hstCalculator.ts';
-import { CropSeason, Land } from '../../types/index.ts';
+import {
+  CropSeason,
+  Land,
+  SeasonExpenseReport,
+  Seedbed,
+} from '../../types/index.ts';
 
 interface SeasonDetailModalProps {
   isOpen: boolean;
@@ -34,6 +52,27 @@ export function SeasonDetailModal({
   const [isCompleting, setIsCompleting] = useState<boolean>(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState<boolean>(false);
   const [yieldInput, setYieldInput] = useState<string>('');
+
+  const [seedbeds, setSeedbeds] = useState<Seedbed[]>([]);
+  const [expenseReport, setExpenseReport] = useState<SeasonExpenseReport | null>(null);
+
+  useEffect(() => {
+    if (!season?.id || !isOpen) return;
+
+    const loadExtras = async () => {
+      try {
+        const sbeds = await seedbedRepository.getByCropSeasonId(season.id);
+        setSeedbeds(sbeds);
+
+        const rep = await expenseRepository.getSeasonReport(season.id);
+        setExpenseReport(rep);
+      } catch (err) {
+        console.error('Error loading extras in SeasonDetailModal:', err);
+      }
+    };
+
+    loadExtras();
+  }, [season?.id, isOpen]);
 
   if (!season || !land) return null;
 
@@ -72,6 +111,14 @@ export function SeasonDetailModal({
     }
   };
 
+  const formattedExpense = expenseReport?.totalExpenseRp
+    ? new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        maximumFractionDigits: 0,
+      }).format(expenseReport.totalExpenseRp)
+    : 'Rp 0';
+
   return (
     <Modal
       isOpen={isOpen}
@@ -79,7 +126,7 @@ export function SeasonDetailModal({
       title="Rincian Musim Tanam"
       subtitle={`Lahan: ${land.name} (${land.areaHa} ha)`}
     >
-      <div className="space-y-4 text-xs sm:text-sm">
+      <div className="space-y-4 text-xs sm:text-sm max-h-[75vh] overflow-y-auto pr-1">
         {/* Status Box */}
         <div className="p-4 bg-emerald-900 text-white rounded-2xl space-y-3">
           <div className="flex items-center justify-between">
@@ -134,6 +181,63 @@ export function SeasonDetailModal({
             </span>
           </div>
         </div>
+
+        {/* Ringkasan Persemaian jika ada */}
+        {seedbeds.length > 0 && (
+          <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-2">
+            <div className="flex items-center gap-2 text-emerald-900 font-bold text-xs">
+              <Leaf className="w-4 h-4 text-emerald-700" />
+              <span>Data Persemaian Benih ({seedbeds.length})</span>
+            </div>
+            {seedbeds.map((sb) => {
+              const sDate = new Date(sb.startDate).toLocaleDateString('id-ID', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+              });
+              return (
+                <div
+                  key={sb.id}
+                  className="bg-white p-2.5 rounded-lg border border-emerald-100 text-xs flex justify-between items-center"
+                >
+                  <div>
+                    <span className="font-bold text-slate-800">{sb.varietyName}</span>
+                    <span className="text-[11px] text-slate-500 block">
+                      Mulai semai: {sDate} ({sb.seedAmountKg} kg benih)
+                    </span>
+                  </div>
+                  {sb.nurseryAreaM2 && (
+                    <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200">
+                      {sb.nurseryAreaM2} m²
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Ringkasan Biaya Riil */}
+        {expenseReport && (
+          <div className="p-3.5 bg-blue-50/70 rounded-xl border border-blue-200 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-800 flex items-center justify-center">
+                <Coins className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-[11px] text-blue-700 font-medium block">
+                  Total Biaya Budidaya Terkumpul:
+                </span>
+                <span className="text-sm font-black text-slate-900">
+                  {formattedExpense}
+                </span>
+              </div>
+            </div>
+            <span className="text-[11px] font-bold text-blue-800 bg-white px-2.5 py-1 rounded-lg border border-blue-200">
+              {expenseReport.totalTransactions} Transaksi
+            </span>
+          </div>
+        )}
 
         {/* Konfirmasi Selesaikan Musim Tanam */}
         {showCompleteConfirm ? (

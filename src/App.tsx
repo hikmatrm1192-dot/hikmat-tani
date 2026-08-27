@@ -1,7 +1,7 @@
 /**
  * HIKMAT TANI - App Shell & UI/UX Core (Langkah 5)
  * 
- * Slogan Resmi: "Bijak Bertani, Cerdas Bertani"
+ * Tagline Resmi: "CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN."
  * 
  * Arsitektur:
  * Dexie DB -> Repository -> Agriculture Engine -> React -> UI
@@ -270,10 +270,37 @@ export default function App() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4 space-y-3">
-        <div className="w-10 h-10 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm font-semibold tracking-tight">Menyiapkan HIKMAT TANI...</p>
-        <p className="text-xs text-slate-400">Memuat database offline...</p>
+      <div className="min-h-screen bg-gradient-to-br from-emerald-950 via-slate-950 to-slate-900 text-white flex flex-col items-center justify-center p-6 space-y-6">
+        <div className="relative flex flex-col items-center text-center space-y-4 max-w-sm">
+          {/* Logo Utama / Lengkap */}
+          <div className="w-24 h-24 rounded-3xl bg-emerald-950/80 border-2 border-emerald-500/40 p-2 shadow-2xl flex items-center justify-center overflow-hidden">
+            <img
+              src="/logo-hikmat-tani-1024.png"
+              alt="Logo Resmi HIKMAT TANI"
+              className="w-full h-full object-contain p-1"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                if (!target.src.includes('/icon-192.png')) {
+                  target.src = '/icon-192.png';
+                }
+              }}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+              HIKMAT <span className="text-emerald-400">TANI</span>
+            </h1>
+            <p className="text-xs sm:text-sm font-semibold text-emerald-200 tracking-wide uppercase">
+              CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5 pt-4 text-xs text-emerald-300/80">
+            <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin shrink-0" />
+            <span>Menyiapkan database lokal 100% offline...</span>
+          </div>
+        </div>
       </div>
     );
   }

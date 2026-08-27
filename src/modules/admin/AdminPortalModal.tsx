@@ -1,38 +1,46 @@
 /**
  * HIKMAT TANI - Modal & Portal Pengelola (Langkah 15)
  * 
- * Fitur:
- * 1. Autentikasi Pengelola (MANAGER & SUPER_ADMIN)
- * 2. Form Konfigurasi Resmi Donasi & Kontak (Bank, Rekening, Penerima, QRIS, Sakelar Aktif/Nonaktif)
- * 3. Manajemen Akun Pengelola (Khusus SUPER_ADMIN: Tambah, Ubah Status, Hapus)
- * 4. Catatan Audit (Audit Log) Transparan
- * 5. 100% Bahasa Indonesia & Responsif
+ * Fitur Menu:
+ * 1. Identitas & Branding: Nama aplikasi, slogan resmi, preview logo resmi 1024 & horizontal, deskripsi.
+ * 2. Pengaturan Akun: Profil SUPER_ADMIN (pappizee / hikmat.rm1192@gmail.com), Ganti Password Aman, Kelola Pengelola Staf.
+ * 3. Donasi & QRIS: Sakelar status donasi, rekening bank, e-wallet, unggah & kelola berkas QRIS resmi.
+ * 4. Pustaka Informasi: Ringkasan database varietas padi, hama & penyakit (OPT), pemupukan, status offline.
+ * 5. Konfigurasi Aplikasi: Kontak bantuan & email resmi, status sistem, riwayat audit log.
  */
 
 import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
+  BookOpen,
   Building,
   Check,
   CheckCircle2,
   Clock,
   CreditCard,
+  Database,
   Edit2,
   Eye,
   EyeOff,
   History,
+  Info,
   KeyRound,
   Lock,
   LogOut,
   Mail,
+  Palette,
   Phone,
   Plus,
   QrCode,
   RefreshCw,
   Save,
+  Server,
+  Settings,
   Shield,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
+  Sprout,
   Trash2,
   Upload,
   User,
@@ -56,7 +64,7 @@ interface AdminPortalModalProps {
   onConfigUpdated?: () => void;
 }
 
-type AdminTab = 'config' | 'managers' | 'audit';
+export type AdminMenuTab = 'identitas' | 'akun' | 'donasi' | 'pustaka' | 'konfigurasi';
 
 export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPortalModalProps) {
   // Auth state
@@ -69,8 +77,8 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  // Active Tab
-  const [activeTab, setActiveTab] = useState<AdminTab>('config');
+  // Active Menu Tab
+  const [activeTab, setActiveTab] = useState<AdminMenuTab>('identitas');
 
   // Config State
   const [config, setConfig] = useState<AdminAppConfig | null>(null);
@@ -80,6 +88,11 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
   const [configErrorMsg, setConfigErrorMsg] = useState<string | null>(null);
 
   // Form Edit Config values
+  const [appName, setAppName] = useState<string>('HIKMAT TANI');
+  const [slogan, setSlogan] = useState<string>('CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.');
+  const [description, setDescription] = useState<string>('');
+  const [supportTitle, setSupportTitle] = useState<string>('Dukung HIKMAT TANI');
+  const [supportDescription, setSupportDescription] = useState<string>('Inisiatif Mandiri Teknologi Pertanian Padi Nusantara');
   const [donationActive, setDonationActive] = useState<boolean>(true);
   const [donationRecipientName, setDonationRecipientName] = useState<string>('');
   const [donationBankName, setDonationBankName] = useState<string>('');
@@ -89,7 +102,15 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
   const [donationQrisImage, setDonationQrisImage] = useState<string>('');
   const [contactPhone, setContactPhone] = useState<string>('');
   const [contactEmail, setContactEmail] = useState<string>('');
-  const [description, setDescription] = useState<string>('');
+
+  // Password Change State
+  const [currentPasswordInput, setCurrentPasswordInput] = useState<string>('');
+  const [newPasswordInput, setNewPasswordInput] = useState<string>('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState<string>('');
+  const [showChangePassword, setShowChangePassword] = useState<boolean>(false);
+  const [isChangingPassword, setIsChangingPassword] = useState<boolean>(false);
+  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState<string | null>(null);
+  const [passwordChangeError, setPasswordChangeError] = useState<string | null>(null);
 
   // Managers State (SUPER_ADMIN ONLY)
   const [managers, setManagers] = useState<ManagerAccount[]>([]);
@@ -131,6 +152,11 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
       const res = await adminClientService.getConfig();
       if (res.success && res.data) {
         setConfig(res.data);
+        setAppName(res.data.appName || 'HIKMAT TANI');
+        setSlogan(res.data.slogan || 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.');
+        setDescription(res.data.description || '');
+        setSupportTitle(res.data.supportTitle || 'Dukung HIKMAT TANI');
+        setSupportDescription(res.data.supportDescription || 'Inisiatif Mandiri Teknologi Pertanian Padi Nusantara');
         setDonationActive(res.data.donationActive);
         setDonationRecipientName(res.data.donationRecipientName || '');
         setDonationBankName(res.data.donationBankName || '');
@@ -140,7 +166,6 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
         setDonationQrisImage(res.data.donationQrisImage || '');
         setContactPhone(res.data.contactPhone || '');
         setContactEmail(res.data.contactEmail || '');
-        setDescription(res.data.description || '');
       } else {
         setConfigErrorMsg(res.error || 'Gagal memuat konfigurasi');
       }
@@ -191,7 +216,7 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
         }
         loadAuditLogs();
       } else {
-        setLoginError(res.error || 'Nama pengguna atau kata sandi tidak cocok.');
+        setLoginError(res.error || 'Nama pengguna/email atau kata sandi tidak cocok.');
       }
     } catch (err: any) {
       setLoginError(err?.message || 'Gagal menghubungi server pengelola.');
@@ -204,7 +229,7 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
   const handleLogout = () => {
     adminClientService.logout();
     setCurrentAdmin(null);
-    setActiveTab('config');
+    setActiveTab('identitas');
   };
 
   // Handler: Upload QRIS Image (File reader to Base64)
@@ -213,12 +238,12 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      setConfigErrorMsg('Berkas QRIS harus berupa gambar (JPG, PNG, WebP).');
+      setConfigErrorMsg('Berkas QRIS harus berupa gambar raster (JPG, PNG, WebP).');
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      setConfigErrorMsg('Ukuran berkas QRIS maksimal 2 MB.');
+    if (file.size > 2.5 * 1024 * 1024) {
+      setConfigErrorMsg('Ukuran berkas QRIS maksimal 2.5 MB.');
       return;
     }
 
@@ -240,6 +265,11 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
 
     try {
       const payload: Partial<AdminAppConfig> = {
+        appName,
+        slogan,
+        description,
+        supportTitle,
+        supportDescription,
         donationActive,
         donationRecipientName,
         donationBankName,
@@ -249,13 +279,12 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
         donationQrisImage,
         contactPhone,
         contactEmail,
-        description,
       };
 
       const res = await adminClientService.updateConfig(payload);
       if (res.success && res.data) {
         setConfig(res.data);
-        setConfigSuccessMsg('Konfigurasi resmi HIKMAT TANI berhasil diperbarui.');
+        setConfigSuccessMsg('Konfigurasi berhasil disimpan dan diperbarui.');
         onConfigUpdated?.();
         loadAuditLogs();
         setTimeout(() => setConfigSuccessMsg(null), 5000);
@@ -266,6 +295,42 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
       setConfigErrorMsg(err?.message || 'Terjadi kesalahan sistem.');
     } finally {
       setIsSavingConfig(false);
+    }
+  };
+
+  // Handler: Ganti Kata Sandi
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordChangeSuccess(null);
+    setPasswordChangeError(null);
+
+    if (newPasswordInput !== confirmPasswordInput) {
+      setPasswordChangeError('Konfirmasi kata sandi baru tidak cocok.');
+      return;
+    }
+
+    if (newPasswordInput.length < 6) {
+      setPasswordChangeError('Kata sandi baru minimal harus 6 karakter.');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const res = await adminClientService.changePassword(currentPasswordInput, newPasswordInput);
+      if (res.success) {
+        setPasswordChangeSuccess(res.message || 'Kata sandi berhasil diperbarui.');
+        setCurrentPasswordInput('');
+        setNewPasswordInput('');
+        setConfirmPasswordInput('');
+        loadAuditLogs();
+        setTimeout(() => setPasswordChangeSuccess(null), 6000);
+      } else {
+        setPasswordChangeError(res.error || 'Gagal mengubah kata sandi.');
+      }
+    } catch (err: any) {
+      setPasswordChangeError(err?.message || 'Terjadi kesalahan sistem.');
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -299,13 +364,13 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
         setManagerErrorMsg(res.error || 'Gagal membuat akun pengelola.');
       }
     } catch (err: any) {
-      setManagerErrorMsg(err?.message || 'Terjadi kesalahan saat membuat pengelola.');
+      setManagerErrorMsg(err?.message || 'Gagal membuat akun pengelola.');
     } finally {
       setIsCreatingManager(false);
     }
   };
 
-  // Handler: Toggle Status Aktif Pengelola (SUPER_ADMIN ONLY)
+  // Handler: Toggle Aktif/Nonaktif Pengelola
   const handleToggleManagerActive = async (manager: ManagerAccount) => {
     if (manager.id === currentAdmin?.id) {
       setManagerErrorMsg('Anda tidak dapat menonaktifkan akun Anda sendiri.');
@@ -316,37 +381,32 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
       const res = await adminClientService.updateManager(manager.id, {
         isActive: !manager.isActive,
       });
+
       if (res.success) {
         loadManagers();
         loadAuditLogs();
-      } else {
-        setManagerErrorMsg(res.error || 'Gagal mengubah status pengelola.');
       }
     } catch (err: any) {
       setManagerErrorMsg(err?.message || 'Gagal memperbarui status pengelola.');
     }
   };
 
-  // Handler: Hapus Pengelola (SUPER_ADMIN ONLY)
+  // Handler: Hapus Pengelola
   const handleDeleteManager = async (manager: ManagerAccount) => {
     if (manager.id === currentAdmin?.id) {
       setManagerErrorMsg('Anda tidak dapat menghapus akun Anda sendiri.');
       return;
     }
 
-    if (!confirm(`Hapus akun pengelola '${manager.username}' (${manager.fullName})?`)) {
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus akun pengelola '${manager.username}'?`)) {
       return;
     }
 
     try {
       const res = await adminClientService.deleteManager(manager.id);
       if (res.success) {
-        setManagerSuccessMsg(`Akun pengelola '${manager.username}' berhasil dihapus.`);
         loadManagers();
         loadAuditLogs();
-        setTimeout(() => setManagerSuccessMsg(null), 5000);
-      } else {
-        setManagerErrorMsg(res.error || 'Gagal menghapus pengelola.');
       }
     } catch (err: any) {
       setManagerErrorMsg(err?.message || 'Gagal menghapus pengelola.');
@@ -369,12 +429,42 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
         {/* JIKA BELUM LOGIN: FORM LOGIN PENGELOLA */}
         {!currentAdmin ? (
           <form onSubmit={handleLogin} className="space-y-4">
+            {/* Official Logo Banner */}
+            <div className="bg-gradient-to-br from-emerald-900 via-emerald-950 to-slate-950 text-white rounded-2xl p-5 border border-emerald-800/80 flex items-center justify-between shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-emerald-950/60 border border-emerald-500/40 p-1 flex items-center justify-center overflow-hidden shrink-0">
+                  <img
+                    src="/logo-hikmat-tani-1024.png"
+                    alt="Logo HIKMAT TANI"
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      if (!target.src.includes('/icon-192.png')) {
+                        target.src = '/icon-192.png';
+                      }
+                    }}
+                  />
+                </div>
+                <div>
+                  <h3 className="text-base font-black tracking-tight text-white">
+                    HIKMAT <span className="text-emerald-400">TANI</span>
+                  </h3>
+                  <p className="text-xs text-emerald-200/90 font-medium">
+                    CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-800/80 text-emerald-200 rounded-full border border-emerald-600/50">
+                Portal Resmi
+              </span>
+            </div>
+
             <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-start gap-3">
               <Shield className="w-5 h-5 text-emerald-800 shrink-0 mt-0.5" />
               <div className="text-xs text-emerald-950">
                 <strong className="block font-bold">Area Khusus Pengelola Resmi</strong>
                 <p className="mt-0.5 text-emerald-800/90 leading-relaxed">
-                  Portal ini digunakan untuk mengelola konfigurasi donasi, rekening, QRIS, dan informasi resmi. Petani biasa tidak memerlukan login pengelola ini untuk bertani mandiri.
+                  Portal ini digunakan untuk mengelola konfigurasi donasi, rekening, QRIS, identitas, dan informasi resmi. Petani biasa tidak memerlukan login pengelola ini untuk bertani mandiri 100% offline.
                 </p>
               </div>
             </div>
@@ -398,7 +488,7 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
                     required
                     value={usernameInput}
                     onChange={(e) => setUsernameInput(e.target.value)}
-                    placeholder="misal: superadmin / pengelola"
+                    placeholder="misal: pappizee / hikmat.rm1192@gmail.com"
                     className="w-full pl-10 pr-3.5 py-2.5 min-h-[48px] bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 focus:border-emerald-700 transition-all outline-hidden"
                   />
                 </div>
@@ -427,13 +517,11 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
                   </button>
                 </div>
               </div>
-            </div>
 
-            <div className="pt-2">
               <button
                 type="submit"
                 disabled={isLoggingIn}
-                className="w-full flex items-center justify-center gap-2 p-3.5 min-h-[48px] bg-emerald-800 hover:bg-emerald-900 active:bg-black text-white font-bold rounded-xl text-xs sm:text-sm transition-all shadow-xs"
+                className="w-full mt-2 py-3 px-4 min-h-[48px] bg-emerald-800 hover:bg-emerald-700 active:bg-emerald-900 text-white font-bold rounded-xl text-sm transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {isLoggingIn ? (
                   <>
@@ -471,84 +559,520 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
                       {currentAdmin.role === 'SUPER_ADMIN' ? 'Super Admin' : 'Pengelola'}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 font-mono">@{currentAdmin.username}</p>
+                  <p className="text-xs text-slate-400 font-mono">
+                    @{currentAdmin.username} {currentAdmin.email ? `• ${currentAdmin.email}` : ''}
+                  </p>
                 </div>
               </div>
 
               <button
                 type="button"
                 onClick={handleLogout}
-                className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[42px] bg-slate-800 hover:bg-rose-900 active:bg-rose-950 text-slate-200 hover:text-white font-bold rounded-xl text-xs transition-colors border border-slate-700"
+                className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[42px] bg-slate-800 hover:bg-rose-900 active:bg-rose-950 text-slate-200 hover:text-white font-bold rounded-xl text-xs transition-colors border border-slate-700 cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span>Keluar Portal</span>
               </button>
             </div>
 
-            {/* Navigasi Tab */}
-            <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
+            {/* Navigasi 5 Menu Wajib */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 border-b border-slate-200 pb-2">
               <button
                 type="button"
-                onClick={() => setActiveTab('config')}
-                className={`flex items-center gap-1.5 px-3.5 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'config'
+                onClick={() => setActiveTab('identitas')}
+                className={`flex items-center justify-center gap-1.5 px-2.5 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-all text-center ${
+                  activeTab === 'identitas'
                     ? 'bg-emerald-800 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                <CreditCard className="w-3.5 h-3.5" />
-                <span>Konfigurasi Donasi & Kontak</span>
+                <Palette className="w-3.5 h-3.5 shrink-0" />
+                <span>Identitas & Branding</span>
               </button>
 
-              {currentAdmin.role === 'SUPER_ADMIN' && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('managers')}
-                  className={`flex items-center gap-1.5 px-3.5 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-all ${
-                    activeTab === 'managers'
-                      ? 'bg-emerald-800 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>Kelola Pengelola</span>
-                  <span className="text-[10px] bg-amber-400 text-slate-950 px-1.5 py-0.2 rounded-full font-black">
-                    {managers.length}
-                  </span>
-                </button>
-              )}
-
               <button
                 type="button"
-                onClick={() => setActiveTab('audit')}
-                className={`flex items-center gap-1.5 px-3.5 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'audit'
+                onClick={() => setActiveTab('akun')}
+                className={`flex items-center justify-center gap-1.5 px-2.5 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-all text-center ${
+                  activeTab === 'akun'
                     ? 'bg-emerald-800 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                <History className="w-3.5 h-3.5" />
-                <span>Catatan Audit</span>
+                <UserCheck className="w-3.5 h-3.5 shrink-0" />
+                <span>Pengaturan Akun</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('donasi')}
+                className={`flex items-center justify-center gap-1.5 px-2.5 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-all text-center ${
+                  activeTab === 'donasi'
+                    ? 'bg-emerald-800 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <CreditCard className="w-3.5 h-3.5 shrink-0" />
+                <span>Donasi & QRIS</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('pustaka')}
+                className={`flex items-center justify-center gap-1.5 px-2.5 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-all text-center ${
+                  activeTab === 'pustaka'
+                    ? 'bg-emerald-800 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                <span>Pustaka Informasi</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('konfigurasi')}
+                className={`flex items-center justify-center gap-1.5 px-2.5 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-all text-center ${
+                  activeTab === 'konfigurasi'
+                    ? 'bg-emerald-800 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <Settings className="w-3.5 h-3.5 shrink-0" />
+                <span>Konfigurasi Aplikasi</span>
               </button>
             </div>
 
-            {/* TAB 1: FORM KONFIGURASI DONASI & KONTAK */}
-            {activeTab === 'config' && (
+            {/* Alert Pesan Sukses / Error Umum */}
+            {configSuccessMsg && (
+              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-300 flex items-center gap-2 text-xs font-semibold text-emerald-950">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{configSuccessMsg}</span>
+              </div>
+            )}
+
+            {configErrorMsg && (
+              <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 flex items-center gap-2 text-xs font-semibold text-rose-900">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{configErrorMsg}</span>
+              </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* MENU 1: IDENTITAS & BRANDING */}
+            {/* ========================================================================= */}
+            {activeTab === 'identitas' && (
               <form onSubmit={handleSaveConfig} className="space-y-4">
-                {configSuccessMsg && (
-                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-300 flex items-center gap-2 text-xs font-semibold text-emerald-950">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>{configSuccessMsg}</span>
+                {/* Visual Identity Showcase */}
+                <div className="p-5 bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-900 text-white rounded-2xl border border-emerald-800/80 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                      Identitas Visual Resmi
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-800/80 text-emerald-200 rounded-full border border-emerald-600/50">
+                      Terverifikasi
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap bg-emerald-950/60 p-4 rounded-xl border border-emerald-700/40">
+                    <div className="w-16 h-16 rounded-xl bg-emerald-950 border border-emerald-400/40 p-1 flex items-center justify-center shrink-0">
+                      <img
+                        src="/logo-hikmat-tani-1024.png"
+                        alt="Emblem Resmi HIKMAT TANI"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-black tracking-tight text-white">
+                        HIKMAT <span className="text-emerald-400">TANI</span>
+                      </h4>
+                      <p className="text-xs text-emerald-200 font-bold mt-0.5">
+                        CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.
+                      </p>
+                      <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+                        Sistem Rekomendasi Budidaya Padi & Catatan Lapang Mandiri 100% Offline Petani Indonesia.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                    Pengaturan Nama & Tagline Aplikasi
+                  </h4>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Nama Aplikasi
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={appName}
+                      onChange={(e) => setAppName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Slogan / Tagline Resmi
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={slogan}
+                      onChange={(e) => setSlogan(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Deskripsi Aplikasi Resmi
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="submit"
+                    disabled={isSavingConfig}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 min-h-[44px] bg-emerald-800 hover:bg-emerald-700 active:bg-emerald-900 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingConfig ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    <span>Simpan Identitas & Branding</span>
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* ========================================================================= */}
+            {/* MENU 2: PENGATURAN AKUN (SUPER_ADMIN & GANTI PASSWORD & STAF) */}
+            {/* ========================================================================= */}
+            {activeTab === 'akun' && (
+              <div className="space-y-6">
+                {/* Informasi Akun Utama Saat Ini */}
+                <div className="p-5 bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-2xl border border-slate-800 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4" />
+                      Kredensial Akun Pengelola Utama
+                    </span>
+                    <span className="text-[10px] font-black px-2 py-0.5 bg-amber-400 text-slate-950 rounded-full uppercase">
+                      {currentAdmin.role}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700/60">
+                      <span className="text-slate-400 block text-[11px]">Nama Pengguna (Username):</span>
+                      <strong className="text-sm font-mono text-white mt-0.5 block">
+                        {currentAdmin.username}
+                      </strong>
+                    </div>
+
+                    <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700/60">
+                      <span className="text-slate-400 block text-[11px]">Email Resmi Pengelola:</span>
+                      <strong className="text-sm font-mono text-emerald-300 mt-0.5 block truncate">
+                        {currentAdmin.email || 'hikmat.rm1192@gmail.com'}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Akun ini memiliki hak akses penuh sebagai <strong>Super Admin Utama</strong> untuk mengelola identitas, donasi, konfigurasi, dan staf pengelola.
+                  </p>
+                </div>
+
+                {/* Form Ganti Kata Sandi */}
+                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
+                        <KeyRound className="w-4 h-4 text-emerald-700" />
+                        Ganti Kata Sandi Akun Pengelola
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Perbarui kata sandi Anda secara berkala untuk menjaga keamanan portal resmi.
+                      </p>
+                    </div>
+                  </div>
+
+                  {passwordChangeSuccess && (
+                    <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-300 flex items-center gap-2 text-xs font-semibold text-emerald-950">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{passwordChangeSuccess}</span>
+                    </div>
+                  )}
+
+                  {passwordChangeError && (
+                    <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 flex items-center gap-2 text-xs font-semibold text-rose-900">
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>{passwordChangeError}</span>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleChangePassword} className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Kata Sandi Saat Ini <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={currentPasswordInput}
+                        onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                        placeholder="Masukkan kata sandi saat ini..."
+                        className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Kata Sandi Baru (Minimal 6 Karakter) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="password"
+                          required
+                          value={newPasswordInput}
+                          onChange={(e) => setNewPasswordInput(e.target.value)}
+                          placeholder="Masukkan kata sandi baru..."
+                          className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Konfirmasi Kata Sandi Baru <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="password"
+                          required
+                          value={confirmPasswordInput}
+                          onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                          placeholder="Ulangi kata sandi baru..."
+                          className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="submit"
+                        disabled={isChangingPassword}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 min-h-[44px] bg-slate-900 hover:bg-emerald-800 active:bg-emerald-950 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                      >
+                        {isChangingPassword ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Lock className="w-4 h-4" />
+                        )}
+                        <span>Perbarui Kata Sandi</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Manajemen Pengelola Staf (Khusus SUPER_ADMIN) */}
+                {currentAdmin.role === 'SUPER_ADMIN' && (
+                  <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
+                          <Users className="w-4 h-4 text-emerald-700" />
+                          Daftar Akun Pengelola Staf
+                        </h4>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Kelola staf pengelola lapangan pendukung yang memiliki akses portal.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsAddManagerOpen(!isAddManagerOpen)}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[40px] bg-emerald-800 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>Tambah Pengelola Staf</span>
+                      </button>
+                    </div>
+
+                    {managerSuccessMsg && (
+                      <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-300 flex items-center gap-2 text-xs font-semibold text-emerald-950">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>{managerSuccessMsg}</span>
+                      </div>
+                    )}
+
+                    {managerErrorMsg && (
+                      <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 flex items-center gap-2 text-xs font-semibold text-rose-900">
+                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <span>{managerErrorMsg}</span>
+                      </div>
+                    )}
+
+                    {/* Form Tambah Pengelola Staf */}
+                    {isAddManagerOpen && (
+                      <form onSubmit={handleCreateManager} className="p-4 bg-white rounded-xl border border-emerald-200 space-y-3">
+                        <h5 className="text-xs font-bold text-emerald-950">Form Tambah Akun Pengelola Staf</h5>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                              Nama Pengguna (Username) <span className="text-rose-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={newUsername}
+                              onChange={(e) => setNewUsername(e.target.value)}
+                              placeholder="misal: pengelola_lapang"
+                              className="w-full px-3 py-2 bg-slate-50 rounded-lg border border-slate-300 text-slate-900 text-xs font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                              Nama Lengkap <span className="text-rose-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={newFullName}
+                              onChange={(e) => setNewFullName(e.target.value)}
+                              placeholder="misal: Budi Santoso"
+                              className="w-full px-3 py-2 bg-slate-50 rounded-lg border border-slate-300 text-slate-900 text-xs font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                              Email Resmi (Opsional)
+                            </label>
+                            <input
+                              type="email"
+                              value={newEmail}
+                              onChange={(e) => setNewEmail(e.target.value)}
+                              placeholder="misal: budi@hikmattani.id"
+                              className="w-full px-3 py-2 bg-slate-50 rounded-lg border border-slate-300 text-slate-900 text-xs font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                              Kata Sandi <span className="text-rose-500">*</span>
+                            </label>
+                            <input
+                              type="password"
+                              required
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              placeholder="Minimal 6 karakter..."
+                              className="w-full px-3 py-2 bg-slate-50 rounded-lg border border-slate-300 text-slate-900 text-xs font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setIsAddManagerOpen(false)}
+                            className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg"
+                          >
+                            Batal
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={isCreatingManager}
+                            className="px-4 py-1.5 text-xs font-bold bg-emerald-800 text-white hover:bg-emerald-700 rounded-lg cursor-pointer disabled:opacity-50"
+                          >
+                            {isCreatingManager ? 'Menyimpan...' : 'Simpan Akun'}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {/* Tabel Daftar Pengelola */}
+                    <div className="divide-y divide-slate-200 bg-white rounded-xl border border-slate-200 overflow-hidden">
+                      {managers.map((m) => (
+                        <div key={m.id} className="p-3.5 flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs shrink-0">
+                              {m.fullName.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h6 className="text-xs font-bold text-slate-900">{m.fullName}</h6>
+                                <span
+                                  className={`text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase ${
+                                    m.role === 'SUPER_ADMIN'
+                                      ? 'bg-amber-400 text-slate-950'
+                                      : 'bg-emerald-100 text-emerald-800'
+                                  }`}
+                                >
+                                  {m.role}
+                                </span>
+                                {!m.isActive && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.2 bg-rose-100 text-rose-800 rounded-full">
+                                    Nonaktif
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-slate-500 font-mono">
+                                @{m.username} {m.email ? `• ${m.email}` : ''}
+                              </p>
+                            </div>
+                          </div>
+
+                          {m.id !== currentAdmin.id && (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleManagerActive(m)}
+                                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${
+                                  m.isActive
+                                    ? 'bg-amber-50 text-amber-900 hover:bg-amber-100'
+                                    : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
+                                }`}
+                              >
+                                {m.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteManager(m)}
+                                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                title="Hapus Pengelola"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
+              </div>
+            )}
 
-                {configErrorMsg && (
-                  <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 flex items-center gap-2 text-xs font-semibold text-rose-900">
-                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                    <span>{configErrorMsg}</span>
-                  </div>
-                )}
-
+            {/* ========================================================================= */}
+            {/* MENU 3: DONASI & QRIS */}
+            {/* ========================================================================= */}
+            {activeTab === 'donasi' && (
+              <form onSubmit={handleSaveConfig} className="space-y-4">
                 {/* Sakelar Status Donasi */}
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-3">
                   <div>
@@ -572,11 +1096,11 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
                   </label>
                 </div>
 
-                {/* Rincian Rekening & Bank */}
-                <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-3">
-                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                {/* Form Rekening Bank */}
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
                     <Building className="w-4 h-4 text-emerald-700" />
-                    <span>Rekening Bank & Pembayaran Resmi</span>
+                    Rekening Bank Resmi
                   </h4>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -588,8 +1112,8 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
                         type="text"
                         value={donationBankName}
                         onChange={(e) => setDonationBankName(e.target.value)}
-                        placeholder="misal: Bank Mandiri / BCA / BSI"
-                        className="w-full px-3 py-2 min-h-[44px] bg-white rounded-xl border border-slate-300 text-slate-900 text-xs font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                        placeholder="misal: Bank Mandiri / BRI / BCA / BSI"
+                        className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
                       />
                     </div>
 
@@ -602,456 +1126,328 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
                         value={donationAccountNumber}
                         onChange={(e) => setDonationAccountNumber(e.target.value)}
                         placeholder="misal: 132-00-9876543-2"
-                        className="w-full px-3 py-2 min-h-[44px] bg-white rounded-xl border border-slate-300 text-slate-900 text-xs font-mono font-bold focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                        className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-mono font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
                       />
                     </div>
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Nama Penerima / Pemilik Rekening
+                      Nama Pemilik Rekening / Penerima
                     </label>
                     <input
                       type="text"
                       value={donationRecipientName}
                       onChange={(e) => setDonationRecipientName(e.target.value)}
-                      placeholder="misal: Yayasan Inovasi Tani Mandiri / Pengelola HIKMAT TANI"
-                      className="w-full px-3 py-2 min-h-[44px] bg-white rounded-xl border border-slate-300 text-slate-900 text-xs font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                      placeholder="misal: Pengelola HIKMAT TANI"
+                      className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Nomor / Akun E-Wallet (Opsional)
-                      </label>
-                      <input
-                        type="text"
-                        value={donationEwalletNumber}
-                        onChange={(e) => setDonationEwalletNumber(e.target.value)}
-                        placeholder="misal: 0812-3456-7890 (GoPay/OVO/DANA)"
-                        className="w-full px-3 py-2 min-h-[44px] bg-white rounded-xl border border-slate-300 text-slate-900 text-xs font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Link Donasi Eksternal (Opsional)
-                      </label>
-                      <input
-                        type="url"
-                        value={donationUrl}
-                        onChange={(e) => setDonationUrl(e.target.value)}
-                        placeholder="https://saweria.co/... atau https://kitabisa.com/..."
-                        className="w-full px-3 py-2 min-h-[44px] bg-white rounded-xl border border-slate-300 text-slate-900 text-xs font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      E-Wallet / Kontak Transfer Alternatif
+                    </label>
+                    <input
+                      type="text"
+                      value={donationEwalletNumber}
+                      onChange={(e) => setDonationEwalletNumber(e.target.value)}
+                      placeholder="misal: 0812-3456-7890 (GoPay/OVO/DANA/ShopeePay)"
+                      className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                    />
                   </div>
                 </div>
 
-                {/* Upload QRIS */}
-                <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-3">
-                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                {/* Pengaturan QRIS Resmi */}
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
                     <QrCode className="w-4 h-4 text-emerald-700" />
-                    <span>Gambar QRIS Pembayaran</span>
+                    Kode QRIS Donasi Resmi
                   </h4>
 
-                  <div className="flex flex-col sm:flex-row items-start gap-4">
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
                     {donationQrisImage ? (
-                      <div className="relative w-36 h-36 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-center p-2 shrink-0">
+                      <div className="w-36 h-36 bg-white p-2 rounded-2xl border-2 border-emerald-600 shadow-sm flex items-center justify-center shrink-0">
                         <img
                           src={donationQrisImage}
-                          alt="QRIS Donasi"
+                          alt="QRIS Donasi HIKMAT TANI"
                           className="w-full h-full object-contain"
                         />
-                        <button
-                          type="button"
-                          onClick={() => setDonationQrisImage('')}
-                          className="absolute -top-2 -right-2 w-6 h-6 bg-rose-600 text-white rounded-full flex items-center justify-center hover:bg-rose-700 shadow-xs"
-                          title="Hapus QRIS"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
                       </div>
                     ) : (
-                      <div className="w-36 h-36 bg-slate-100 rounded-xl border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 text-xs p-2 text-center shrink-0">
-                        <QrCode className="w-8 h-8 mb-1" />
-                        <span>Belum ada gambar QRIS</span>
+                      <div className="w-36 h-36 bg-slate-200 rounded-2xl border border-slate-300 flex flex-col items-center justify-center text-slate-500 text-center p-2 shrink-0">
+                        <QrCode className="w-8 h-8 mb-1 text-slate-400" />
+                        <span className="text-[10px] font-bold">Belum Ada QRIS</span>
                       </div>
                     )}
 
-                    <div className="space-y-2 text-xs flex-1">
-                      <p className="text-slate-600">
-                        Unggah gambar barcode QRIS resmi (format JPG/PNG/WebP, maksimal 2 MB) untuk memudahkan donasi langsung melalui mobile banking atau aplikasi dompet digital.
+                    <div className="space-y-2 flex-1 w-full">
+                      <label className="block text-xs font-bold text-slate-700">
+                        Unggah Berkas Gambar QRIS Baru
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/png, image/jpeg, image/webp"
+                        onChange={handleQrisFileChange}
+                        className="block w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-800 file:text-white hover:file:bg-emerald-700 cursor-pointer"
+                      />
+                      <p className="text-[11px] text-slate-500">
+                        Format yang didukung: PNG, JPG, WebP. Ukuran maks 2.5 MB.
                       </p>
-                      <label className="inline-flex items-center gap-1.5 px-3.5 py-2 min-h-[44px] bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs cursor-pointer border border-slate-300 transition-colors">
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>{donationQrisImage ? 'Ganti Gambar QRIS' : 'Pilih Gambar QRIS'}</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleQrisFileChange}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Kontak Resmi & Deskripsi */}
-                <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-3">
-                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                    <Phone className="w-4 h-4 text-emerald-700" />
-                    <span>Kontak Resmi & Deskripsi Singkat</span>
-                  </h4>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Nomor Telepon / WhatsApp Resmi
-                      </label>
-                      <input
-                        type="text"
-                        value={contactPhone}
-                        onChange={(e) => setContactPhone(e.target.value)}
-                        placeholder="+62 812-3456-7890"
-                        className="w-full px-3 py-2 min-h-[44px] bg-white rounded-xl border border-slate-300 text-slate-900 text-xs font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Email Resmi Pengelola
-                      </label>
-                      <input
-                        type="email"
-                        value={contactEmail}
-                        onChange={(e) => setContactEmail(e.target.value)}
-                        placeholder="kontak@hikmattani.id"
-                        className="w-full px-3 py-2 min-h-[44px] bg-white rounded-xl border border-slate-300 text-slate-900 text-xs font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
-                      />
+                      {donationQrisImage && (
+                        <button
+                          type="button"
+                          onClick={() => setDonationQrisImage('')}
+                          className="text-xs text-rose-600 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Hapus Gambar QRIS</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Deskripsi Singkat / Misi Aplikasi
+                      Tautan Donasi Eksternal (Kitabisa / Saweria / KaryaKarsa - Opsional)
                     </label>
-                    <textarea
-                      rows={2}
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Deskripsi misi kemandirian petani..."
-                      className="w-full px-3 py-2 bg-white rounded-xl border border-slate-300 text-slate-900 text-xs font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                    <input
+                      type="url"
+                      value={donationUrl}
+                      onChange={(e) => setDonationUrl(e.target.value)}
+                      placeholder="https://..."
+                      className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
                     />
                   </div>
                 </div>
 
-                <div className="pt-2">
+                <div className="flex justify-end pt-2">
                   <button
                     type="submit"
                     disabled={isSavingConfig}
-                    className="w-full flex items-center justify-center gap-2 p-3.5 min-h-[48px] bg-emerald-800 hover:bg-emerald-900 active:bg-black text-white font-bold rounded-xl text-xs sm:text-sm transition-all shadow-xs"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 min-h-[44px] bg-emerald-800 hover:bg-emerald-700 active:bg-emerald-900 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer disabled:opacity-50"
                   >
                     {isSavingConfig ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Menyimpan Konfigurasi...</span>
-                      </>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
                     ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        <span>Simpan Perubahan Konfigurasi Resmi</span>
-                      </>
+                      <Save className="w-4 h-4" />
                     )}
+                    <span>Simpan Pengaturan Donasi & QRIS</span>
                   </button>
                 </div>
               </form>
             )}
 
-            {/* TAB 2: KELOLA PENGELOLA (SUPER_ADMIN ONLY) */}
-            {activeTab === 'managers' && currentAdmin.role === 'SUPER_ADMIN' && (
+            {/* ========================================================================= */}
+            {/* MENU 4: PUSTAKA INFORMASI */}
+            {/* ========================================================================= */}
+            {activeTab === 'pustaka' && (
               <div className="space-y-4">
-                {managerSuccessMsg && (
-                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-300 flex items-center gap-2 text-xs font-semibold text-emerald-950">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>{managerSuccessMsg}</span>
+                <div className="p-5 bg-gradient-to-br from-emerald-950 to-slate-900 text-white rounded-2xl border border-emerald-800/80 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <BookOpen className="w-4 h-4" />
+                      Status Basis Pengetahuan Agronomi Padi
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-700 text-white rounded-full">
+                      100% Offline Ready
+                    </span>
                   </div>
-                )}
 
-                {managerErrorMsg && (
-                  <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 flex items-center gap-2 text-xs font-semibold text-rose-900">
-                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                    <span>{managerErrorMsg}</span>
-                  </div>
-                )}
+                  <p className="text-xs text-slate-200 leading-relaxed">
+                    Database pustaka agronomi telah diindeks dan disimpan secara lokal pada peramban/perangkat petani sehingga dapat diakses tanpa koneksi internet sama sekali di tengah sawah.
+                  </p>
+                </div>
 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900">Daftar Akun Pengelola</h4>
-                    <p className="text-xs text-slate-500">
-                      Kelola hak akses pengelola dan admin utama
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+                    <div className="flex items-center justify-between font-bold text-slate-900">
+                      <span>Database Varietas Padi</span>
+                      <span className="text-emerald-700">15+ Varietas</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Varietas Inpari, Ciherang, Mekongga, IR64, Sintanur, Sigupai, dll lengkap dengan potensi hasil, umur panen, dan ketahanan wereng/hawar.
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setIsAddManagerOpen(!isAddManagerOpen)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 min-h-[44px] bg-emerald-800 hover:bg-emerald-900 text-white font-bold rounded-xl text-xs transition-colors shadow-xs"
-                  >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    <span>{isAddManagerOpen ? 'Tutup Form' : 'Tambah Pengelola'}</span>
-                  </button>
-                </div>
-
-                {/* Form Tambah Pengelola Baru */}
-                {isAddManagerOpen && (
-                  <form
-                    onSubmit={handleCreateManager}
-                    className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3"
-                  >
-                    <h5 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                      Buat Akun Pengelola Baru
-                    </h5>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Nama Pengguna (Username) <span className="text-rose-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={newUsername}
-                          onChange={(e) => setNewUsername(e.target.value)}
-                          placeholder="misal: manager_subang"
-                          className="w-full px-3 py-2 min-h-[44px] bg-white rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Nama Lengkap <span className="text-rose-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={newFullName}
-                          onChange={(e) => setNewFullName(e.target.value)}
-                          placeholder="misal: Ahmad Subang"
-                          className="w-full px-3 py-2 min-h-[44px] bg-white rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
-                        />
-                      </div>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+                    <div className="flex items-center justify-between font-bold text-slate-900">
+                      <span>Diagnosis Hama & Penyakit (OPT)</span>
+                      <span className="text-emerald-700">12+ OPT Utama</span>
                     </div>
+                    <p className="text-[11px] text-slate-500">
+                      Penggerek batang (sundep/beluk), wereng batang coklat (WBC), blast, kresek, tikus, walang sangit, dll disertai ambang kendali & pestisida nabati.
+                    </p>
+                  </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Email (Opsional)
-                        </label>
-                        <input
-                          type="email"
-                          value={newEmail}
-                          onChange={(e) => setNewEmail(e.target.value)}
-                          placeholder="ahmad@hikmattani.id"
-                          className="w-full px-3 py-2 min-h-[44px] bg-white rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Kata Sandi Awal <span className="text-rose-500">*</span>
-                        </label>
-                        <input
-                          type="password"
-                          required
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          placeholder="Minimal 6 karakter..."
-                          className="w-full px-3 py-2 min-h-[44px] bg-white rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
-                        />
-                      </div>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+                    <div className="flex items-center justify-between font-bold text-slate-900">
+                      <span>Kalkulator Pemupukan Berimbang</span>
+                      <span className="text-emerald-700">5 Dosis Unsur</span>
                     </div>
+                    <p className="text-[11px] text-slate-500">
+                      Rekomendasi takaran pupuk dasar & susulan (Organik, Urea, SP-36, KCl, NPK Ponska) disesuaikan luas lahan dan fase umur tanaman (HST).
+                    </p>
+                  </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Peran (Role)
-                      </label>
-                      <select
-                        value={newRole}
-                        onChange={(e) => setNewRole(e.target.value as 'MANAGER' | 'SUPER_ADMIN')}
-                        className="w-full px-3 py-2 min-h-[44px] bg-white rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-emerald-700 outline-hidden"
-                      >
-                        <option value="MANAGER">MANAGER (Pengelola Resmi)</option>
-                        <option value="SUPER_ADMIN">SUPER_ADMIN (Admin Utama)</option>
-                      </select>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+                    <div className="flex items-center justify-between font-bold text-slate-900">
+                      <span>Rujukan Ilmiah Terstandar</span>
+                      <span className="text-emerald-700">BBPadi & Ditlin</span>
                     </div>
-
-                    <div className="flex justify-end gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setIsAddManagerOpen(false)}
-                        className="px-3 py-2 min-h-[42px] bg-white text-slate-700 border border-slate-300 font-bold rounded-xl text-xs"
-                      >
-                        Batal
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={isCreatingManager}
-                        className="px-4 py-2 min-h-[42px] bg-emerald-800 text-white font-bold rounded-xl text-xs shadow-xs"
-                      >
-                        {isCreatingManager ? 'Menyimpan...' : 'Simpan Akun Pengelola'}
-                      </button>
-                    </div>
-                  </form>
-                )}
-
-                {/* List Akun Pengelola */}
-                <div className="space-y-2">
-                  {managers.map((m) => (
-                    <div
-                      key={m.id}
-                      className="p-3.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-3"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs shrink-0">
-                          {m.fullName.charAt(0)}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-xs text-slate-900">{m.fullName}</span>
-                            <span
-                              className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${
-                                m.role === 'SUPER_ADMIN'
-                                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                  : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                              }`}
-                            >
-                              {m.role}
-                            </span>
-                            <span
-                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
-                                m.isActive
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : 'bg-rose-50 text-rose-700'
-                              }`}
-                            >
-                              {m.isActive ? 'Aktif' : 'Nonaktif'}
-                            </span>
-                          </div>
-                          <span className="text-[11px] text-slate-500 font-mono">@{m.username}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        {m.id !== currentAdmin.id && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleManagerActive(m)}
-                              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${
-                                m.isActive
-                                  ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                  : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                              }`}
-                            >
-                              {m.isActive ? 'Nonaktifkan' : 'Aktifkan'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteManager(m)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors"
-                              title="Hapus Pengelola"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    <p className="text-[11px] text-slate-500">
+                      Disusun mengacu pada standar Balai Besar Penelitian Tanaman Padi (BBPadi) Sukamandi dan Ditlin Kementan RI.
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* TAB 3: CATATAN AUDIT (AUDIT LOGS) */}
-            {activeTab === 'audit' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900">Riwayat Catatan Audit</h4>
-                    <p className="text-xs text-slate-500">
-                      Pencatatan transparan seluruh perubahan konfigurasi & aksi manajerial
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={loadAuditLogs}
-                    className="p-2 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100"
-                    title="Segarkan Log"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isLoadingAudit ? 'animate-spin' : ''}`} />
-                  </button>
-                </div>
+            {/* ========================================================================= */}
+            {/* MENU 5: KONFIGURASI APLIKASI */}
+            {/* ========================================================================= */}
+            {activeTab === 'konfigurasi' && (
+              <div className="space-y-5">
+                <form onSubmit={handleSaveConfig} className="space-y-4">
+                  {/* Kontak Bantuan & Dukungan */}
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
+                      <Phone className="w-4 h-4 text-emerald-700" />
+                      Kontak Layanan & Bantuan Resmi
+                    </h4>
 
-                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                  {auditLogs.length === 0 ? (
-                    <div className="p-6 text-center text-xs text-slate-400">
-                      Belum ada catatan audit tercatat.
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Nomor Telepon / WhatsApp
+                        </label>
+                        <input
+                          type="text"
+                          value={contactPhone}
+                          onChange={(e) => setContactPhone(e.target.value)}
+                          placeholder="+62 812-3456-7890"
+                          className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Email Kontak Bantuan
+                        </label>
+                        <input
+                          type="email"
+                          value={contactEmail}
+                          onChange={(e) => setContactEmail(e.target.value)}
+                          placeholder="kontak@hikmattani.id"
+                          className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                        />
+                      </div>
                     </div>
-                  ) : (
-                    auditLogs.map((log) => (
-                      <div
-                        key={log.id}
-                        className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1 text-xs"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-slate-900">{log.actorName}</span>
-                            <span className="text-[10px] font-mono px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded">
-                              {log.actorRole}
+                  </div>
+
+                  {/* Banner Dukungan Petani */}
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
+                      <Building className="w-4 h-4 text-emerald-700" />
+                      Pengaturan Banner Dukung HIKMAT TANI
+                    </h4>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Judul Banner
+                      </label>
+                      <input
+                        type="text"
+                        value={supportTitle}
+                        onChange={(e) => setSupportTitle(e.target.value)}
+                        placeholder="Dukung HIKMAT TANI"
+                        className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Subjudul / Keterangan Banner
+                      </label>
+                      <input
+                        type="text"
+                        value={supportDescription}
+                        onChange={(e) => setSupportDescription(e.target.value)}
+                        placeholder="Inisiatif Mandiri Teknologi Pertanian Padi Nusantara"
+                        className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="submit"
+                      disabled={isSavingConfig}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 min-h-[44px] bg-emerald-800 hover:bg-emerald-700 active:bg-emerald-900 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                    >
+                      {isSavingConfig ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      <span>Simpan Konfigurasi Aplikasi</span>
+                    </button>
+                  </div>
+                </form>
+
+                {/* Ringkasan Catatan Audit (Audit Log) */}
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
+                      <History className="w-4 h-4 text-emerald-700" />
+                      Riwayat Catatan Audit (Audit Log)
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={loadAuditLogs}
+                      className="text-xs text-emerald-800 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isLoadingAudit ? 'animate-spin' : ''}`} />
+                      <span>Muat Ulang</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {auditLogs.length === 0 ? (
+                      <p className="text-xs text-slate-500 italic py-2">Belum ada catatan aktivitas.</p>
+                    ) : (
+                      auditLogs.map((log) => (
+                        <div
+                          key={log.id}
+                          className="p-2.5 bg-white rounded-xl border border-slate-200 text-xs flex items-center justify-between gap-3"
+                        >
+                          <div>
+                            <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                              <span className="font-mono text-emerald-800">{log.action}</span>
+                              <span className="text-slate-400">•</span>
+                              <span className="text-slate-700">{log.actorName}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-500">
+                              {new Date(log.createdAt).toLocaleString('id-ID', {
+                                dateStyle: 'medium',
+                                timeStyle: 'short',
+                              })}
                             </span>
                           </div>
-                          <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {new Date(log.createdAt).toLocaleDateString('id-ID', {
-                              day: 'numeric',
-                              month: 'short',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
+                          {log.ipAddress && (
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {log.ipAddress}
+                            </span>
+                          )}
                         </div>
-                        <div className="text-slate-700 font-medium">
-                          Aksi: <strong className="font-mono text-emerald-800">{log.action}</strong>
-                        </div>
-                        {log.details && (
-                          <div className="text-[11px] text-slate-500 font-mono bg-white p-2 rounded border border-slate-200">
-                            {JSON.stringify(log.details)}
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  )}
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
             )}
           </div>
         )}
-
-        {/* Footer */}
-        <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
-          <span className="text-[11px] text-slate-400 italic">
-            "Bijak Bertani, Cerdas Bertani"
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 min-h-[48px] bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-800 font-bold rounded-xl text-xs transition-colors"
-          >
-            Tutup
-          </button>
-        </div>
       </div>
     </Modal>
   );

@@ -80,6 +80,43 @@ router.get('/me', requireManager, async (req: AuthenticatedRequest, res: Respons
   });
 });
 
+// Ganti Kata Sandi Akun Pengelola Aktif
+router.post('/auth/change-password', requireManager, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const ipAddress = req.ip || req.socket.remoteAddress || '127.0.0.1';
+
+    if (!currentPassword || typeof currentPassword !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_INPUT', message: 'Kata sandi saat ini wajib diisi.' },
+      });
+    }
+
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_INPUT', message: 'Kata sandi baru minimal 6 karakter.' },
+      });
+    }
+
+    const result = adminService.changePassword(req.user!, currentPassword, newPassword, ipAddress);
+
+    return res.status(200).json({
+      success: true,
+      message: result.message,
+    });
+  } catch (err: any) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'CHANGE_PASSWORD_ERROR',
+        message: err.message || 'Gagal mengubah kata sandi.',
+      },
+    });
+  }
+});
+
 // ==========================================
 // 2. KONFIGURASI RESMI HIKMAT TANI (MANAGER+)
 // ==========================================

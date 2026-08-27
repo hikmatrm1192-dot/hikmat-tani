@@ -9,10 +9,12 @@
 import { EntityId, ISODateString, Percentage } from './common.ts';
 
 export type OptCategory =
-  | 'INSECT_PEST' // Hama Serangga
-  | 'DISEASE'     // Penyakit (Jamur/Bakteri/Virus)
-  | 'WEED'        // Gulma
-  | 'RODENT'      // Tikus / Vertebrata
+  | 'INSECT_PEST'      // Hama Serangga
+  | 'DISEASE'          // Penyakit (Jamur/Bakteri/Virus)
+  | 'WEED'             // Gulma
+  | 'RODENT'           // Tikus / Vertebrata
+  | 'VERTEBRATE_PEST'  // Hama Vertebrata (Tikus/Burung)
+  | 'MOLLUSC_PEST'     // Hama Moluska (Keong Mas)
   | 'OTHER';
 
 export type AttackSeverity = 'UNKNOWN' | 'LIGHT' | 'MEDIUM' | 'HEAVY';

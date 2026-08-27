@@ -26,7 +26,7 @@ export const outboxRepository = {
     entityType: SyncOutboxItem['entityType'],
     entityId: string,
     action: SyncOutboxItem['action'],
-    payload: Record<string, unknown>,
+    payload: Record<string, any> | any,
     operationId?: string
   ): Promise<string> {
     const opId = operationId || `op-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -36,12 +36,25 @@ export const outboxRepository = {
       entityType,
       entityId,
       action,
-      payload,
+      payload: payload as Record<string, any>,
       createdAt: new Date().toISOString(),
       retryCount: 0,
       status: 'PENDING',
     };
     return await this.add(item);
+  },
+
+  /**
+   * Alias pencatatan mutasi lokal ke syncOutbox
+   */
+  async recordMutation(
+    entityType: SyncOutboxItem['entityType'],
+    entityId: string,
+    action: SyncOutboxItem['action'],
+    payload: Record<string, any> | any,
+    operationId?: string
+  ): Promise<string> {
+    return await this.enqueue(entityType, entityId, action, payload, operationId);
   },
 
   async getPending(): Promise<SyncOutboxItem[]> {

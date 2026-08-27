@@ -256,8 +256,8 @@ export const adminUsers = pgTable('admin_users', {
 export const appConfigs = pgTable('app_configs', {
   id: text('id').primaryKey(), // singleton id e.g. 'official_config'
   appName: text('app_name').default('HIKMAT TANI').notNull(),
-  slogan: text('slogan').default('Bijak Bertani, Cerdas Bertani').notNull(),
-  logoUrl: text('logo_url').default('/icon.svg').notNull(),
+  slogan: text('slogan').default('CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.').notNull(),
+  logoUrl: text('logo_url').default('/logo-hikmat-tani-1024.png').notNull(),
   description: text('description').notNull(),
   contactPhone: text('contact_phone'),
   contactEmail: text('contact_email'),

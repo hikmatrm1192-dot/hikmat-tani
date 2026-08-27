@@ -27,6 +27,7 @@ export interface CropSeason {
   plantingDate: ISODateString;
   plantedAreaHa: AreaHa;
   plantingSystem?: PlantingSystem;
+  notes?: string;
   status: CropSeasonStatus;
   harvestDate?: ISODateString;
   yieldKg?: WeightKg;

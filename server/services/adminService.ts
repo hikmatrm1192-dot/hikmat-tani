@@ -9,6 +9,9 @@
  * 5. Setiap perubahan konfigurasi dan manajemen pengelola dicatat dalam audit log.
  */
 
+import dotenv from 'dotenv';
+dotenv.config();
+
 import crypto from 'crypto';
 import { authService, AuthSessionPayload } from './authService.ts';
 
@@ -59,6 +62,18 @@ export interface AdminAuditLog {
   createdAt: string;
 }
 
+/**
+ * Membaca password awal Super Admin dari environment variable resmi
+ * Satu sumber konfigurasi: ADMIN_INITIAL_PASSWORD atau SUPER_ADMIN_PASSWORD
+ */
+export function getSuperAdminInitialPasswordFromEnv(): string {
+  const envPassword = process.env.ADMIN_INITIAL_PASSWORD || process.env.SUPER_ADMIN_PASSWORD;
+  if (typeof envPassword === 'string' && envPassword.trim().length > 0) {
+    return envPassword.trim();
+  }
+  return '';
+}
+
 export class AdminService {
   private static instance: AdminService;
 
@@ -71,8 +86,8 @@ export class AdminService {
     // 1. Inisialisasi default official config
     this.officialConfig = {
       appName: 'HIKMAT TANI',
-      slogan: 'Bijak Bertani, Cerdas Bertani',
-      logoUrl: '/icon.svg',
+      slogan: 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.',
+      logoUrl: '/logo-hikmat-tani-1024.png',
       description: 'Sistem Rekomendasi Budidaya Padi & Catatan Lapang Mandiri 100% Offline untuk Petani Nusantara.',
       contactPhone: '+62 812-3456-7890',
       contactEmail: 'kontak@hikmattani.id',
@@ -89,7 +104,7 @@ export class AdminService {
       updatedAt: new Date().toISOString(),
     };
 
-    // 2. Inisialisasi akun Super Admin default (dapat diubah/diupdate oleh superadmin)
+    // 2. Inisialisasi akun Super Admin default & manager
     this.seedDefaultAdmin();
   }
 
@@ -101,7 +116,7 @@ export class AdminService {
   }
 
   /**
-   * Helper Keamanan: Hash Password dengan PBKDF2
+   * Helper Keamanan: Hash Password dengan PBKDF2 (HMAC-SHA512)
    */
   public hashPassword(password: string, salt?: string): { hash: string; salt: string } {
     const useSalt = salt || crypto.randomBytes(16).toString('hex');
@@ -110,40 +125,83 @@ export class AdminService {
   }
 
   public verifyPassword(password: string, hash: string, salt: string): boolean {
+    if (!password || !hash || !salt) return false;
     const calculated = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
-    return calculated === hash;
+    try {
+      const calcBuf = Buffer.from(calculated, 'hex');
+      const hashBuf = Buffer.from(hash, 'hex');
+      if (calcBuf.length !== hashBuf.length) return false;
+      return crypto.timingSafeEqual(calcBuf, hashBuf);
+    } catch {
+      return calculated === hash;
+    }
   }
 
   /**
-   * Seed Super Admin & Manager awal secara aman
+   * Provisioning atau Re-provisioning Akun SUPER_ADMIN secara aman
+   * - Tidak membuat akun kedua
+   * - Menjaga username 'pappizee' dan email 'hikmat.rm1192@gmail.com'
+   * - Menghash password dari environment dengan PBKDF2 (SHA-512)
+   * - Hanya menyimpan hash + salt (tidak ada plaintext)
    */
-  private seedDefaultAdmin() {
-    // Akun Super Admin Utama
-    const superAdminSalt = 'hikmat_tani_super_admin_salt_2026';
-    const superAdminHash = this.hashPassword('AdminHikmat2026!', superAdminSalt).hash;
+  public reprovisionSuperAdminPassword(): void {
+    const envPassword = getSuperAdminInitialPasswordFromEnv();
+    const existing = this.adminUsers.get('admin_super_pappizee');
+
+    if (existing) {
+      existing.username = 'pappizee';
+      existing.email = 'hikmat.rm1192@gmail.com';
+      existing.fullName = 'Pappizee';
+      existing.role = 'SUPER_ADMIN';
+      existing.isActive = true;
+      if (envPassword) {
+        const { hash, salt } = this.hashPassword(envPassword, existing.salt || crypto.randomBytes(16).toString('hex'));
+        existing.passwordHash = hash;
+        existing.salt = salt;
+        existing.updatedAt = new Date().toISOString();
+      }
+      return;
+    }
+
+    // Buat akun Super Admin tunggal
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = envPassword
+      ? this.hashPassword(envPassword, salt).hash
+      : this.hashPassword('SuperPappizeeFallbackSecret2026!', salt).hash;
 
     const superAdmin: AdminUser = {
-      id: 'admin_super_01',
-      username: 'superadmin',
-      email: 'admin.utama@hikmattani.id',
-      fullName: 'Super Admin HIKMAT TANI',
-      passwordHash: superAdminHash,
-      salt: superAdminSalt,
+      id: 'admin_super_pappizee',
+      username: 'pappizee',
+      email: 'hikmat.rm1192@gmail.com',
+      fullName: 'Pappizee',
+      passwordHash: hash,
+      salt: salt,
       role: 'SUPER_ADMIN',
       isActive: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    // Akun Pengelola / Manager Lapangan
+    this.adminUsers.set(superAdmin.id, superAdmin);
+  }
+
+  /**
+   * Seed Super Admin & Manager awal secara aman
+   * Akun Utama: pappizee (hikmat.rm1192@gmail.com) sebagai SUPER_ADMIN
+   */
+  private seedDefaultAdmin() {
+    this.reprovisionSuperAdminPassword();
+
+    // Akun Pengelola / Manager Staf Lapangan (Role MANAGER, bukan SUPER_ADMIN)
     const managerSalt = 'hikmat_tani_manager_salt_2026';
-    const managerHash = this.hashPassword('ManagerTani2026!', managerSalt).hash;
+    const managerEnvPassword = process.env.MANAGER_INITIAL_PASSWORD || 'ManagerTani2026!';
+    const managerHash = this.hashPassword(managerEnvPassword, managerSalt).hash;
 
     const manager: AdminUser = {
       id: 'admin_mgr_01',
       username: 'pengelola',
       email: 'pengelola@hikmattani.id',
-      fullName: 'Pengelola Resmi HIKMAT TANI',
+      fullName: 'Pengelola Lapangan HIKMAT TANI',
       passwordHash: managerHash,
       salt: managerSalt,
       role: 'MANAGER',
@@ -152,12 +210,11 @@ export class AdminService {
       updatedAt: new Date().toISOString(),
     };
 
-    this.adminUsers.set(superAdmin.id, superAdmin);
     this.adminUsers.set(manager.id, manager);
   }
 
   /**
-   * Autentikasi Pengelola / Super Admin
+   * Autentikasi Pengelola / Super Admin (Bisa menggunakan Username ATAU Email)
    */
   public authenticateAdmin(
     usernameOrEmail: string,
@@ -166,29 +223,47 @@ export class AdminService {
   ): {
     success: boolean;
     token?: string;
-    admin?: { id: string; username: string; fullName: string; role: 'MANAGER' | 'SUPER_ADMIN' };
+    admin?: { id: string; username: string; email?: string; fullName: string; role: 'MANAGER' | 'SUPER_ADMIN' };
     error?: string;
   } {
+    if (!usernameOrEmail || !passwordPlain) {
+      return { success: false, error: 'Nama pengguna/email atau kata sandi pengelola salah.' };
+    }
+
+    const trimmedInput = usernameOrEmail.trim().toLowerCase();
     const user = Array.from(this.adminUsers.values()).find(
       (u) =>
         u.isActive &&
-        (u.username.toLowerCase() === usernameOrEmail.toLowerCase() ||
-          (u.email && u.email.toLowerCase() === usernameOrEmail.toLowerCase()))
+        (u.username.toLowerCase() === trimmedInput ||
+          (u.email && u.email.toLowerCase() === trimmedInput))
     );
 
     if (!user) {
-      return { success: false, error: 'Nama pengguna atau kata sandi pengelola salah.' };
+      return { success: false, error: 'Nama pengguna/email atau kata sandi pengelola salah.' };
     }
 
-    const isMatch = this.verifyPassword(passwordPlain, user.passwordHash, user.salt);
+    let isMatch = this.verifyPassword(passwordPlain, user.passwordHash, user.salt);
+
+    // Mekanisme reset/re-provision aman jika hash di memori belum sinkron dengan password environment
+    if (!isMatch && user.role === 'SUPER_ADMIN') {
+      const envPassword = getSuperAdminInitialPasswordFromEnv();
+      if (envPassword && passwordPlain === envPassword) {
+        const { hash, salt } = this.hashPassword(passwordPlain);
+        user.passwordHash = hash;
+        user.salt = salt;
+        user.updatedAt = new Date().toISOString();
+        isMatch = true;
+      }
+    }
+
     if (!isMatch) {
-      return { success: false, error: 'Nama pengguna atau kata sandi pengelola salah.' };
+      return { success: false, error: 'Nama pengguna/email atau kata sandi pengelola salah.' };
     }
 
     user.lastLoginAt = new Date().toISOString();
     user.updatedAt = new Date().toISOString();
 
-    // Catat login ke audit log
+    // Catat login ke audit log (tanpa menampilkan password)
     this.recordAuditLog({
       actorId: user.id,
       actorName: user.fullName,
@@ -211,9 +286,84 @@ export class AdminService {
       admin: {
         id: user.id,
         username: user.username,
+        email: user.email,
         fullName: user.fullName,
         role: user.role,
       },
+    };
+  }
+
+  /**
+   * Helper diagnostik verifikasi SUPER_ADMIN (tanpa mengekspos plaintext)
+   */
+  public verifySuperAdminStatus(): {
+    exists: boolean;
+    username: string;
+    email: string;
+    role: string;
+    hasSalt: boolean;
+    hasPasswordHash: boolean;
+    hasPlaintextPasswordInRecord: boolean;
+    duplicateSuperAdminsCount: number;
+  } {
+    const superAdmins = Array.from(this.adminUsers.values()).filter(
+      (u) => u.role === 'SUPER_ADMIN'
+    );
+    const user = this.adminUsers.get('admin_super_pappizee');
+    return {
+      exists: Boolean(user),
+      username: user?.username || '',
+      email: user?.email || '',
+      role: user?.role || '',
+      hasSalt: Boolean(user?.salt),
+      hasPasswordHash: Boolean(user?.passwordHash),
+      hasPlaintextPasswordInRecord: Object.prototype.hasOwnProperty.call(user || {}, 'password'),
+      duplicateSuperAdminsCount: superAdmins.length,
+    };
+  }
+
+  /**
+   * Ganti Kata Sandi Akun Sendiri (MANAGER / SUPER_ADMIN)
+   */
+  public changePassword(
+    actor: AuthSessionPayload,
+    currentPasswordPlain: string,
+    newPasswordPlain: string,
+    ipAddress?: string
+  ): { success: boolean; message: string } {
+    this.assertIsAdmin(actor);
+
+    const user = this.adminUsers.get(actor.userId);
+    if (!user) {
+      throw new Error('Akun pengelola tidak ditemukan.');
+    }
+
+    const isMatch = this.verifyPassword(currentPasswordPlain, user.passwordHash, user.salt);
+    if (!isMatch) {
+      throw new Error('Kata sandi saat ini yang Anda masukkan salah.');
+    }
+
+    if (!newPasswordPlain || newPasswordPlain.length < 6) {
+      throw new Error('Kata sandi baru minimal harus 6 karakter.');
+    }
+
+    const { hash, salt } = this.hashPassword(newPasswordPlain);
+    user.passwordHash = hash;
+    user.salt = salt;
+    user.updatedAt = new Date().toISOString();
+
+    this.recordAuditLog({
+      actorId: user.id,
+      actorName: user.fullName,
+      actorRole: user.role,
+      action: 'CHANGE_PASSWORD',
+      details: { username: user.username },
+      ipAddress,
+    });
+
+    return {
+      success: true,
+      message: 'Kata sandi berhasil diperbarui dengan aman.',
     };
   }
 

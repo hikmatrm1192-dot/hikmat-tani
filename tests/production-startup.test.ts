@@ -1,6 +1,6 @@
 /**
  * HIKMAT TANI - PRODUCTION STARTUP & HEALTH CHECK TEST
- * Slogan Resmi: "Bijak Bertani, Cerdas Bertani"
+ * Tagline Resmi: "CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN."
  */
 
 import { createApp } from '../server/server.ts';
