@@ -5,7 +5,7 @@
  * Menggunakan progressive disclosure tanpa form yang membingungkan.
  */
 
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { Modal } from '../../components/common/Modal.tsx';
 import { CropSeason, Land, PlantingSystem, RiceVariety } from '../../types/index.ts';
 
@@ -28,16 +28,43 @@ export function StartSeasonModal({
 }: StartSeasonModalProps) {
   const [selectedLandId, setSelectedLandId] = useState<string>(land?.id || allLands[0]?.id || '');
   const [commodity, setCommodity] = useState<string>('Padi');
-  const [varietyName, setVarietyName] = useState<string>('Inpari 32 HDB');
+
+  // De-duplicate varieties list safely based on trimmed lowercase name
+  const uniqueVarieties = useMemo(() => {
+    const seen = new Set<string>();
+    const result: RiceVariety[] = [];
+
+    // Prioritize passed varieties
+    for (const v of varieties) {
+      const key = v.name.toLowerCase().trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(v);
+      }
+    }
+    return result;
+  }, [varieties]);
+
+  const [selectedVarietyOption, setSelectedVarietyOption] = useState<string>(
+    uniqueVarieties[0]?.name || 'Inpari 32 HDB'
+  );
+  const [customVarietyName, setCustomVarietyName] = useState<string>('');
+  const [customDurationDays, setCustomDurationDays] = useState<number>(120);
+
   const [plantingDate, setPlantingDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
   const [plantedAreaHa, setPlantedAreaHa] = useState<number>(land?.areaHa || 1.0);
   const [plantingSystem, setPlantingSystem] = useState<PlantingSystem>('JAJAR_LEGOWO_2_1');
+  const [customPlantingSystem, setCustomPlantingSystem] = useState<string>('');
+
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const activeLand = allLands.find((l) => l.id === (land?.id || selectedLandId)) || land;
+
+  const isCustomVarietySelected = selectedVarietyOption === '__CUSTOM__';
+  const isCustomPlantingSystemSelected = plantingSystem === 'OTHER';
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -56,21 +83,44 @@ export function StartSeasonModal({
       return;
     }
 
+    let finalVarietyName = selectedVarietyOption;
+    let finalVarietyId: string | undefined = undefined;
+
+    if (isCustomVarietySelected) {
+      if (!customVarietyName.trim()) {
+        setError('Nama varietas lokal/khusus wajib diisi');
+        return;
+      }
+      finalVarietyName = customVarietyName.trim();
+    } else {
+      const matched = uniqueVarieties.find(
+        (v) => v.name.toLowerCase().trim() === selectedVarietyOption.toLowerCase().trim()
+      );
+      if (matched) {
+        finalVarietyName = matched.name;
+        finalVarietyId = matched.id;
+      }
+    }
+
+    if (isCustomPlantingSystemSelected && !customPlantingSystem.trim()) {
+      setError('Nama atau keterangan sistem tanam lainnya wajib diisi');
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
     try {
-      const selectedVariety = varieties.find(
-        (v) => v.name.toLowerCase().trim() === varietyName.toLowerCase().trim()
-      );
-
       await onSave({
         landId: targetLandId,
         commodity: commodity.trim() || 'Padi',
-        varietyId: selectedVariety?.id,
-        varietyName: varietyName.trim() || 'Padi Sawah',
+        varietyId: finalVarietyId,
+        varietyName: finalVarietyName || 'Padi Sawah',
         plantingDate: new Date(plantingDate).toISOString(),
         plantedAreaHa: numArea || activeLand?.areaHa || 1.0,
         plantingSystem,
+        notes: isCustomPlantingSystemSelected && customPlantingSystem.trim()
+          ? `Sistem Tanam Kustom: ${customPlantingSystem.trim()}`
+          : undefined,
         status: 'ACTIVE',
       });
       onClose();
@@ -108,7 +158,7 @@ export function StartSeasonModal({
                 const found = allLands.find((l) => l.id === e.target.value);
                 if (found) setPlantedAreaHa(found.areaHa);
               }}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
             >
               {allLands.map((l) => (
                 <option key={l.id} value={l.id}>
@@ -126,72 +176,129 @@ export function StartSeasonModal({
             type="text"
             value={commodity}
             onChange={(e) => setCommodity(e.target.value)}
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
           />
         </div>
 
         {/* Varietas Padi */}
-        <div>
+        <div className="space-y-2">
           <label className="block text-xs font-bold text-slate-700 mb-1">
             Varietas Padi <span className="text-rose-600">*</span>
           </label>
-          {varieties.length > 0 ? (
-            <select
-              value={varietyName}
-              onChange={(e) => setVarietyName(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 font-medium"
-            >
-              {varieties.map((v) => (
-                <option key={v.id} value={v.name}>
-                  {v.name} (~{v.growthDurationDays || 120} hari)
-                </option>
-              ))}
-              <option value="Ciherang">Ciherang (~116 hari)</option>
-              <option value="Inpari 32 HDB">Inpari 32 HDB (~120 hari)</option>
-              <option value="Mekongga">Mekongga (~118 hari)</option>
-              <option value="Lainnya">Lainnya / Varietas Lokal</option>
-            </select>
-          ) : (
-            <input
-              type="text"
-              required
-              value={varietyName}
-              onChange={(e) => setVarietyName(e.target.value)}
-              placeholder="Contoh: Inpari 32 HDB / Ciherang"
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
-            />
+          <select
+            value={selectedVarietyOption}
+            onChange={(e) => setSelectedVarietyOption(e.target.value)}
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 font-medium min-h-[44px]"
+          >
+            {uniqueVarieties.map((v) => (
+              <option key={v.id} value={v.name}>
+                {v.name} (~{v.growthDurationDays || 120} hari)
+              </option>
+            ))}
+            <option value="__CUSTOM__">+ Varietas Lainnya / Benih Lokal</option>
+          </select>
+
+          {/* Form Varietas Lokal / Khusus jika dipilih */}
+          {isCustomVarietySelected && (
+            <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-2.5 animate-fadeIn">
+              <div className="text-xs font-bold text-emerald-950">
+                Data Varietas Lokal / Kustom
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Nama Varietas Lokal <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={customVarietyName}
+                    onChange={(e) => setCustomVarietyName(e.target.value)}
+                    placeholder="Contoh: Pandan Wangi / Rojolele / Mentik"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-emerald-600 focus:outline-none min-h-[40px]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Estimasi Umur (Hari)
+                  </label>
+                  <input
+                    type="number"
+                    min="60"
+                    max="180"
+                    value={customDurationDays}
+                    onChange={(e) => setCustomDurationDays(parseInt(e.target.value, 10) || 120)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-emerald-600 focus:outline-none min-h-[40px]"
+                  />
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
-        {/* Tanggal Tanam */}
-        <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1">
-            Tanggal Tanam (Hari H Tanam) <span className="text-rose-600">*</span>
-          </label>
-          <input
-            type="date"
-            required
-            value={plantingDate}
-            onChange={(e) => setPlantingDate(e.target.value)}
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
-          />
+        {/* Tanggal Tanam & Luas */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Tanggal Tanam (Hari H) <span className="text-rose-600">*</span>
+            </label>
+            <input
+              type="date"
+              required
+              value={plantingDate}
+              onChange={(e) => setPlantingDate(e.target.value)}
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Luas Tanam (Hektar) <span className="text-rose-600">*</span>
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              required
+              value={plantedAreaHa || ''}
+              onChange={(e) => setPlantedAreaHa(parseFloat(e.target.value) || 0)}
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+            />
+          </div>
         </div>
 
         {/* Sistem Tanam */}
-        <div>
+        <div className="space-y-2">
           <label className="block text-xs font-bold text-slate-700 mb-1">Sistem Tanam</label>
           <select
             value={plantingSystem}
             onChange={(e) => setPlantingSystem(e.target.value as PlantingSystem)}
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
           >
             <option value="JAJAR_LEGOWO_2_1">Jajar Legowo 2:1</option>
             <option value="JAJAR_LEGOWO_4_1">Jajar Legowo 4:1</option>
             <option value="TEGEL">Tegel (Bujur Sangkar)</option>
             <option value="TABELA">Tabela (Tanam Benih Langsung)</option>
             <option value="SRI">SRI (System of Rice Intensification)</option>
-            <option value="OTHER">Lainnya</option>
+            <option value="OTHER">Lainnya / Sistem Khusus</option>
           </select>
+
+          {/* Form Sistem Tanam Lainnya */}
+          {isCustomPlantingSystemSelected && (
+            <div className="p-3.5 bg-slate-100 border border-slate-300 rounded-xl space-y-1.5 animate-fadeIn">
+              <label className="block text-[11px] font-bold text-slate-700">
+                Nama / Keterangan Sistem Tanam Khusus <span className="text-rose-600">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={customPlantingSystem}
+                onChange={(e) => setCustomPlantingSystem(e.target.value)}
+                placeholder="Contoh: Hazton / Gogo Rancah / Salibu / Jajar Legowo Modifikasi"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-emerald-600 focus:outline-none min-h-[40px]"
+              />
+            </div>
+          )}
         </div>
 
         {/* Buttons */}

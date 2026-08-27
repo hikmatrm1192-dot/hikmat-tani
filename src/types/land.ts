@@ -20,6 +20,8 @@ export type LandType =
   | 'OTHER'
   | string;
 
+export type LandStatus = 'ACTIVE' | 'ARCHIVED';
+
 export interface Land {
   id: EntityId;
   farmerId: EntityId;
@@ -28,6 +30,7 @@ export interface Land {
   location?: string;
   waterSource?: WaterSource;
   landType?: LandType;
+  status?: LandStatus; // 'ACTIVE' (default) | 'ARCHIVED'
   latitude?: Latitude;
   longitude?: Longitude;
   notes?: string;

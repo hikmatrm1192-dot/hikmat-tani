@@ -4,20 +4,32 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
+    "dev": "tsx server/server.ts",
+    "build": "vite build && esbuild server/server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "db:migrate": "tsx server/db/migrate.ts",
+    "test": "tsx tests/backend.test.ts && tsx tests/sync.test.ts && tsx tests/knowledge.test.ts && tsx tests/weather.test.ts && tsx tests/admin.test.ts && tsx tests/e2e-integration.test.ts && tsx tests/production-startup.test.ts",
+    "test:backend": "tsx tests/backend.test.ts",
+    "test:sync": "tsx tests/sync.test.ts",
+    "test:knowledge": "tsx tests/knowledge.test.ts",
+    "test:weather": "tsx tests/weather.test.ts",
+    "test:admin": "tsx tests/admin.test.ts",
+    "test:e2e": "tsx tests/e2e-integration.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
+    "cors": "^2.8.6",
     "dexie": "^4.4.5",
     "dexie-react-hooks": "^4.4.0",
     "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.45.2",
     "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",
@@ -25,13 +37,16 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
+    "fake-indexeddb": "^6.2.5",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3",
-    "@types/express": "^4.17.21"
+    "vite": "^6.2.3"
   }
 }

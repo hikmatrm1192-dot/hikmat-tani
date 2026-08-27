@@ -102,6 +102,7 @@ export function AddLandModal({ isOpen, onClose, onSave }: AddLandModalProps) {
               type="number"
               step="any"
               min="0.001"
+              inputMode="decimal"
               required
               value={areaInput}
               onChange={(e) => setAreaInput(e.target.value)}

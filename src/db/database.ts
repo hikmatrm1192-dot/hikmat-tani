@@ -8,6 +8,7 @@ import {
   ActualAction,
   BackupMetadata,
   CropSeason,
+  CultivationExpense,
   Farmer,
   FarmerDecision,
   Fertilizer,
@@ -20,6 +21,7 @@ import {
   Recommendation,
   Reference,
   RiceVariety,
+  Seedbed,
   SyncOutboxItem,
 } from '../types/index.ts';
 import { DB_NAME, DB_VERSION, SCHEMA_V1 } from './schema.ts';
@@ -42,6 +44,8 @@ export class HikmatTaniDatabase extends Dexie {
   activities!: Table<Activity, string>;
   fertilizerApplications!: Table<FertilizerApplication, string>;
   optObservations!: Table<OptObservation, string>;
+  seedbeds!: Table<Seedbed, string>;
+  expenses!: Table<CultivationExpense, string>;
 
   // --- Tiga Lapisan Keputusan ---
   recommendations!: Table<Recommendation, string>;
@@ -131,55 +135,43 @@ export async function initializeDatabase(): Promise<{
       // 1. References
       for (const item of SEED_REFERENCES) {
         const existing = await db.references.get(item.id);
-        if (!existing) {
-          await db.references.add(item);
-          seedCounts.references++;
-        }
+        await db.references.put(item);
+        if (!existing) seedCounts.references++;
       }
 
       // 2. Fertilizers
       for (const item of SEED_FERTILIZERS) {
         const existing = await db.fertilizers.get(item.id);
-        if (!existing) {
-          await db.fertilizers.add(item);
-          seedCounts.fertilizers++;
-        }
+        await db.fertilizers.put(item);
+        if (!existing) seedCounts.fertilizers++;
       }
 
       // 3. Varieties
       for (const item of SEED_VARIETIES) {
         const existing = await db.riceVarieties.get(item.id);
-        if (!existing) {
-          await db.riceVarieties.add(item);
-          seedCounts.varieties++;
-        }
+        await db.riceVarieties.put(item);
+        if (!existing) seedCounts.varieties++;
       }
 
       // 4. OPTs
       for (const item of SEED_OPTS) {
         const existing = await db.opts.get(item.id);
-        if (!existing) {
-          await db.opts.add(item);
-          seedCounts.opts++;
-        }
+        await db.opts.put(item);
+        if (!existing) seedCounts.opts++;
       }
 
       // 5. Natural Enemies
       for (const item of SEED_NATURAL_ENEMIES) {
         const existing = await db.naturalEnemies.get(item.id);
-        if (!existing) {
-          await db.naturalEnemies.add(item);
-          seedCounts.naturalEnemies++;
-        }
+        await db.naturalEnemies.put(item);
+        if (!existing) seedCounts.naturalEnemies++;
       }
 
       // 6. Knowledge Articles
       for (const item of SEED_KNOWLEDGE_ARTICLES) {
         const existing = await db.knowledgeArticles.get(item.id);
-        if (!existing) {
-          await db.knowledgeArticles.add(item);
-          seedCounts.articles++;
-        }
+        await db.knowledgeArticles.put(item);
+        if (!existing) seedCounts.articles++;
       }
     }
   );

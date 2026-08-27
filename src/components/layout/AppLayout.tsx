@@ -20,12 +20,12 @@ interface AppLayoutProps {
 
 export function AppLayout({ activeTab, onSelectTab, children }: AppLayoutProps) {
   return (
-    <div className="min-h-screen bg-slate-100/70 text-slate-800 flex flex-col md:flex-row antialiased">
+    <div className="min-h-screen bg-slate-100/70 text-slate-800 flex flex-col md:flex-row antialiased overflow-x-hidden">
       {/* Desktop & Tablet Sidebar */}
       <DesktopSidebar activeTab={activeTab} onSelectTab={onSelectTab} />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 pb-20 md:pb-8">
+      <div className="flex-1 flex flex-col min-w-0 pb-24 md:pb-8">
         {/* Mobile Header (Hidden on Desktop) */}
         <header className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 py-3 flex items-center justify-between shadow-xs">
           <BrandLogo size="sm" showSlogan={false} />
@@ -33,7 +33,7 @@ export function AppLayout({ activeTab, onSelectTab, children }: AppLayoutProps) 
         </header>
 
         {/* Dynamic Page Container */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full">
+        <main className="flex-1 p-3.5 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full">
           {children}
         </main>
       </div>

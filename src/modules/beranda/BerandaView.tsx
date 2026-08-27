@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { Sprout } from 'lucide-react';
 import { EmptyState } from '../../components/common/EmptyState.tsx';
 import { recommendationRepository } from '../../db/repositories/recommendationRepository.ts';
+import { landRepository } from '../../db/repositories/landRepository.ts';
 import { buildActivityTimeline } from '../../engine/activityTimeline.ts';
 import { buildFieldContext } from '../../engine/contextEngine.ts';
 import { evaluateRecommendations } from '../../engine/recommendation/evaluator.ts';
@@ -191,9 +192,23 @@ export function BerandaView({
     }
   };
 
+  const handleUpdateLandLocation = async (lat: number, lon: number) => {
+    if (activeLand?.id) {
+      try {
+        await landRepository.update(activeLand.id, {
+          latitude: lat,
+          longitude: lon,
+        });
+        await onRefreshData();
+      } catch (err) {
+        console.error('Gagal memperbarui koordinat lahan:', err);
+      }
+    }
+  };
+
   return (
     <div className="space-y-5">
-      {/* 1. Kondisi Lahan Utama */}
+      {/* 1. Lahan Aktif, Musim Tanam, Varietas, HST & Fase Tanaman */}
       <ActiveLandCard
         land={activeLand}
         activeSeason={activeSeason || undefined}
@@ -204,18 +219,7 @@ export function BerandaView({
         onSelectLand={onSelectLandId}
       />
 
-      {/* 2. Cuaca Lapang */}
-      <WeatherCard />
-
-      {/* 3. Aksi Cepat (Catatan Lapang) */}
-      <QuickActions
-        onAddFertilizer={() => handleOpenActivityForm('FERTILIZER')}
-        onAddObservation={() => handleOpenActivityForm('OPT')}
-        onAddIrrigation={() => handleOpenActivityForm('IRRIGATION')}
-        disabled={!activeSeason}
-      />
-
-      {/* 4. Perlu Diperhatikan (Saran Ilmiah Santun & Tiga Jalur Keputusan) */}
+      {/* 2. Yang Perlu Diperhatikan (Saran Ilmiah Santun & Jalur Keputusan Petani) */}
       <RecommendationCard
         recommendations={evaluatedRecommendations}
         hasActiveSeason={Boolean(activeSeason)}
@@ -225,12 +229,29 @@ export function BerandaView({
         existingDecisions={farmerDecisions}
       />
 
-      {/* 5. Aktivitas Terakhir */}
+      {/* 3. Cuaca Lapang */}
+      <WeatherCard
+        land={activeLand}
+        onUpdateLandLocation={handleUpdateLandLocation}
+      />
+
+      {/* 4. Kegiatan Terakhir */}
       <RecentActivities
         timelineEvents={timelineEvents}
         onViewAll={() => onNavigateToTab('kegiatan')}
         onAddFirstActivity={() => handleOpenActivityForm('FERTILIZER')}
         hasActiveSeason={Boolean(activeSeason)}
+      />
+
+      {/* 5. Aksi Cepat (Catat Kegiatan Lapang) */}
+      <QuickActions
+        onAddFertilizer={() => handleOpenActivityForm('FERTILIZER')}
+        onAddObservation={() => handleOpenActivityForm('OPT')}
+        onAddIrrigation={() => handleOpenActivityForm('IRRIGATION')}
+        onAddMaintenance={() => handleOpenActivityForm('MAINTENANCE')}
+        onAddHarvest={() => handleOpenActivityForm('HARVEST')}
+        onAddGeneral={() => handleOpenActivityForm(null)}
+        disabled={!activeSeason}
       />
 
       {/* Detail Modal Musim Tanam */}

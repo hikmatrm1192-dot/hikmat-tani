@@ -8,12 +8,14 @@
 import { EntityId, ISODateString } from './common.ts';
 
 export type ActivityCategory =
+  | 'SEEDBED'
   | 'PLANTING'
   | 'FERTILIZER'
   | 'IRRIGATION'
   | 'OPT'
   | 'MAINTENANCE'
   | 'HARVEST'
+  | 'EXPENSE'
   | 'OTHER';
 
 export interface Activity {

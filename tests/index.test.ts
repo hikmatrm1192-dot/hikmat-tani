@@ -12,6 +12,7 @@
  * 8. Offline Simulation (No network call required)
  */
 
+import { backupService } from '../src/backup/index.ts';
 import {
   activityRepository,
   cropSeasonRepository,
@@ -287,6 +288,100 @@ export async function runDatabaseTests(): Promise<{
     const retrieved = await outboxRepository.getByOperationId(opId);
     if (!retrieved || retrieved.status !== 'PENDING') {
       throw new Error('Outbox item gagal dicatat berdasarkan operationId');
+    }
+  });
+
+  // --- UJI 8: Siklus Pemulihan Penuh & Verifikasi Integritas Relasional (Create -> Backup -> Delete -> Restore -> Verify Relations) ---
+  await test('8. Siklus Pemulihan Penuh (Create -> Backup -> Delete -> Restore -> Verify Relasi Bebas Orphan)', async () => {
+    // 1. Generate Backup saat ini (mencakup Farmer -> Land -> CropSeason -> Activity -> FertilizerApp -> OptObs -> Recommendation -> FarmerDecision -> ActualAction)
+    const backupResult = await backupService.generateBackup();
+    if (!backupResult.backup || !backupResult.backup.data) {
+      throw new Error('Gagal menghasilkan struktur cadangan data.');
+    }
+
+    // 2. Simulasi Hapus Data Uji Tertentu dari DB Lokal
+    await db.actualActions.delete(testActActionId);
+    await db.farmerDecisions.delete(testDecId);
+    await db.recommendations.delete(testRecId);
+    await db.optObservations.delete(testOptObsId);
+    await db.fertilizerApplications.delete(testFertAppId);
+    await db.activities.delete(testActivity1Id);
+    await db.activities.delete(testActivity2Id);
+    await db.cropSeasons.delete(testSeasonId);
+    await db.lands.delete(testLandId);
+    await db.farmers.delete(testFarmerId);
+
+    // Pastikan data benar-benar terhapus
+    const checkDeletedLand = await db.lands.get(testLandId);
+    if (checkDeletedLand) {
+      throw new Error('Simulasi pembersihan data uji gagal.');
+    }
+
+    // 3. Eksekusi Restore Atomik dari Berkas Cadangan
+    const restoreResult = await backupService.restoreBackup(backupResult.backup);
+    if (!restoreResult.success) {
+      throw new Error(`Pemulihan cadangan gagal: ${restoreResult.message}`);
+    }
+
+    // 4. Verifikasi Hubungan Antar Entitas (Relational Integrity & No Orphan References)
+    // Farmer
+    const restoredFarmer = await db.farmers.get(testFarmerId);
+    if (!restoredFarmer || restoredFarmer.name !== 'Pak Sutrisno') {
+      throw new Error('Relasi Farmer gagal dipulihkan.');
+    }
+
+    // Land -> Farmer
+    const restoredLand = await db.lands.get(testLandId);
+    if (!restoredLand || restoredLand.farmerId !== testFarmerId) {
+      throw new Error('Relasi Land -> Farmer rusak/orphan setelah restore.');
+    }
+
+    // CropSeason -> Land
+    const restoredSeason = await db.cropSeasons.get(testSeasonId);
+    if (!restoredSeason || restoredSeason.landId !== testLandId) {
+      throw new Error('Relasi CropSeason -> Land rusak/orphan setelah restore.');
+    }
+
+    // Activity -> CropSeason
+    const restoredActivity = await db.activities.get(testActivity1Id);
+    if (!restoredActivity || restoredActivity.cropSeasonId !== testSeasonId) {
+      throw new Error('Relasi Activity -> CropSeason rusak/orphan setelah restore.');
+    }
+
+    // FertilizerApplication -> Activity
+    const restoredFertApp = await db.fertilizerApplications.get(testFertAppId);
+    if (!restoredFertApp || restoredFertApp.activityId !== testActivity1Id || restoredFertApp.amountKg !== 50) {
+      throw new Error('Relasi FertilizerApplication -> Activity rusak setelah restore.');
+    }
+
+    // OptObservation -> Activity
+    const restoredOptObs = await db.optObservations.get(testOptObsId);
+    if (!restoredOptObs || restoredOptObs.activityId !== testActivity2Id) {
+      throw new Error('Relasi OptObservation -> Activity rusak setelah restore.');
+    }
+
+    // Recommendation -> CropSeason
+    const restoredRec = await db.recommendations.get(testRecId);
+    if (!restoredRec || restoredRec.cropSeasonId !== testSeasonId) {
+      throw new Error('Relasi Recommendation -> CropSeason rusak setelah restore.');
+    }
+
+    // FarmerDecision -> Recommendation
+    const restoredDecision = await db.farmerDecisions.get(testDecId);
+    if (!restoredDecision || restoredDecision.recommendationId !== testRecId || restoredDecision.decision !== 'ADJUST') {
+      throw new Error('Relasi FarmerDecision -> Recommendation rusak setelah restore.');
+    }
+
+    // ActualAction -> FarmerDecision
+    const restoredAction = await db.actualActions.get(testActActionId);
+    if (!restoredAction || restoredAction.decisionId !== testDecId) {
+      throw new Error('Relasi ActualAction -> FarmerDecision rusak setelah restore.');
+    }
+
+    // Composite 3-Layer Record Verification
+    const compositeCheck = await recommendationRepository.getCompositeDecisionRecord(testActActionId);
+    if (!compositeCheck || !compositeCheck.recommendation || !compositeCheck.farmerDecision) {
+      throw new Error('Integritas 3-Layer Decision Record tidak utuh setelah restore.');
     }
   });
 

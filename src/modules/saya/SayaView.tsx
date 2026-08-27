@@ -44,6 +44,7 @@ import {
 import { backupService } from '../../backup/index.ts';
 import { BrandLogo } from '../../components/common/BrandLogo.tsx';
 import { PageHeader } from '../../components/common/PageHeader.tsx';
+import { syncEngine, SyncEngineStateInfo } from '../../sync/index.ts';
 import { outboxRepository } from '../../db/repositories/outboxRepository.ts';
 import {
   Activity,
@@ -57,6 +58,9 @@ import {
 import { CultivationReportModal } from './CultivationReportModal.tsx';
 import { EditFarmerModal } from './EditFarmerModal.tsx';
 import { RestoreConfirmModal } from './RestoreConfirmModal.tsx';
+import { SupportModal } from './SupportModal.tsx';
+import { AdminPortalModal } from '../admin/AdminPortalModal.tsx';
+import { Shield } from 'lucide-react';
 
 interface SayaViewProps {
   farmer: Farmer | null;
@@ -89,6 +93,8 @@ export function SayaView({
   const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState<boolean>(false);
+  const [isSupportModalOpen, setIsSupportModalOpen] = useState<boolean>(false);
+  const [isPortalAdminOpen, setIsPortalAdminOpen] = useState<boolean>(false);
   const [pendingRestoreBackup, setPendingRestoreBackup] = useState<HikmatBackup | null>(null);
   const [restoreFileName, setRestoreFileName] = useState<string>('');
 
@@ -104,10 +110,34 @@ export function SayaView({
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
   const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
   const [installPromptEvent, setInstallPromptEvent] = useState<any>(null);
+  const [syncInfo, setSyncInfo] = useState<SyncEngineStateInfo>(() => syncEngine.getStateInfo());
+  const [isManualSyncing, setIsManualSyncing] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeSeasonsCount = seasons.filter((s) => s.status === 'ACTIVE').length;
+
+  // Subscribe ke Sync Engine untuk status dua arah (push & pull) real-time
+  useEffect(() => {
+    syncEngine.init();
+    const unsubscribe = syncEngine.subscribe((info) => {
+      setSyncInfo(info);
+      setPendingSyncCount(info.pendingCount);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleManualSync = async () => {
+    setIsManualSyncing(true);
+    try {
+      const res = await syncEngine.syncNow();
+      if (res.success && res.pulledCount > 0) {
+        await onRefreshData();
+      }
+    } finally {
+      setIsManualSyncing(false);
+    }
+  };
 
   // Tangkap event PWA install jika browser mendukung
   useEffect(() => {
@@ -217,10 +247,10 @@ export function SayaView({
 
   // Handler: Bagikan ke WhatsApp
   const handleShareApp = () => {
-    const text = `Aplikasi HIKMAT TANI: Panduan budidaya padi cerdas, kalkulator pupuk berimbang, dan diagnosis hama PHT 100% offline tanpa kuota. Coba di: ${window.location.origin}`;
+    const text = `Aplikasi HIKMAT TANI — Bijak Bertani, Cerdas Bertani.\nPanduan budidaya padi cerdas, kalkulator pupuk berimbang, dan diagnosis hama PHT 100% offline tanpa kuota. Coba di: ${window.location.origin}`;
     if (navigator.share) {
       navigator.share({
-        title: 'HIKMAT TANI - Cerdas Bertani Padi',
+        title: 'HIKMAT TANI — Bijak Bertani, Cerdas Bertani',
         text,
         url: window.location.origin,
       }).catch(() => {});
@@ -322,37 +352,54 @@ export function SayaView({
 
       {/* 2. Status Offline / Online & Penyimpanan Data */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
               <Database className="w-5 h-5" />
             </div>
             <div>
               <h4 className="text-sm sm:text-base font-bold text-slate-900">
-                Penyimpanan & Koneksi
+                Penyimpanan & Sinkronisasi
               </h4>
               <p className="text-xs text-slate-500">Status kemandirian data di perangkat Anda</p>
             </div>
           </div>
 
-          <div
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-              isOnline
-                ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                : 'bg-amber-50 text-amber-800 border border-amber-300'
-            }`}
-          >
-            {isOnline ? (
-              <>
-                <Wifi className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Terhubung Online</span>
-              </>
-            ) : (
-              <>
-                <WifiOff className="w-3.5 h-3.5 text-amber-600" />
-                <span>Mode Offline</span>
-              </>
-            )}
+          <div className="flex items-center gap-2">
+            {/* Tag Status Sinkronisasi Sesuai Spesifikasi */}
+            <div
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                syncInfo.statusLabel === '✓ Tersinkron'
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                  : syncInfo.statusLabel === '⟳ Menyinkronkan'
+                  ? 'bg-blue-50 text-blue-800 border border-blue-300 animate-pulse'
+                  : syncInfo.statusLabel === '! Sinkronisasi tertunda'
+                  ? 'bg-rose-50 text-rose-800 border border-rose-300'
+                  : 'bg-amber-50 text-amber-800 border border-amber-300'
+              }`}
+            >
+              <span>{syncInfo.statusLabel}</span>
+            </div>
+
+            <div
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+                isOnline
+                  ? 'bg-slate-100 text-slate-700'
+                  : 'bg-amber-50 text-amber-800 border border-amber-200'
+              }`}
+            >
+              {isOnline ? (
+                <>
+                  <Wifi className="w-3 h-3 text-emerald-600" />
+                  <span>Online</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-3 h-3 text-amber-600" />
+                  <span>Offline</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -362,26 +409,41 @@ export function SayaView({
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
             <div>
               <strong className="text-slate-900 font-bold block">
-                ● Data Tersimpan Aman di Perangkat Ini
+                ● {syncInfo.statusDetail}
               </strong>
               <p className="text-slate-600 leading-relaxed mt-0.5">
-                Semua catatan lahan, pemupukan, dan pengamatan OPT tersimpan di memori HP/komputer Anda. Aplikasi tetap dapat digunakan sepenuhnya saat berada di tengah sawah tanpa koneksi internet.
+                Semua catatan lahan, pemupukan, dan pengamatan OPT tersimpan aman di memori HP/komputer Anda. Aplikasi tetap dapat digunakan sepenuhnya saat berada di tengah sawah tanpa koneksi internet.
               </p>
             </div>
           </div>
 
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-2.5">
-            <HardDrive className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
-            <div>
-              <strong className="text-slate-900 font-bold block">
-                ● {pendingSyncCount === 0 ? 'Semua Catatan Telah Tersimpan Lengkap' : `${pendingSyncCount} Catatan Menunggu Internet untuk Sinkronisasi`}
-              </strong>
-              <p className="text-slate-600 leading-relaxed mt-0.5">
-                {pendingSyncCount === 0
-                  ? 'Tidak ada antrean catatan yang tertunda. Sistem siap beroperasi kapan saja.'
-                  : 'Catatan baru Anda tersimpan aman secara lokal dan akan otomatis disinkronkan saat tersambung internet.'}
-              </p>
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-start justify-between gap-2.5 flex-wrap sm:flex-nowrap">
+            <div className="flex items-start gap-2.5">
+              <HardDrive className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-slate-900 font-bold block">
+                  ● {pendingSyncCount === 0 ? 'Semua Catatan Telah Tersimpan Lengkap' : `${pendingSyncCount} Catatan Menunggu Internet untuk Sinkronisasi`}
+                </strong>
+                <p className="text-slate-600 leading-relaxed mt-0.5">
+                  {pendingSyncCount === 0
+                    ? 'Tidak ada antrean catatan yang tertunda. Sistem siap beroperasi kapan saja.'
+                    : 'Catatan baru Anda tersimpan aman secara lokal dan akan otomatis disinkronkan saat tersambung internet.'}
+                </p>
+              </div>
             </div>
+
+            {/* Tombol Sinkronkan Manual */}
+            {isOnline && (
+              <button
+                type="button"
+                onClick={handleManualSync}
+                disabled={isManualSyncing || syncInfo.state === 'SYNCING'}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-800 hover:bg-emerald-900 active:bg-black text-white font-bold rounded-xl text-xs transition-colors self-end sm:self-center"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isManualSyncing || syncInfo.state === 'SYNCING' ? 'animate-spin' : ''}`} />
+                <span>{isManualSyncing || syncInfo.state === 'SYNCING' ? 'Menyinkronkan...' : 'Sinkronkan Sekarang'}</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -554,11 +616,16 @@ export function SayaView({
           </p>
         </div>
 
-        {/* Opsi Mendukung: Bagikan & Solidaritas */}
+        {/* Opsi Mendukung: Donasi Sukarela & Bagikan */}
         <div className="p-4 bg-emerald-900/60 rounded-xl border border-emerald-700/50 space-y-3">
-          <div className="flex items-center gap-2">
-            <HeartHandshake className="w-5 h-5 text-amber-400 shrink-0" />
-            <h4 className="text-sm font-bold text-white">Dukung & Sebarkan Kemanfaatan</h4>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <HeartHandshake className="w-5 h-5 text-amber-400 shrink-0" />
+              <h4 className="text-sm font-bold text-white">Dukung & Sebarkan Kemanfaatan</h4>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-400/20 text-amber-300 rounded-full border border-amber-400/30">
+              100% Sukarela
+            </span>
           </div>
 
           <p className="text-xs text-emerald-200 leading-relaxed">
@@ -568,19 +635,28 @@ export function SayaView({
           <div className="flex flex-wrap gap-2 pt-1">
             <button
               type="button"
+              onClick={() => setIsSupportModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] bg-amber-400 hover:bg-amber-300 active:bg-amber-500 text-emerald-950 font-bold rounded-xl text-xs transition-colors shadow-xs"
+            >
+              <HeartHandshake className="w-4 h-4" />
+              <span>❤️ Dukung / Donasi Sukarela</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleShareApp}
-              className="inline-flex items-center gap-1.5 px-4 py-2 min-h-[40px] bg-amber-400 hover:bg-amber-300 active:bg-amber-500 text-emerald-950 font-bold rounded-xl text-xs transition-colors shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 min-h-[44px] bg-emerald-800/90 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-colors border border-emerald-600/60"
             >
               <Share2 className="w-3.5 h-3.5" />
-              <span>Bagikan ke WhatsApp Petani</span>
+              <span>Bagikan ke WhatsApp</span>
             </button>
 
             <button
               type="button"
               onClick={handleCopyLink}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 min-h-[40px] bg-emerald-800/90 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-colors border border-emerald-600/60"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 min-h-[44px] bg-emerald-900/80 hover:bg-emerald-800 text-emerald-100 font-bold rounded-xl text-xs transition-colors border border-emerald-700/60"
             >
-              <span>{copiedLink ? 'Tautan Tersalin!' : 'Salin Tautan Aplikasi'}</span>
+              <span>{copiedLink ? 'Tautan Tersalin!' : 'Salin Tautan Web'}</span>
             </button>
           </div>
         </div>
@@ -588,20 +664,46 @@ export function SayaView({
         {/* Footer Versi & Catatan Ilmiah */}
         <div className="pt-2 border-t border-emerald-800/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px] text-emerald-400">
           <span>Versi 1.0.0 • Offline Agronomy Engine</span>
-          <span className="italic">"Cerdas Bertani, Bijak Mengambil Keputusan"</span>
+          <span className="italic">"Bijak Bertani, Cerdas Bertani"</span>
         </div>
       </div>
 
       {/* 6. Tentang HIKMAT TANI & Atribusi Pustaka */}
-      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-600 space-y-2">
-        <div className="flex items-center gap-2 font-bold text-slate-800">
-          <Info className="w-4 h-4 text-emerald-700" />
-          <span>Atribusi & Sumber Pengetahuan Ilmiah</span>
+      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-600 space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2 font-bold text-slate-800">
+            <Info className="w-4 h-4 text-emerald-700" />
+            <span>Atribusi & Sumber Pengetahuan Ilmiah</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsPortalAdminOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-200/80 hover:bg-slate-300 active:bg-slate-400 text-slate-700 font-bold rounded-xl text-[11px] transition-colors min-h-[36px]"
+          >
+            <Shield className="w-3.5 h-3.5 text-slate-600" />
+            <span>Akses Pengelola</span>
+          </button>
         </div>
         <p className="leading-relaxed">
           Algoritma pemupukan berimbang, pedoman pengendalian OPT PHT, dan deskripsi varietas padi dirujuk dari publikasi resmi Balai Besar Penelitian Tanaman Padi (BBPadi Sukamandi), Direktorat Perlindungan Tanaman Pangan (Ditlin TP Kementan), Balai Penelitian Tanah (Balittanah), serta International Rice Research Institute (IRRI).
         </p>
       </div>
+
+      {/* Modal Dukung HIKMAT TANI */}
+      <SupportModal
+        isOpen={isSupportModalOpen}
+        onClose={() => setIsSupportModalOpen(false)}
+      />
+
+      {/* Modal Portal Pengelola (Langkah 15) */}
+      <AdminPortalModal
+        isOpen={isPortalAdminOpen}
+        onClose={() => setIsPortalAdminOpen(false)}
+        onConfigUpdated={() => {
+          // Callback jika config berhasil diupdate
+        }}
+      />
 
       {/* Modal Ubah Profil Singkat */}
       <EditFarmerModal

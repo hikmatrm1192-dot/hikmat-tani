@@ -22,10 +22,13 @@ import {
   Flower2,
   HelpCircle,
   Leaf,
+  RefreshCw,
   ShieldCheck,
   Sparkles,
   Sprout,
   Wheat,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { PageHeader } from '../../components/common/PageHeader.tsx';
 import {
@@ -38,6 +41,7 @@ import {
   Reference,
   RiceVariety,
 } from '../../types/index.ts';
+import { clientKnowledgeSync, KnowledgeSyncInfo } from '../../sync/knowledgeSync.ts';
 import { ArticleCatalog } from './ArticleCatalog.tsx';
 import { FertilizerCatalog } from './FertilizerCatalog.tsx';
 import { NaturalEnemyCatalog } from './NaturalEnemyCatalog.tsx';
@@ -62,6 +66,7 @@ interface InformasiViewProps {
   lands?: Land[];
   navigationTarget?: NavigationTarget | null;
   onClearNavigationTarget?: () => void;
+  onRefreshKnowledge?: () => Promise<void>;
 }
 
 export function InformasiView({
@@ -75,9 +80,22 @@ export function InformasiView({
   lands = [],
   navigationTarget,
   onClearNavigationTarget,
+  onRefreshKnowledge,
 }: InformasiViewProps) {
   const [activeCategory, setActiveCategory] = useState<InfoCategory>('opt');
   const [targetItemId, setTargetItemId] = useState<string | null>(null);
+  const [syncInfo, setSyncInfo] = useState<KnowledgeSyncInfo>(() =>
+    clientKnowledgeSync.getSyncInfo()
+  );
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
+
+  // Subscribe ke event knowledge sync
+  useEffect(() => {
+    const unsubscribe = clientKnowledgeSync.subscribe((info) => {
+      setSyncInfo(info);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Tangani navigasi langsung dari modul lain (Beranda / Kegiatan)
   useEffect(() => {
@@ -91,6 +109,21 @@ export function InformasiView({
       }
     }
   }, [navigationTarget, onClearNavigationTarget]);
+
+  const handleManualSync = async () => {
+    if (isUpdating) return;
+    setIsUpdating(true);
+    try {
+      await clientKnowledgeSync.syncKnowledge();
+      if (onRefreshKnowledge) {
+        await onRefreshKnowledge();
+      }
+    } catch {
+      // Ditangani oleh engine
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   const categories = [
     {
@@ -143,6 +176,48 @@ export function InformasiView({
         subtitle="Rujukan agronomi terverifikasi, pedoman PHT, pupuk, varietas, dan budidaya"
       />
 
+      {/* Bar Status Pembaruan Informasi (Non-Intrusive & Friendly) */}
+      <div className="flex items-center justify-between flex-wrap gap-2 px-3.5 py-2.5 bg-white rounded-xl border border-slate-200 text-xs shadow-xs">
+        <div className="flex items-center gap-2">
+          {syncInfo.status === 'SYNCING' || isUpdating ? (
+            <RefreshCw className="w-3.5 h-3.5 text-blue-600 animate-spin shrink-0" />
+          ) : syncInfo.status === 'SUCCESS' ? (
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+          ) : syncInfo.status === 'OFFLINE_FALLBACK' ? (
+            <WifiOff className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+          ) : (
+            <Sparkles className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+          )}
+
+          <span className="text-slate-700 font-medium">{syncInfo.message}</span>
+          <span className="text-[11px] text-slate-400 font-mono hidden sm:inline">
+            • Versi: {syncInfo.localVersion}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 ml-auto">
+          {typeof navigator !== 'undefined' && navigator.onLine && (
+            <button
+              type="button"
+              onClick={handleManualSync}
+              disabled={isUpdating || syncInfo.status === 'SYNCING'}
+              className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-800 font-bold rounded-lg text-[11px] transition-colors disabled:opacity-50"
+            >
+              <RefreshCw
+                className={`w-3 h-3 ${
+                  isUpdating || syncInfo.status === 'SYNCING' ? 'animate-spin' : ''
+                }`}
+              />
+              <span>
+                {isUpdating || syncInfo.status === 'SYNCING'
+                  ? 'Memperbarui...'
+                  : 'Perbarui Rujukan'}
+              </span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Navigasi Kategori (5 Tab Utama) */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 p-1.5 bg-slate-200/70 rounded-2xl">
         {categories.map((cat) => {
@@ -155,7 +230,7 @@ export function InformasiView({
                 setActiveCategory(cat.id);
                 setTargetItemId(null);
               }}
-              className={`flex items-center justify-center gap-1.5 py-2.5 px-2 min-h-[44px] rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-2.5 px-2 min-h-[48px] rounded-xl text-xs font-bold transition-all last:col-span-2 sm:last:col-span-1 ${
                 isActive
                   ? 'bg-white text-slate-950 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/40'

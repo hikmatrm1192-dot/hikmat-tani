@@ -15,13 +15,15 @@ export const DB_VERSION = 1;
 export const SCHEMA_V1 = {
   // --- Data Petani & Lahan ---
   farmers: 'id, name, phoneNumber, createdAt',
-  lands: 'id, farmerId, name, [farmerId+name], createdAt',
+  lands: 'id, farmerId, name, status, [farmerId+name], createdAt',
   cropSeasons: 'id, landId, status, plantingDate, [landId+status], createdAt',
 
   // --- Sejarah Kejadian Budidaya (Event Data) ---
   activities: 'id, cropSeasonId, category, activityDate, [cropSeasonId+category], [cropSeasonId+activityDate], createdAt',
   fertilizerApplications: 'id, activityId, fertilizerId, createdAt',
   optObservations: 'id, activityId, optId, isUnknown, createdAt',
+  seedbeds: 'id, cropSeasonId, activityId, startDate, createdAt',
+  expenses: 'id, cropSeasonId, activityId, category, expenseDate, [cropSeasonId+category], createdAt',
 
   // --- Tiga Lapisan Keputusan (Three-Layer Decision Architecture) ---
   recommendations: 'id, cropSeasonId, contextType, priority, [cropSeasonId+contextType], createdAt',

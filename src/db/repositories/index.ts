@@ -9,3 +9,5 @@ export * from './activityRepository.ts';
 export * from './recommendationRepository.ts';
 export * from './knowledgeRepository.ts';
 export * from './outboxRepository.ts';
+export * from './seedbedRepository.ts';
+export * from './expenseRepository.ts';

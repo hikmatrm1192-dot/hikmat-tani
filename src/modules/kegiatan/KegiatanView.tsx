@@ -47,6 +47,8 @@ interface KegiatanViewProps {
   fertilizers: Fertilizer[];
   varieties?: RiceVariety[];
   opts?: Opt[];
+  selectedLandId?: string;
+  onSelectLandId?: (landId: string) => void;
   onNavigateToKnowledge?: (category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan', itemId?: string) => void;
   onRefreshData: () => Promise<void>;
 }
@@ -58,6 +60,8 @@ export function KegiatanView({
   fertilizers,
   varieties = [],
   opts = [],
+  selectedLandId,
+  onSelectLandId,
   onNavigateToKnowledge,
   onRefreshData,
 }: KegiatanViewProps) {
@@ -72,9 +76,16 @@ export function KegiatanView({
   const [detailFertApps, setDetailFertApps] = useState<FertilizerApplication[]>([]);
   const [detailOptObs, setDetailOptObs] = useState<OptObservation[]>([]);
 
-  // Tentukan musim tanam yang aktif/dipilih
+  // Tentukan musim tanam yang aktif/dipilih dengan sinkronisasi ke lahan terpilih
+  const activeSeasonForLand = activeSeasons.find(
+    (s) => s.landId === selectedLandId && s.status === 'ACTIVE'
+  );
+
   const currentSeason =
-    activeSeasons.find((s) => s.id === selectedSeasonId) || activeSeasons[0] || null;
+    activeSeasons.find((s) => s.id === selectedSeasonId) ||
+    activeSeasonForLand ||
+    activeSeasons[0] ||
+    null;
 
   const currentLand = currentSeason
     ? lands.find((l) => l.id === currentSeason.landId) || null
@@ -211,7 +222,14 @@ export function KegiatanView({
                 <span className="text-xs font-bold text-slate-600 shrink-0">Pilih:</span>
                 <select
                   value={currentSeason?.id || ''}
-                  onChange={(e) => setSelectedSeasonId(e.target.value)}
+                  onChange={(e) => {
+                    const newSeasonId = e.target.value;
+                    setSelectedSeasonId(newSeasonId);
+                    const matchedSeason = activeSeasons.find((s) => s.id === newSeasonId);
+                    if (matchedSeason && onSelectLandId) {
+                      onSelectLandId(matchedSeason.landId);
+                    }
+                  }}
                   className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
                 >
                   {activeSeasons.map((s) => {

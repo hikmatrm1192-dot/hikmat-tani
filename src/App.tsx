@@ -1,7 +1,7 @@
 /**
  * HIKMAT TANI - App Shell & UI/UX Core (Langkah 5)
  * 
- * Slogan Resmi: "Cerdas Bertani, Bijak Mengambil Keputusan"
+ * Slogan Resmi: "Bijak Bertani, Cerdas Bertani"
  * 
  * Arsitektur:
  * Dexie DB -> Repository -> Agriculture Engine -> React -> UI
@@ -240,6 +240,18 @@ export default function App() {
       const dbRes = await runDatabaseTests();
       const engRes = await runEngineTests();
       const bakRes = await runBackupTests();
+
+      let backendStatus = 'Belum terhubung (Offline)';
+      try {
+        const healthCheck = await fetch('/api/v1/health');
+        if (healthCheck.ok) {
+          const healthData = await healthCheck.json();
+          backendStatus = `ONLINE (${healthData.app} v${healthData.version})`;
+        }
+      } catch {
+        backendStatus = 'Offline (Client Mode)';
+      }
+
       alert(
         `Hasil Uji Sistem HIKMAT TANI:\n\n• Database Acceptance: ${
           dbRes.allPassed ? 'SEMUA LOLOS (PASS)' : 'ADA GAGAL'
@@ -247,7 +259,7 @@ export default function App() {
           engRes.allPassed ? 'SEMUA LOLOS (PASS)' : 'ADA GAGAL'
         } (${engRes.passed}/${engRes.total})\n• Backup & Restore Subsystem: ${
           bakRes.allPassed ? 'SEMUA LOLOS (PASS)' : 'ADA GAGAL'
-        } (${bakRes.passed}/${bakRes.total})\n\nSistem 100% Offline & Siap Digunakan!`
+        } (${bakRes.passed}/${bakRes.total})\n• Server Status: ${backendStatus}\n\nSistem 100% Offline & Siap Digunakan!`
       );
     } catch (err: any) {
       alert(`Gagal menjalankan uji diagnostik: ${err?.message || err}`);
@@ -301,6 +313,9 @@ export default function App() {
           lands={lands}
           activeSeasons={activeSeasons}
           varieties={varieties}
+          selectedLandId={selectedLandId}
+          onSelectLandId={setSelectedLandId}
+          onNavigateToTab={setActiveTab}
           onOpenAddLand={() => setIsAddLandModalOpen(true)}
           onOpenStartSeason={(land) => handleOpenStartSeasonModal(land)}
           onRefreshData={loadData}
@@ -316,6 +331,8 @@ export default function App() {
           fertilizers={fertilizers}
           varieties={varieties}
           opts={opts}
+          selectedLandId={selectedLandId}
+          onSelectLandId={setSelectedLandId}
           onNavigateToKnowledge={handleNavigateToKnowledge}
           onRefreshData={loadData}
         />
@@ -334,6 +351,7 @@ export default function App() {
           lands={lands}
           navigationTarget={knowledgeNavigationTarget}
           onClearNavigationTarget={() => setKnowledgeNavigationTarget(null)}
+          onRefreshKnowledge={loadData}
         />
       )}
 

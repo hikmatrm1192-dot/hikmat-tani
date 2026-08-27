@@ -14,6 +14,8 @@ import { RiceVariety } from './variety.ts';
 import { Recommendation, FarmerDecision, ActualAction, DecisionRecord } from './recommendation.ts';
 import { Reference } from './reference.ts';
 import { KnowledgeArticle } from './knowledge.ts';
+import { Seedbed } from './seedbed.ts';
+import { CultivationExpense } from './expense.ts';
 
 export interface BackupMetadata {
   backupVersion: string; // e.g. "1.0.0"
@@ -30,6 +32,8 @@ export interface HikmatBackupData {
   activities: Activity[];
   fertilizerApplications: FertilizerApplication[];
   optObservations: OptObservation[];
+  seedbeds?: Seedbed[];
+  expenses?: CultivationExpense[];
   farmerDecisions: FarmerDecision[];
   actualActions: ActualAction[];
   decisionRecords: DecisionRecord[];

@@ -16,3 +16,6 @@ export * from './reference.ts';
 export * from './knowledge.ts';
 export * from './sync.ts';
 export * from './backup.ts';
+export * from './weather.ts';
+export * from './seedbed.ts';
+export * from './expense.ts';

@@ -13,6 +13,7 @@ import {
   Activity,
   ActualAction,
   CropSeason,
+  CultivationExpense,
   Farmer,
   FarmerDecision,
   FertilizerApplication,
@@ -21,6 +22,7 @@ import {
   Land,
   OptObservation,
   Recommendation,
+  Seedbed,
 } from '../types/index.ts';
 
 export interface BackupResult {
@@ -39,6 +41,8 @@ export interface RestoreSummary {
     activities: number;
     fertilizerApplications: number;
     optObservations: number;
+    seedbeds: number;
+    expenses: number;
     recommendations: number;
     farmerDecisions: number;
     actualActions: number;
@@ -57,6 +61,8 @@ export const backupService = {
       activities,
       fertilizerApplications,
       optObservations,
+      seedbeds,
+      expenses,
       recommendations,
       farmerDecisions,
       actualActions,
@@ -67,6 +73,8 @@ export const backupService = {
       db.activities.toArray(),
       db.fertilizerApplications.toArray(),
       db.optObservations.toArray(),
+      db.seedbeds.toArray(),
+      db.expenses.toArray(),
       db.recommendations.toArray(),
       db.farmerDecisions.toArray(),
       db.actualActions.toArray(),
@@ -79,6 +87,8 @@ export const backupService = {
       activities,
       fertilizerApplications,
       optObservations,
+      seedbeds,
+      expenses,
       recommendations,
       farmerDecisions,
       actualActions,
@@ -91,6 +101,8 @@ export const backupService = {
       activities: activities.length,
       fertilizerApplications: fertilizerApplications.length,
       optObservations: optObservations.length,
+      seedbeds: seedbeds.length,
+      expenses: expenses.length,
       recommendations: recommendations.length,
       farmerDecisions: farmerDecisions.length,
       actualActions: actualActions.length,
@@ -165,6 +177,8 @@ export const backupService = {
       'activities',
       'fertilizerApplications',
       'optObservations',
+      'seedbeds',
+      'expenses',
       'recommendations',
       'farmerDecisions',
       'actualActions',
@@ -256,6 +270,8 @@ export const backupService = {
       activities: 0,
       fertilizerApplications: 0,
       optObservations: 0,
+      seedbeds: 0,
+      expenses: 0,
       recommendations: 0,
       farmerDecisions: 0,
       actualActions: 0,
@@ -271,6 +287,8 @@ export const backupService = {
         db.activities,
         db.fertilizerApplications,
         db.optObservations,
+        db.seedbeds,
+        db.expenses,
         db.recommendations,
         db.farmerDecisions,
         db.actualActions,
@@ -324,7 +342,23 @@ export const backupService = {
           }
         }
 
-        // 7. Rekomendasi
+        // 7. Persemaian (Seedbed)
+        if (data.seedbeds && Array.isArray(data.seedbeds)) {
+          for (const item of data.seedbeds) {
+            await db.seedbeds.put(item);
+            counts.seedbeds++;
+          }
+        }
+
+        // 8. Pengeluaran / Biaya (Expenses)
+        if (data.expenses && Array.isArray(data.expenses)) {
+          for (const item of data.expenses) {
+            await db.expenses.put(item);
+            counts.expenses++;
+          }
+        }
+
+        // 9. Rekomendasi
         if (data.recommendations && Array.isArray(data.recommendations)) {
           for (const item of data.recommendations) {
             await db.recommendations.put(item);
@@ -332,7 +366,7 @@ export const backupService = {
           }
         }
 
-        // 8. Keputusan Petani
+        // 10. Keputusan Petani
         if (data.farmerDecisions && Array.isArray(data.farmerDecisions)) {
           for (const item of data.farmerDecisions) {
             await db.farmerDecisions.put(item);
@@ -340,7 +374,7 @@ export const backupService = {
           }
         }
 
-        // 9. Tindakan Aktual
+        // 11. Tindakan Aktual
         if (data.actualActions && Array.isArray(data.actualActions)) {
           for (const item of data.actualActions) {
             await db.actualActions.put(item);
