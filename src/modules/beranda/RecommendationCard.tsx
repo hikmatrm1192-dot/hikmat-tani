@@ -11,20 +11,27 @@
  * - Progressive disclosure: Layar utama tetap bersih, tombol "Lihat alasan" menampilkan rujukan ilmiah.
  */
 
-import { BookOpen, ChevronDown, ChevronUp, Info, Lightbulb, ShieldCheck } from 'lucide-react';
+import { BookOpen, Check, CheckCircle2, ChevronDown, ChevronUp, Info, Lightbulb, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { EvaluatedRecommendation } from '../../engine/recommendation/types.ts';
+import { FarmerDecision } from '../../types/index.ts';
 
 interface RecommendationCardProps {
   recommendations: EvaluatedRecommendation[];
   hasActiveSeason: boolean;
   onOpenSeasonForm?: () => void;
+  onOpenDecisionModal?: (rec: EvaluatedRecommendation) => void;
+  onNavigateToKnowledge?: (category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan', itemId?: string) => void;
+  existingDecisions?: FarmerDecision[];
 }
 
 export function RecommendationCard({
   recommendations,
   hasActiveSeason,
   onOpenSeasonForm,
+  onOpenDecisionModal,
+  onNavigateToKnowledge,
+  existingDecisions = [],
 }: RecommendationCardProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -83,6 +90,21 @@ export function RecommendationCard({
     );
   }
 
+  const getDecisionLabel = (choice: string) => {
+    switch (choice) {
+      case 'ACCEPT':
+        return 'Mengikuti Saran';
+      case 'ADJUST':
+        return 'Menyesuaikan';
+      case 'REJECT':
+        return 'Tidak Mengikuti';
+      case 'ALTERNATIVE':
+        return 'Cara Lain';
+      default:
+        return choice;
+    }
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -100,8 +122,8 @@ export function RecommendationCard({
       <div className="space-y-3">
         {recommendations.map((rec) => {
           const isExpanded = expandedId === rec.id;
-
           const isHighPriority = rec.priority === 'HIGH' || rec.priority === 'CRITICAL';
+          const decision = existingDecisions.find((d) => d.recommendationId === rec.id);
 
           return (
             <div
@@ -146,8 +168,23 @@ export function RecommendationCard({
                   </div>
                 </div>
 
-                {/* Progressive Disclosure Action */}
-                <div className="pt-2 border-t border-slate-100/80 flex items-center justify-between">
+                {/* Status Keputusan Petani jika sudah pernah ditanggapi */}
+                {decision && (
+                  <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5 text-emerald-950 font-bold">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+                      <span>Keputusan Anda: {getDecisionLabel(decision.decision)}</span>
+                    </div>
+                    {decision.notes && (
+                      <span className="text-[11px] text-emerald-800 truncate max-w-[150px] sm:max-w-xs">
+                        "{decision.notes}"
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Progressive Disclosure & Aksi Keputusan */}
+                <div className="pt-2.5 border-t border-slate-100/80 flex flex-wrap items-center justify-between gap-2">
                   <button
                     type="button"
                     onClick={() => toggleExpand(rec.id)}
@@ -155,7 +192,7 @@ export function RecommendationCard({
                     aria-expanded={isExpanded}
                   >
                     <BookOpen className="w-3.5 h-3.5 text-amber-600" />
-                    <span>{isExpanded ? 'Sembunyikan Alasan Ilmiah' : 'Lihat Alasan & Rujukan'}</span>
+                    <span>{isExpanded ? 'Sembunyikan Rujukan' : 'Lihat Alasan & Rujukan'}</span>
                     {isExpanded ? (
                       <ChevronUp className="w-3.5 h-3.5" />
                     ) : (
@@ -163,9 +200,16 @@ export function RecommendationCard({
                     )}
                   </button>
 
-                  <span className="text-[10px] text-slate-400">
-                    Saran Ilmiah • Keputusan Petani
-                  </span>
+                  {onOpenDecisionModal && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenDecisionModal(rec)}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 min-h-[38px] bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white rounded-xl transition-colors shadow-xs"
+                    >
+                      <SlidersHorizontal className="w-3.5 h-3.5" />
+                      <span>{decision ? 'Ubah Keputusan' : 'Tentukan Keputusan'}</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Expanded Details: Progressive Disclosure Content */}
@@ -200,6 +244,34 @@ export function RecommendationCard({
                             </span>
                           ))}
                         </div>
+                      </div>
+                    )}
+
+                    {onNavigateToKnowledge && (
+                      <div className="pt-2 border-t border-slate-200/60 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cat =
+                              rec.contextType === 'FERTILIZER'
+                                ? 'pupuk'
+                                : rec.contextType === 'OPT_CONTROL'
+                                ? 'opt'
+                                : 'panduan';
+                            onNavigateToKnowledge(cat);
+                          }}
+                          className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 hover:underline"
+                        >
+                          <BookOpen className="w-3 h-3 text-emerald-600" />
+                          <span>
+                            Buka Pustaka{' '}
+                            {rec.contextType === 'FERTILIZER'
+                              ? 'Pupuk & Nutrisi'
+                              : rec.contextType === 'OPT_CONTROL'
+                              ? 'Hama & OPT'
+                              : 'Informasi'}
+                          </span>
+                        </button>
                       </div>
                     )}
                   </div>

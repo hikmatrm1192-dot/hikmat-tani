@@ -11,6 +11,7 @@ import { calculateHST } from '../../engine/hstCalculator.ts';
 import { CropSeason, Land } from '../../types/index.ts';
 
 interface LandCardProps {
+  key?: string | number;
   land: Land;
   activeSeason?: CropSeason;
   varietyDurationDays?: number | null;

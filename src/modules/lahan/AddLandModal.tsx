@@ -6,7 +6,7 @@
  * - Field awal: Nama Lahan, Luas, Sumber Air, Jenis Lahan (Lokasi/GPS opsional).
  */
 
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Modal } from '../../components/common/Modal.tsx';
 import { Land, LandType, WaterSource } from '../../types/index.ts';
 
@@ -26,7 +26,7 @@ export function AddLandModal({ isOpen, onClose, onSave }: AddLandModalProps) {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setError('Nama lahan wajib diisi');

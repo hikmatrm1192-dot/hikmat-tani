@@ -5,16 +5,16 @@
  * Menggunakan progressive disclosure tanpa form yang membingungkan.
  */
 
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Modal } from '../../components/common/Modal.tsx';
-import { CropSeason, Land, PlantingSystem, Variety } from '../../types/index.ts';
+import { CropSeason, Land, PlantingSystem, RiceVariety } from '../../types/index.ts';
 
 interface StartSeasonModalProps {
   isOpen: boolean;
   onClose: () => void;
   land: Land | null;
   allLands?: Land[];
-  varieties?: Variety[];
+  varieties?: RiceVariety[];
   onSave: (seasonData: Omit<CropSeason, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
 }
 
@@ -39,15 +39,20 @@ export function StartSeasonModal({
 
   const activeLand = allLands.find((l) => l.id === (land?.id || selectedLandId)) || land;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const targetLandId = land?.id || selectedLandId;
     if (!targetLandId) {
-      setError('Silakan pilih lahan untuk musim tanam');
+      setError('Silakan pilih petak lahan untuk musim tanam');
       return;
     }
     if (!plantingDate) {
-      setError('Tanggal tanam wajib diisi');
+      setError('Tanggal tanam wajib diisi dengan benar');
+      return;
+    }
+    const numArea = Number(plantedAreaHa);
+    if (isNaN(numArea) || numArea <= 0) {
+      setError('Luas tanam harus berupa angka positif yang valid');
       return;
     }
 
@@ -55,7 +60,7 @@ export function StartSeasonModal({
     setError(null);
     try {
       const selectedVariety = varieties.find(
-        (v) => v.name.toLowerCase() === varietyName.toLowerCase()
+        (v) => v.name.toLowerCase().trim() === varietyName.toLowerCase().trim()
       );
 
       await onSave({
@@ -64,7 +69,7 @@ export function StartSeasonModal({
         varietyId: selectedVariety?.id,
         varietyName: varietyName.trim() || 'Padi Sawah',
         plantingDate: new Date(plantingDate).toISOString(),
-        plantedAreaHa: Number(plantedAreaHa) || activeLand?.areaHa || 1.0,
+        plantedAreaHa: numArea || activeLand?.areaHa || 1.0,
         plantingSystem,
         status: 'ACTIVE',
       });
@@ -138,7 +143,7 @@ export function StartSeasonModal({
             >
               {varieties.map((v) => (
                 <option key={v.id} value={v.name}>
-                  {v.name} (~{v.maturityDays} hari)
+                  {v.name} (~{v.growthDurationDays || 120} hari)
                 </option>
               ))}
               <option value="Ciherang">Ciherang (~116 hari)</option>

@@ -43,6 +43,9 @@ export interface HikmatBackupData {
 }
 
 export interface HikmatBackup {
-  metadata: BackupMetadata;
+  format: 'hikmat-tani-backup';
+  version: number;
+  createdAt: ISODateString;
+  metadata?: BackupMetadata;
   data: Partial<HikmatBackupData>;
 }

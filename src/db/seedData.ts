@@ -48,6 +48,28 @@ export const SEED_REFERENCES: Reference[] = [
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   },
+  {
+    id: 'ref-irri-rice-knowledge',
+    title: 'Rice Knowledge Bank - AWD Water Management and Pest Ecology',
+    authorInstitution: 'International Rice Research Institute (IRRI)',
+    publicationYear: 2022,
+    sourceUrlOrBook: 'IRRI Agronomy Series',
+    regionApplicability: 'Asia Tenggara / Tropis',
+    validationStatus: 'VERIFIED',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'ref-brin-varietas-2023',
+    title: 'Deskripsi Varietas Unggul Baru Padi Sawah dan Ketahanan Cekaman Biotik',
+    authorInstitution: 'Pusat Riset Tanaman Pangan - BRIN',
+    publicationYear: 2023,
+    sourceUrlOrBook: 'Laporan Riset Varietas Padi BRIN',
+    regionApplicability: 'Nasional',
+    validationStatus: 'REVIEW',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  },
 ];
 
 export const SEED_FERTILIZERS: Fertilizer[] = [
@@ -288,6 +310,19 @@ export const SEED_NATURAL_ENEMIES: NaturalEnemy[] = [
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   },
+  {
+    id: 'enemy-kepik-mirid',
+    name: 'Kepik Mirid Pemangsa Telur',
+    scientificName: 'Cyrtorhinus lividipennis',
+    type: 'PREDATOR',
+    targetOptIds: ['opt-wereng-coklat'],
+    attackedStages: ['Telur', 'Nimfa muda'],
+    habitat: 'Pangkal batang dan pelepah daun padi.',
+    conservationNotes: 'Kepik ini sangat efektif memangsa telur wereng di dalam jaringan pelepah.',
+    referenceId: 'ref-pht-padi-2019',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  },
 ];
 
 export const SEED_KNOWLEDGE_ARTICLES: KnowledgeArticle[] = [
@@ -326,6 +361,65 @@ Prinsip 5 Tepat:
     tags: ['PHT', 'OPT', 'Musuh Alami', 'Pengamatan'],
     referenceId: 'ref-pht-padi-2019',
     verifiedDate: '2026-01-15T00:00:00.000Z',
+    status: 'VERIFIED',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'art-jajar-legowo',
+    category: 'CULTIVATION',
+    title: 'Sistem Tanam Jajar Legowo 2:1 untuk Padi Sawah',
+    summary: 'Meningkatkan populasi tanaman hingga 33% dan menciptakan efek tanaman pinggir yang lebih produktif.',
+    content: `Sistem tanam Jajar Legowo 2:1 adalah cara tanam berselang antara dua baris tanaman dan satu baris kosong dengan jarak antar baris 20-25 cm dan jarak dalam baris 10-12.5 cm.
+
+Manfaat Utama:
+1. Menambah populasi rumpun tanaman per hektar.
+2. Memanfaatkan efek tepi (border effect) di mana semua tanaman di pinggir lorong mendapat sinar matahari optimal.
+3. Memudahkan pemupukan, penyiangan, dan pengamatan OPT di sepanjang lorong kosong.
+4. Menurunkan kelembapan kanopi mikro sehingga menekan perkembangan jamur Blas dan Hawar Daun Bakteri.`,
+    tags: ['Budidaya', 'Jajar Legowo', 'Tanam', 'Populasi'],
+    referenceId: 'ref-litbang-padi-2020',
+    verifiedDate: '2026-01-20T00:00:00.000Z',
+    status: 'VERIFIED',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'art-pengairan-berselang',
+    category: 'IRRIGATION',
+    title: 'Pengairan Berselang (Intermittent / AWD) pada Sawah',
+    summary: 'Pengaturan air sawah secara berselang untuk menghemat air 20-30% dan merangsang perakaran yang lebih dalam.',
+    content: `Pengairan berselang (Alternate Wetting and Drying / AWD) adalah teknik pengaturan air kondisi tergenang dan kering secara bergantian sesuai fase pertumbuhan tanaman.
+
+Tahapan Aplikasi:
+- 0-7 HST: Tergenang dangkal (1-2 cm) untuk adaptasi bibit baru.
+- 8-35 HST (Anakan): Kondisi macak-macak hingga berselang; biarkan air surut sampai permukaan tanah sedikit retak rambut (bukan retak belah).
+- 40-65 HST (Bunting - Berbunga): Wajib tergenang dangkal (3-5 cm) karena tanaman sangat butuh air untuk pengisian sari.
+- 70-85 HST (Pemasakan Bulir): Berselang kembali (macak-macak).
+- 10-14 Hari Sebelum Panen: Keringkan petak sawah sepenuhnya untuk mempercepat kematangan serempak dan mempermudah panen.`,
+    tags: ['Irigasi', 'Air Berselang', 'AWD', 'Macak-Macak'],
+    referenceId: 'ref-irri-rice-knowledge',
+    verifiedDate: '2026-01-20T00:00:00.000Z',
+    status: 'VERIFIED',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'art-panen-pasca-panen',
+    category: 'HARVEST',
+    title: 'Tanda Kematangan Optimal & Penanganan Panen Padi',
+    summary: 'Mencegah kehilangan hasil saat panen dengan menentukan umur panen dan kadar air gabah yang tepat.',
+    content: `Waktu panen yang tepat sangat menentukan mutu beras (rendemen beras kepala dan menekan beras patah).
+
+Tanda Padi Siap Panen:
+1. 90-95% bulir padi pada malai telah menguning.
+2. Daun bendera telah menguning atau mengering.
+3. Batang bawah mulai mengering tetapi tidak rebah.
+4. Umur tanaman telah mencapai deskripsi varietas (misal Inpari 32 sekitar 115-120 HST).
+5. Kadar air gabah ideal saat panen sekitar 21-24%.`,
+    tags: ['Panen', 'Kadar Air', 'GKP', 'Rendemen'],
+    referenceId: 'ref-litbang-padi-2020',
+    verifiedDate: '2026-01-20T00:00:00.000Z',
     status: 'VERIFIED',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',

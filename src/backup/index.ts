@@ -1,4 +1,5 @@
 /**
  * HIKMAT TANI - Local Backup & Restore Subsystem Entrypoint
  */
-export {};
+
+export * from './backupService.ts';

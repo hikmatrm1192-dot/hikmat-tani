@@ -1,0 +1,19 @@
+{
+  "name": "HIKMAT TANI — Cerdas Bertani Padi",
+  "short_name": "HIKMAT TANI",
+  "description": "Sistem Rekomendasi Budidaya Padi & Catatan Lapang Mandiri 100% Offline untuk Petani Indonesia",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#065f46",
+  "categories": ["productivity", "utilities", "agriculture"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
