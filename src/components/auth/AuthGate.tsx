@@ -144,16 +144,22 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
     <div className="min-h-screen bg-slate-900 flex flex-col justify-center items-center px-4 py-8 sm:py-12">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
         {/* Header Identitas Brand */}
-        <div className="bg-emerald-900 text-white p-6 text-center space-y-3 relative overflow-hidden">
+        <div className="bg-emerald-900 text-white p-6 text-center space-y-2.5 relative overflow-hidden">
           <div className="flex justify-center">
             <BrandLogo size="lg" variant="light" showSlogan={false} />
           </div>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-amber-300">
+          <div className="text-[11px] sm:text-xs font-bold tracking-wider text-amber-300 uppercase py-0.5">
+            CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.
+          </div>
+          <div className="pt-1 border-t border-emerald-800/80">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
               Identitas Petani
             </h1>
-            <p className="text-xs sm:text-sm text-emerald-100 mt-1">
-              Gerbang Mandiri Budidaya Padi Terisolasi & Aman
+            <p className="text-xs sm:text-sm text-emerald-100 font-medium mt-0.5">
+              Gerbang petani cerdas dan bijak
+            </p>
+            <p className="text-[11px] sm:text-xs text-emerald-200/90 font-semibold mt-0.5">
+              Data terisolasi dan aman
             </p>
           </div>
         </div>

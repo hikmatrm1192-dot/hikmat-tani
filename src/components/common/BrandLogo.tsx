@@ -108,14 +108,12 @@ export function BrandLogo({
 
       <div className="flex flex-col min-w-0">
         <div className="flex items-center gap-1.5 leading-none">
-          <span
-            className={`${titleSizes[size]} tracking-tight leading-none ${
-              isLight ? 'text-white' : 'text-emerald-950'
-            }`}
-          >
-            {firstWord}{' '}
+          <span className={`${titleSizes[size]} tracking-tight leading-none`}>
+            <span className={isLight ? 'text-amber-400 font-black' : 'text-amber-600 font-black'}>
+              {firstWord}
+            </span>{' '}
             {restWords && (
-              <span className={isLight ? 'text-emerald-300 font-bold' : 'text-emerald-600 font-bold'}>
+              <span className={isLight ? 'text-white font-bold' : 'text-emerald-900 font-bold'}>
                 {restWords}
               </span>
             )}
@@ -124,7 +122,7 @@ export function BrandLogo({
         {showSlogan && (
           <span
             className={`text-[11px] sm:text-xs leading-tight font-semibold mt-1 tracking-wide truncate ${
-              isLight ? 'text-emerald-200/90' : 'text-slate-600'
+              isLight ? 'text-emerald-100/90' : 'text-slate-600'
             }`}
           >
             {slogan}

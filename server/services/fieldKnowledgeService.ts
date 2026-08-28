@@ -62,11 +62,11 @@ export class FieldKnowledgeService {
   // In-memory raw observation buffer (anonymized upon ingestion)
   private rawObservations: FieldObservationInput[] = [];
   private aggregatedCache: AggregatedFieldKnowledge[] = [];
-  private lastAggregatedAt: string = new Date().toISOString();
+  private lastAggregatedAt: string = '2026-08-01T00:00:00.000Z';
+  private isInitialized = false;
 
   private constructor() {
-    this.seedSampleObservations();
-    this.recomputeAggregations();
+    // Inisialisasi ditunda ke ensureInitialized() (lazy runtime)
   }
 
   public static getInstance(): FieldKnowledgeService {
@@ -74,6 +74,13 @@ export class FieldKnowledgeService {
       FieldKnowledgeService.instance = new FieldKnowledgeService();
     }
     return FieldKnowledgeService.instance;
+  }
+
+  private ensureInitialized(): void {
+    if (this.isInitialized) return;
+    this.isInitialized = true;
+    this.seedSampleObservations();
+    this.recomputeAggregations();
   }
 
   /**
@@ -89,8 +96,8 @@ export class FieldKnowledgeService {
         farmerName: `Petani Karawang ${i}`,
         nik: `321501010175000${i}`,
         phoneNumber: `0812345678${i.toString().padStart(2, '0')}`,
-        latitude: -6.305 + Math.random() * 0.05,
-        longitude: 107.305 + Math.random() * 0.05,
+        latitude: -6.305 + i * 0.003,
+        longitude: 107.305 + i * 0.003,
         regency: 'Karawang',
         district: 'Telagasari',
         commodity: 'Padi',
@@ -100,7 +107,7 @@ export class FieldKnowledgeService {
         hst: 28 + (i % 7),
         growthStage: 'Vegetatif (21-45 HST)',
         affectedAreaPercentage: 5 + (i * 2),
-        observedAt: new Date(Date.now() - i * 86400000).toISOString(),
+        observedAt: new Date(1785628800000 - i * 86400000).toISOString(),
       });
     }
 
@@ -111,6 +118,8 @@ export class FieldKnowledgeService {
         farmerName: `Petani Majalengka ${i}`,
         nik: `321001010175000${i}`,
         phoneNumber: `0813345678${i.toString().padStart(2, '0')}`,
+        latitude: -6.83 + i * 0.002,
+        longitude: 108.22 + i * 0.002,
         regency: 'Majalengka',
         district: 'Kasokandel',
         commodity: 'Padi',
@@ -120,7 +129,7 @@ export class FieldKnowledgeService {
         hst: 40 + (i % 10),
         growthStage: 'Vegetatif Akhir (35-50 HST)',
         affectedAreaPercentage: 4 + i,
-        observedAt: new Date(Date.now() - i * 86400000).toISOString(),
+        observedAt: new Date(1785628800000 - i * 86400000).toISOString(),
       });
     }
 
@@ -130,6 +139,8 @@ export class FieldKnowledgeService {
         farmerId: `farmer_sbg_${i}`,
         farmerName: `Petani Subang ${i}`,
         nik: `321301010175000${i}`,
+        latitude: -6.56 + i * 0.002,
+        longitude: 107.76 + i * 0.002,
         regency: 'Subang',
         district: 'Pagaden',
         commodity: 'Padi',
@@ -139,7 +150,7 @@ export class FieldKnowledgeService {
         hst: 15,
         growthStage: 'Vegetatif Awal',
         affectedAreaPercentage: 2,
-        observedAt: new Date().toISOString(),
+        observedAt: '2026-08-01T08:00:00.000Z',
       });
     }
   }
@@ -148,6 +159,7 @@ export class FieldKnowledgeService {
    * Menerima observasi baru dari sinkronisasi lapangan
    */
   public ingestObservation(obs: FieldObservationInput): void {
+    this.ensureInitialized();
     this.rawObservations.push(obs);
     this.recomputeAggregations();
   }
@@ -156,6 +168,7 @@ export class FieldKnowledgeService {
    * Reset store untuk pengujian
    */
   public resetStore(): void {
+    this.isInitialized = true;
     this.rawObservations = [];
     this.aggregatedCache = [];
     this.seedSampleObservations();
@@ -297,6 +310,7 @@ export class FieldKnowledgeService {
     lastAggregatedAt: string;
     data: AggregatedFieldKnowledge[];
   } {
+    this.ensureInitialized();
     let list = [...this.aggregatedCache];
 
     if (filters?.regency) {
@@ -330,6 +344,7 @@ export class FieldKnowledgeService {
     totalSamplesAnalyzed: number;
     anonymizationPolicy: string;
   } {
+    this.ensureInitialized();
     const published = this.aggregatedCache.filter((i) => i.isPublished);
     return {
       summaryTitle: 'Peta Pengetahuan Lapangan & Peringatan Dini Wilayah',

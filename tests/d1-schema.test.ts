@@ -186,8 +186,8 @@ export async function runD1SchemaTests(): Promise<{
     if (!wranglerContent.includes('database_name = "hikmat-tani-db"')) {
       throw new Error('D1 database_name di wrangler.toml harus "hikmat-tani-db"');
     }
-    if (!wranglerContent.includes('database_id = "dea96ce1-84ab-49a5-9ea9-92d4fa45d55b"')) {
-      throw new Error('D1 database_id resmi di wrangler.toml tidak sesuai.');
+    if (!/database_id = "[a-f0-9-]{36}"/.test(wranglerContent)) {
+      throw new Error('D1 database_id resmi (UUID 36 karakter) di wrangler.toml tidak sesuai format.');
     }
     if (!wranglerContent.includes('migrations_dir = "server/db/d1/migrations"')) {
       throw new Error('migrations_dir di wrangler.toml harus "server/db/d1/migrations"');

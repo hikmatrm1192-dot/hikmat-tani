@@ -81,9 +81,11 @@ export class AuthService {
   private nikIndex = new Map<string, string>(); // nik -> farmerId
   private phoneIndex = new Map<string, string>(); // phoneNumber -> farmerId
   private userIndex = new Map<string, string>(); // authUserId -> farmerId
+  private isInitialized = false;
 
   private constructor() {
-    this.seedDefaultAccounts();
+    // Operasi inisialisasi default ditunda ke ensureInitialized() (lazy runtime)
+    // demi kompatibilitas penuh dengan Cloudflare Workers edge runtime (mencegah error 10021).
   }
 
   public static getInstance(): AuthService {
@@ -94,6 +96,16 @@ export class AuthService {
   }
 
   /**
+   * Memastikan store default telah di-seed sebelum operasi runtime pertama.
+   * Bersifat idempotent dan hanya dieksekusi saat ada request/runtime aktif.
+   */
+  private ensureInitialized(): void {
+    if (this.isInitialized) return;
+    this.isInitialized = true;
+    this.seedDefaultAccounts();
+  }
+
+  /**
    * Helper: Hash PIN menggunakan PBKDF2 dengan salt unik
    */
   public hashPin(pin: string, salt: string): string {
@@ -101,10 +113,22 @@ export class AuthService {
   }
 
   /**
-   * Helper: Generate salt acak
+   * Helper: Generate salt acak secara aman (kompatibel Node.js dan Cloudflare Edge Runtime)
    */
   public generateSalt(): string {
-    return crypto.randomBytes(16).toString('hex');
+    if (typeof crypto !== 'undefined' && typeof crypto.randomBytes === 'function') {
+      try {
+        return crypto.randomBytes(16).toString('hex');
+      } catch {
+        // Fallback jika randomBytes dilarang pada konteks tertentu
+      }
+    }
+    if (typeof globalThis !== 'undefined' && globalThis.crypto?.getRandomValues) {
+      const array = new Uint8Array(16);
+      globalThis.crypto.getRandomValues(array);
+      return Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+    return Math.random().toString(36).slice(2, 18);
   }
 
   /**
@@ -157,9 +181,12 @@ export class AuthService {
   }
 
   /**
-   * Seed akun default awal untuk pengujian
+   * Seed akun default awal untuk pengujian (idempotent)
    */
   private seedDefaultAccounts(): void {
+    if (this.farmersStore.has('farmer_sutrisno')) {
+      return;
+    }
     const saltA = this.generateSalt();
     const pinHashA = this.hashPin('123456', saltA);
     const farmerA: StoredFarmerAccount = {
@@ -197,6 +224,7 @@ export class AuthService {
     this.nikIndex.clear();
     this.phoneIndex.clear();
     this.userIndex.clear();
+    this.isInitialized = true;
     this.seedDefaultAccounts();
   }
 
@@ -209,6 +237,8 @@ export class AuthService {
     user: { id: string; role: string; isAnonymous: boolean };
     farmer: SanitizedFarmerProfile;
   } {
+    this.ensureInitialized();
+
     // 1. Validasi Nama
     if (!params.name || params.name.trim().length < 2) {
       throw { statusCode: 400, code: 'INVALID_NAME', message: 'Nama lengkap minimal 2 karakter' };
@@ -308,6 +338,8 @@ export class AuthService {
     user: { id: string; role: string; isAnonymous: boolean };
     farmer: SanitizedFarmerProfile;
   } {
+    this.ensureInitialized();
+
     if (!params.identifier || !params.pin) {
       throw {
         statusCode: 400,
@@ -372,6 +404,7 @@ export class AuthService {
    * Mengambil profil petani berdasarkan farmerId
    */
   public getFarmerProfile(farmerId: string): SanitizedFarmerProfile | null {
+    this.ensureInitialized();
     const account = this.farmersStore.get(farmerId);
     if (!account) return null;
     return this.sanitizeProfile(account);
@@ -381,6 +414,7 @@ export class AuthService {
    * Mengambil profil petani berdasarkan authUserId
    */
   public getFarmerProfileByUserId(userId: string): SanitizedFarmerProfile | null {
+    this.ensureInitialized();
     const farmerId = this.userIndex.get(userId);
     if (!farmerId) return null;
     return this.getFarmerProfile(farmerId);

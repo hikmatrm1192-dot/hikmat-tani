@@ -16,9 +16,9 @@ compatibility_flags = ["nodejs_compat"]
 directory = "./dist"
 binding = "ASSETS"
 
-# Scheduled Cron Triggers (Outbox Consumer Engine)
-[triggers]
-crons = ["* * * * *"]
+# Scheduled Cron Triggers (Outbox Consumer Engine - Uncomment when Workers Paid plan is active)
+# [triggers]
+# crons = ["* * * * *"]
 
 # ==============================================================================
 # Cloudflare D1 Database Binding
@@ -31,7 +31,7 @@ crons = ["* * * * *"]
 [[d1_databases]]
 binding = "DB"
 database_name = "hikmat-tani-db"
-database_id = "dea96ce1-84ab-49a5-9ea9-92d4fa45d55b"
+database_id = "696c0ee2-01a3-4365-8684-f04831f57f67"
 migrations_dir = "server/db/d1/migrations"
 
 # ==============================================================================

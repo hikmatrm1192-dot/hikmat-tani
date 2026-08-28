@@ -84,6 +84,7 @@ export class AdminService {
   private adminUsers: Map<string, AdminUser> = new Map();
   private auditLogs: AdminAuditLog[] = [];
   private officialConfig: OfficialAppConfig;
+  private isInitialized = false;
 
   private constructor() {
     // 1. Inisialisasi default official config
@@ -107,11 +108,11 @@ export class AdminService {
       donationQrisImage: '', // Siap diisi via upload pengelola
       donationUrl: '',
       updatedBy: 'system',
-      updatedAt: new Date().toISOString(),
+      updatedAt: '2026-08-01T00:00:00.000Z',
     };
 
-    // 2. Inisialisasi akun Super Admin default & manager
-    this.seedDefaultAdmin();
+    // Note: seedDefaultAdmin() ditunda ke ensureInitialized() (lazy runtime)
+    // demi kompatibilitas mutlak dengan Cloudflare Workers edge runtime.
   }
 
   public static getInstance(): AdminService {
@@ -122,10 +123,36 @@ export class AdminService {
   }
 
   /**
+   * Memastikan akun admin default telah diinisialisasi pada runtime request.
+   */
+  private ensureInitialized(): void {
+    if (this.isInitialized) return;
+    this.isInitialized = true;
+    this.seedDefaultAdmin();
+  }
+
+  /**
+   * Helper: Generate salt acak secara aman (kompatibel Node.js dan Edge Runtime)
+   */
+  public generateSalt(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomBytes === 'function') {
+      try {
+        return crypto.randomBytes(16).toString('hex');
+      } catch {}
+    }
+    if (typeof globalThis !== 'undefined' && globalThis.crypto?.getRandomValues) {
+      const array = new Uint8Array(16);
+      globalThis.crypto.getRandomValues(array);
+      return Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+    return Math.random().toString(36).slice(2, 18);
+  }
+
+  /**
    * Helper Keamanan: Hash Password dengan PBKDF2 (HMAC-SHA512)
    */
   public hashPassword(password: string, salt?: string): { hash: string; salt: string } {
-    const useSalt = salt || crypto.randomBytes(16).toString('hex');
+    const useSalt = salt || this.generateSalt();
     const hash = crypto.pbkdf2Sync(password, useSalt, 10000, 64, 'sha512').toString('hex');
     return { hash, salt: useSalt };
   }
@@ -161,7 +188,7 @@ export class AdminService {
       existing.role = 'SUPER_ADMIN';
       existing.isActive = true;
       if (envPassword) {
-        const { hash, salt } = this.hashPassword(envPassword, existing.salt || crypto.randomBytes(16).toString('hex'));
+        const { hash, salt } = this.hashPassword(envPassword, existing.salt || this.generateSalt());
         existing.passwordHash = hash;
         existing.salt = salt;
         existing.updatedAt = new Date().toISOString();
@@ -170,7 +197,7 @@ export class AdminService {
     }
 
     // Buat akun Super Admin tunggal
-    const salt = crypto.randomBytes(16).toString('hex');
+    const salt = this.generateSalt();
     const defaultSecret = 'HikmatTaniSuperAdmin2026Secret!';
     const hash = envPassword
       ? this.hashPassword(envPassword, salt).hash
@@ -193,31 +220,33 @@ export class AdminService {
   }
 
   /**
-   * Seed Super Admin & Manager awal secara aman
+   * Seed Super Admin & Manager awal secara aman (idempotent)
    * Akun Utama: pappizee (hikmat.rm1192@gmail.com) sebagai SUPER_ADMIN
    */
-  private seedDefaultAdmin() {
+  public seedDefaultAdmin() {
     this.reprovisionSuperAdminPassword();
 
-    // Akun Pengelola / Manager Staf Lapangan (Role MANAGER, bukan SUPER_ADMIN)
-    const managerSalt = 'hikmat_tani_manager_salt_2026';
-    const managerEnvPassword = process.env.MANAGER_INITIAL_PASSWORD || 'ManagerTani2026!';
-    const managerHash = this.hashPassword(managerEnvPassword, managerSalt).hash;
+    if (!this.adminUsers.has('admin_mgr_01')) {
+      // Akun Pengelola / Manager Staf Lapangan (Role MANAGER, bukan SUPER_ADMIN)
+      const managerSalt = 'hikmat_tani_manager_salt_2026';
+      const managerEnvPassword = process.env.MANAGER_INITIAL_PASSWORD || 'ManagerTani2026!';
+      const managerHash = this.hashPassword(managerEnvPassword, managerSalt).hash;
 
-    const manager: AdminUser = {
-      id: 'admin_mgr_01',
-      username: 'pengelola',
-      email: 'pengelola@hikmattani.id',
-      fullName: 'Pengelola Lapangan HIKMAT TANI',
-      passwordHash: managerHash,
-      salt: managerSalt,
-      role: 'MANAGER',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+      const manager: AdminUser = {
+        id: 'admin_mgr_01',
+        username: 'pengelola',
+        email: 'pengelola@hikmattani.id',
+        fullName: 'Pengelola Lapangan HIKMAT TANI',
+        passwordHash: managerHash,
+        salt: managerSalt,
+        role: 'MANAGER',
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
-    this.adminUsers.set(manager.id, manager);
+      this.adminUsers.set(manager.id, manager);
+    }
   }
 
   /**
@@ -233,6 +262,8 @@ export class AdminService {
     admin?: { id: string; username: string; email?: string; fullName: string; role: 'MANAGER' | 'SUPER_ADMIN' };
     error?: string;
   } {
+    this.ensureInitialized();
+
     if (!usernameOrEmail || !passwordPlain) {
       return { success: false, error: 'Nama pengguna/email atau kata sandi pengelola salah.' };
     }
@@ -313,6 +344,7 @@ export class AdminService {
     hasPlaintextPasswordInRecord: boolean;
     duplicateSuperAdminsCount: number;
   } {
+    this.ensureInitialized();
     const superAdmins = Array.from(this.adminUsers.values()).filter(
       (u) => u.role === 'SUPER_ADMIN'
     );
@@ -338,6 +370,7 @@ export class AdminService {
     newPasswordPlain: string,
     ipAddress?: string
   ): { success: boolean; message: string } {
+    this.ensureInitialized();
     this.assertIsAdmin(actor);
 
     const user = this.adminUsers.get(actor.userId);
@@ -398,6 +431,7 @@ export class AdminService {
     donationUrl: string;
     updatedAt: string;
   } {
+    this.ensureInitialized();
     return {
       appName: this.officialConfig.appName,
       slogan: this.officialConfig.slogan,
@@ -425,6 +459,7 @@ export class AdminService {
    * Mengambil Konfigurasi Lengkap Pengelola (MANAGER / SUPER_ADMIN)
    */
   public getAdminConfig(actor: AuthSessionPayload): OfficialAppConfig {
+    this.ensureInitialized();
     this.assertIsAdmin(actor);
     return { ...this.officialConfig };
   }
@@ -437,6 +472,7 @@ export class AdminService {
     payload: Partial<OfficialAppConfig>,
     ipAddress?: string
   ): OfficialAppConfig {
+    this.ensureInitialized();
     this.assertIsAdmin(actor);
 
     const oldConfig = { ...this.officialConfig };
@@ -510,6 +546,7 @@ export class AdminService {
     qrisImagePayload: string,
     ipAddress?: string
   ): { success: boolean; donationQrisImage: string } {
+    this.ensureInitialized();
     this.assertIsAdmin(actor);
 
     if (typeof qrisImagePayload !== 'string') {
@@ -562,6 +599,7 @@ export class AdminService {
    * Manajemen Akun Pengelola: Daftar Akun (SUPER_ADMIN ONLY)
    */
   public listManagers(actor: AuthSessionPayload): Array<Omit<AdminUser, 'passwordHash' | 'salt'>> {
+    this.ensureInitialized();
     this.assertIsSuperAdmin(actor);
 
     return Array.from(this.adminUsers.values()).map((user) => ({
@@ -591,6 +629,7 @@ export class AdminService {
     },
     ipAddress?: string
   ): Omit<AdminUser, 'passwordHash' | 'salt'> {
+    this.ensureInitialized();
     this.assertIsSuperAdmin(actor);
 
     if (!payload.username || payload.username.trim().length < 3) {
@@ -671,6 +710,7 @@ export class AdminService {
     },
     ipAddress?: string
   ): Omit<AdminUser, 'passwordHash' | 'salt'> {
+    this.ensureInitialized();
     this.assertIsSuperAdmin(actor);
 
     const user = this.adminUsers.get(managerId);
@@ -729,6 +769,7 @@ export class AdminService {
    * Manajemen Akun Pengelola: Hapus Pengelola (SUPER_ADMIN ONLY)
    */
   public deleteManager(actor: AuthSessionPayload, managerId: string, ipAddress?: string): boolean {
+    this.ensureInitialized();
     this.assertIsSuperAdmin(actor);
 
     if (actor.userId === managerId) {
@@ -765,6 +806,7 @@ export class AdminService {
    * Audit Logs (MANAGER / SUPER_ADMIN)
    */
   public getAuditLogs(actor: AuthSessionPayload, limit: number = 50): AdminAuditLog[] {
+    this.ensureInitialized();
     this.assertIsAdmin(actor);
     return [...this.auditLogs].reverse().slice(0, limit);
   }
