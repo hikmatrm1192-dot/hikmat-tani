@@ -188,10 +188,10 @@ export function RecommendationCard({
                   <button
                     type="button"
                     onClick={() => toggleExpand(rec.id)}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 hover:text-emerald-950 min-h-[36px] py-1 px-2 rounded-lg hover:bg-emerald-50/60 transition-colors"
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0F5132] hover:text-[#0B3D26] min-h-[36px] py-1 px-2 rounded-lg hover:bg-emerald-50 transition-colors"
                     aria-expanded={isExpanded}
                   >
-                    <BookOpen className="w-3.5 h-3.5 text-amber-600" />
+                    <BookOpen className="w-3.5 h-3.5 text-[#D4AF37]" />
                     <span>{isExpanded ? 'Sembunyikan Rujukan' : 'Lihat Alasan & Rujukan'}</span>
                     {isExpanded ? (
                       <ChevronUp className="w-3.5 h-3.5" />
@@ -204,9 +204,9 @@ export function RecommendationCard({
                     <button
                       type="button"
                       onClick={() => onOpenDecisionModal(rec)}
-                      className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 min-h-[38px] bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white rounded-xl transition-colors shadow-xs"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 min-h-[38px] bg-[#0F5132] hover:bg-[#0B3D26] active:bg-[#072417] text-white rounded-xl transition-colors shadow-xs"
                     >
-                      <SlidersHorizontal className="w-3.5 h-3.5" />
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-[#D4AF37]" />
                       <span>{decision ? 'Ubah Keputusan' : 'Tentukan Keputusan'}</span>
                     </button>
                   )}

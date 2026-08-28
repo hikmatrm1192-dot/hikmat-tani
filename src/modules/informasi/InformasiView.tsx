@@ -232,16 +232,16 @@ export function InformasiView({
               }}
               className={`flex items-center justify-center gap-1.5 py-2.5 px-2 min-h-[48px] rounded-xl text-xs font-bold transition-all last:col-span-2 sm:last:col-span-1 ${
                 isActive
-                  ? 'bg-white text-slate-950 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/40'
+                  ? 'bg-[#0F5132] text-white shadow-md'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
-              {cat.icon}
+              <span className={isActive ? 'text-white' : ''}>{cat.icon}</span>
               <span className="truncate">{cat.label}</span>
               <span
                 className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
                   isActive
-                    ? 'bg-slate-900 text-white'
+                    ? 'bg-[#072417] text-emerald-200'
                     : 'bg-slate-300/80 text-slate-700'
                 }`}
               >

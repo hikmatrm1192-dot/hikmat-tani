@@ -273,7 +273,7 @@ export function KegiatanView({
                 <button
                   type="button"
                   onClick={() => handleOpenNewActivity()}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[48px] bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-xs"
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[48px] bg-[#0F5132] hover:bg-[#0B3D26] active:bg-[#072417] text-white font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-xs"
                 >
                   <Plus className="w-4 h-4" />
                   <span>+ Catat Kegiatan</span>
@@ -283,7 +283,7 @@ export function KegiatanView({
                 <button
                   type="button"
                   onClick={handleCreateSeedbed}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[48px] bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-xs"
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[48px] bg-[#0F5132] hover:bg-[#0B3D26] active:bg-[#072417] text-white font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-xs"
                 >
                   <Plus className="w-4 h-4" />
                   <span>+ Catat Persemaian</span>
@@ -293,7 +293,7 @@ export function KegiatanView({
                 <button
                   type="button"
                   onClick={handleCreateExpense}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[48px] bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-xs"
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[48px] bg-[#0F5132] hover:bg-[#0B3D26] active:bg-[#072417] text-white font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-xs"
                 >
                   <Plus className="w-4 h-4" />
                   <span>+ Catat Biaya</span>
@@ -421,7 +421,7 @@ export function KegiatanView({
                     onClick={() => setSelectedCategory(cat.id)}
                     className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all min-h-[40px] border ${
                       selectedCategory === cat.id
-                        ? 'bg-emerald-800 text-white border-emerald-800 shadow-xs'
+                        ? 'bg-[#0F5132] text-white border-[#0F5132] shadow-xs'
                         : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
@@ -430,7 +430,7 @@ export function KegiatanView({
                     <span
                       className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
                         selectedCategory === cat.id
-                          ? 'bg-emerald-950 text-emerald-200'
+                          ? 'bg-[#072417] text-emerald-200'
                           : 'bg-slate-100 text-slate-600'
                       }`}
                     >

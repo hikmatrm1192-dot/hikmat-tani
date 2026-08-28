@@ -91,7 +91,7 @@ export function BrandLogo({
     <div className={`flex items-center gap-2.5 sm:gap-3 ${className}`}>
       {/* Official Emblem / Icon */}
       <div
-        className={`${iconSizes[size]} shrink-0 flex items-center justify-center rounded-xl overflow-hidden shadow-xs bg-emerald-950/20 border border-emerald-600/30 p-0.5`}
+        className={`${iconSizes[size]} shrink-0 flex items-center justify-center rounded-xl overflow-hidden shadow-xs bg-[#0B3D26]/20 border border-[#2E7D4F]/40 p-0.5`}
       >
         <img
           src={primaryLogo}
@@ -109,11 +109,11 @@ export function BrandLogo({
       <div className="flex flex-col min-w-0">
         <div className="flex items-center gap-1.5 leading-none">
           <span className={`${titleSizes[size]} tracking-tight leading-none`}>
-            <span className={isLight ? 'text-amber-400 font-black' : 'text-amber-600 font-black'}>
+            <span className={isLight ? 'text-[#D4AF37] font-black' : 'text-[#B89327] font-black'}>
               {firstWord}
             </span>{' '}
             {restWords && (
-              <span className={isLight ? 'text-white font-bold' : 'text-emerald-900 font-bold'}>
+              <span className={isLight ? 'text-white font-black' : 'text-[#0F5132] font-black'}>
                 {restWords}
               </span>
             )}
@@ -122,7 +122,7 @@ export function BrandLogo({
         {showSlogan && (
           <span
             className={`text-[11px] sm:text-xs leading-tight font-semibold mt-1 tracking-wide truncate ${
-              isLight ? 'text-emerald-100/90' : 'text-slate-600'
+              isLight ? 'text-emerald-100/80' : 'text-[#2E7D4F]'
             }`}
           >
             {slogan}

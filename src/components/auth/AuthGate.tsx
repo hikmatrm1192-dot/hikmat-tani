@@ -141,40 +141,44 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col justify-center items-center px-4 py-8 sm:py-12">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-[#072417] via-[#0B3D26] to-[#05180F] flex flex-col justify-center items-center px-4 py-8 sm:py-12">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-emerald-900/30 overflow-hidden flex flex-col">
         {/* Header Identitas Brand */}
-        <div className="bg-emerald-900 text-white p-6 text-center space-y-2.5 relative overflow-hidden">
-          <div className="flex justify-center">
+        <div className="bg-gradient-to-br from-[#0B3D26] via-[#0F5132] to-[#0B3D26] text-white p-6 text-center space-y-2.5 relative overflow-hidden">
+          {/* Subtle background glow */}
+          <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-[#2E7D4F]/20 rounded-full blur-xl pointer-events-none" />
+          
+          <div className="flex justify-center relative z-10">
             <BrandLogo size="lg" variant="light" showSlogan={false} />
           </div>
-          <div className="text-[11px] sm:text-xs font-bold tracking-wider text-amber-300 uppercase py-0.5">
+          <div className="text-[11px] sm:text-xs font-bold tracking-wider text-emerald-100/90 uppercase py-0.5 relative z-10">
             CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.
           </div>
-          <div className="pt-1 border-t border-emerald-800/80">
+          <div className="pt-2 border-t border-emerald-700/60 relative z-10">
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
               Identitas Petani
             </h1>
-            <p className="text-xs sm:text-sm text-emerald-100 font-medium mt-0.5">
+            <p className="text-xs sm:text-sm text-emerald-100/90 font-medium mt-0.5">
               Gerbang petani cerdas dan bijak
             </p>
-            <p className="text-[11px] sm:text-xs text-emerald-200/90 font-semibold mt-0.5">
-              Data terisolasi dan aman
-            </p>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 mt-1.5 rounded-full bg-[#072417]/50 border border-emerald-600/40 text-[10px] text-emerald-200 font-bold">
+              <ShieldCheck className="w-3 h-3 text-[#D4AF37]" />
+              <span>Data Saya Adalah Milik Saya</span>
+            </div>
           </div>
         </div>
 
         {/* Tab Navigasi: Masuk vs Daftar */}
-        <div className="flex border-b border-slate-200 bg-slate-50">
+        <div className="flex border-b border-slate-200 bg-[#F7F6F0]">
           <button
             type="button"
             onClick={() => {
               setActiveTab('login');
               setErrorMessage(null);
             }}
-            className={`flex-1 py-3.5 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${
+            className={`flex-1 py-3.5 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-all ${
               activeTab === 'login'
-                ? 'border-emerald-800 text-emerald-900 bg-white shadow-xs'
+                ? 'border-[#0F5132] text-[#0F5132] bg-white shadow-xs'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
@@ -188,9 +192,9 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
               setActiveTab('register');
               setErrorMessage(null);
             }}
-            className={`flex-1 py-3.5 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${
+            className={`flex-1 py-3.5 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-all ${
               activeTab === 'register'
-                ? 'border-emerald-800 text-emerald-900 bg-white shadow-xs'
+                ? 'border-[#0F5132] text-[#0F5132] bg-white shadow-xs'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
@@ -200,7 +204,7 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
         </div>
 
         {/* Konten Form */}
-        <div className="p-6 space-y-5 flex-1">
+        <div className="p-6 space-y-5 flex-1 bg-white">
           {errorMessage && (
             <div className="p-4 bg-rose-50 rounded-2xl border border-rose-300 flex items-start gap-3 text-xs sm:text-sm text-rose-950">
               <AlertCircle className="w-5 h-5 text-rose-700 shrink-0 mt-0.5" />
@@ -226,17 +230,17 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
                         key={acc.id}
                         type="button"
                         onClick={() => handleSelectSavedAccount(acc)}
-                        className="w-full text-left p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 transition-colors flex items-center justify-between group"
+                        className="w-full text-left p-3 rounded-xl border border-slate-200 bg-[#F7F6F0] hover:bg-emerald-50 hover:border-[#0F5132]/40 transition-colors flex items-center justify-between group"
                       >
                         <div className="min-w-0 pr-2">
-                          <strong className="text-xs sm:text-sm font-bold text-slate-900 block truncate group-hover:text-emerald-900">
+                          <strong className="text-xs sm:text-sm font-bold text-slate-900 block truncate group-hover:text-[#0F5132]">
                             {acc.name}
                           </strong>
                           <span className="text-[11px] text-slate-500 block truncate">
                             {acc.phoneNumber} • NIK: {acc.nikMasked}
                           </span>
                         </div>
-                        <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-800 shrink-0" />
+                        <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#0F5132] shrink-0" />
                       </button>
                     ))}
                   </div>
@@ -257,7 +261,7 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
                     value={loginIdentifier}
                     onChange={(e) => setLoginIdentifier(e.target.value)}
                     placeholder="Contoh: 081234567890 atau 3210..."
-                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-700 focus:bg-white transition-all"
+                    className="w-full pl-11 pr-4 py-3 bg-[#F7F6F0] border border-slate-300 rounded-xl text-slate-900 font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-[#0F5132] focus:bg-white transition-all"
                   />
                 </div>
               </div>
@@ -278,7 +282,7 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
                     value={loginPin}
                     onChange={(e) => setLoginPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     placeholder="Contoh: 123456"
-                    className="w-full pl-11 pr-11 py-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-bold text-sm tracking-widest focus:outline-hidden focus:ring-2 focus:ring-emerald-700 focus:bg-white transition-all"
+                    className="w-full pl-11 pr-11 py-3 bg-[#F7F6F0] border border-slate-300 rounded-xl text-slate-900 font-bold text-sm tracking-widest focus:outline-hidden focus:ring-2 focus:ring-[#0F5132] focus:bg-white transition-all"
                   />
                   <button
                     type="button"
@@ -293,7 +297,7 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3.5 px-4 bg-emerald-800 hover:bg-emerald-900 active:bg-emerald-950 text-white font-bold text-sm sm:text-base rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
+                className="w-full py-3.5 px-4 bg-[#0F5132] hover:bg-[#0B3D26] active:bg-[#072417] text-white font-bold text-sm sm:text-base rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 mt-2 disabled:opacity-50 min-h-[48px]"
               >
                 <KeyRound className="w-5 h-5" />
                 <span>{loading ? 'Memverifikasi...' : 'Masuk ke Aplikasi'}</span>
@@ -318,7 +322,7 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
                     placeholder="Contoh: Pak Sutrisno"
-                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-medium text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+                    className="w-full pl-9 pr-3 py-2.5 bg-[#F7F6F0] border border-slate-300 rounded-xl text-slate-900 font-medium text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-[#0F5132] focus:bg-white"
                   />
                 </div>
               </div>
@@ -336,7 +340,7 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
                     value={regNik}
                     onChange={(e) => setRegNik(e.target.value.replace(/\D/g, '').slice(0, 16))}
                     placeholder="3210010101750001"
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-medium text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+                    className="w-full px-3 py-2.5 bg-[#F7F6F0] border border-slate-300 rounded-xl text-slate-900 font-medium text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-[#0F5132] focus:bg-white"
                   />
                 </div>
 
@@ -354,7 +358,7 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
                       value={regPhone}
                       onChange={(e) => setRegPhone(e.target.value)}
                       placeholder="081234567890"
-                      className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-medium text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+                      className="w-full pl-9 pr-3 py-2.5 bg-[#F7F6F0] border border-slate-300 rounded-xl text-slate-900 font-medium text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-[#0F5132] focus:bg-white"
                     />
                   </div>
                 </div>
@@ -376,7 +380,7 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
                     value={regPin}
                     onChange={(e) => setRegPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     placeholder="Contoh: 123456"
-                    className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-bold text-xs sm:text-sm tracking-widest focus:outline-hidden focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+                    className="w-full pl-9 pr-10 py-2.5 bg-[#F7F6F0] border border-slate-300 rounded-xl text-slate-900 font-bold text-xs sm:text-sm tracking-widest focus:outline-hidden focus:ring-2 focus:ring-[#0F5132] focus:bg-white"
                   />
                   <button
                     type="button"
@@ -398,7 +402,7 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
                     value={regVillage}
                     onChange={(e) => setRegVillage(e.target.value)}
                     placeholder="Sukamaju"
-                    className="w-full px-2.5 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs"
+                    className="w-full px-2.5 py-2 bg-[#F7F6F0] border border-slate-300 rounded-lg text-slate-900 text-xs"
                   />
                 </div>
                 <div>
@@ -410,7 +414,7 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
                     value={regRegency}
                     onChange={(e) => setRegRegency(e.target.value)}
                     placeholder="Majalengka"
-                    className="w-full px-2.5 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs"
+                    className="w-full px-2.5 py-2 bg-[#F7F6F0] border border-slate-300 rounded-lg text-slate-900 text-xs"
                   />
                 </div>
               </div>
@@ -424,14 +428,14 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
                   value={regFarmerGroup}
                   onChange={(e) => setRegFarmerGroup(e.target.value)}
                   placeholder="Kelompok Tani Sri Rejeki"
-                  className="w-full px-2.5 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs"
+                  className="w-full px-2.5 py-2 bg-[#F7F6F0] border border-slate-300 rounded-lg text-slate-900 text-xs"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 px-4 bg-emerald-800 hover:bg-emerald-900 active:bg-emerald-950 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
+                className="w-full py-3 px-4 bg-[#0F5132] hover:bg-[#0B3D26] active:bg-[#072417] text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 mt-2 disabled:opacity-50 min-h-[48px]"
               >
                 <UserPlus className="w-4 h-4" />
                 <span>{loading ? 'Mendaftarkan...' : 'Daftar Identitas Petani'}</span>
@@ -441,7 +445,7 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
 
           {/* Jaminan Privasi Data Petani */}
           <div className="pt-3 border-t border-slate-100 flex items-start gap-2.5 text-[11px] text-slate-500">
-            <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+            <ShieldCheck className="w-4 h-4 text-[#0F5132] shrink-0 mt-0.5" />
             <p className="leading-relaxed">
               <strong>Jaminan Privasi:</strong> Data lahan, catatan budidaya, dan kalkulasi Anda terisolasi secara aman. Petani lain tidak dapat melihat atau mengubah catatan Anda.
             </p>

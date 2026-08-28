@@ -42,19 +42,21 @@ export function BottomNav({ activeTab, onSelectTab }: BottomNavProps) {
               onClick={() => onSelectTab(item.id)}
               className={`flex flex-col items-center justify-center min-h-[52px] py-1 px-1 rounded-xl transition-all ${
                 isActive
-                  ? 'text-emerald-800 font-bold'
-                  : 'text-slate-500 hover:text-slate-700 active:text-emerald-700 font-medium'
+                  ? 'text-[#0F5132] font-black'
+                  : 'text-slate-500 hover:text-slate-800 active:text-[#0F5132] font-medium'
               }`}
               aria-current={isActive ? 'page' : undefined}
             >
               <div
-                className={`w-9 h-7 flex items-center justify-center rounded-full transition-colors ${
-                  isActive ? 'bg-emerald-100 text-emerald-800' : ''
+                className={`w-10 h-7 flex items-center justify-center rounded-full transition-all ${
+                  isActive ? 'bg-[#0F5132]/10 text-[#0F5132] font-bold' : ''
                 }`}
               >
                 <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
               </div>
-              <span className="text-[11px] leading-tight mt-0.5 tracking-tight">{item.label}</span>
+              <span className={`text-[11px] leading-tight mt-0.5 tracking-tight ${isActive ? 'font-black text-[#0F5132]' : 'text-slate-500'}`}>
+                {item.label}
+              </span>
             </button>
           );
         })}

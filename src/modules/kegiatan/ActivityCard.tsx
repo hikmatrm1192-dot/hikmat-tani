@@ -122,7 +122,7 @@ export function ActivityCard({
             <span>{theme.label}</span>
           </span>
 
-          <span className="text-[11px] font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+          <span className="text-[11px] font-black text-[#0F5132] bg-emerald-50 px-2.5 py-0.5 rounded-full border border-[#0F5132]/30">
             {activity.hst} HST
           </span>
 

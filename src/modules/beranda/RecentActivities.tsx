@@ -122,7 +122,7 @@ export function RecentActivities({
                 </div>
 
                 <div className="text-right shrink-0">
-                  <span className="inline-block px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[10px] font-bold rounded-full border border-emerald-200">
+                  <span className="inline-block px-2.5 py-0.5 bg-emerald-50 text-[#0F5132] text-[10px] font-black rounded-full border border-[#0F5132]/30">
                     {evt.hst} HST
                   </span>
                   <span className="block text-[10px] text-slate-400 mt-0.5">

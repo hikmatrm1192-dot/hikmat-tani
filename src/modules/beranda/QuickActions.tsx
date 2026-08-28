@@ -80,7 +80,7 @@ export function QuickActions({
           type="button"
           onClick={onAddGeneral}
           disabled={disabled}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 font-bold rounded-lg text-xs transition-colors border border-emerald-300 disabled:opacity-50 disabled:pointer-events-none"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-emerald-50 active:bg-emerald-100 text-[#0F5132] font-bold rounded-xl text-xs transition-colors border border-[#0F5132]/30 shadow-xs disabled:opacity-50 disabled:pointer-events-none min-h-[36px]"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>+ Catat Kegiatan</span>
@@ -96,15 +96,15 @@ export function QuickActions({
               type="button"
               onClick={btn.action}
               disabled={disabled}
-              className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5 p-3 min-h-[58px] bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200/90 rounded-xl transition-all shadow-xs text-left group disabled:opacity-50 disabled:pointer-events-none"
+              className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5 p-3.5 min-h-[64px] bg-white hover:bg-[#FBF9F2] active:bg-emerald-50/60 border border-slate-200/90 hover:border-[#0F5132]/40 rounded-2xl transition-all shadow-xs text-left group disabled:opacity-50 disabled:pointer-events-none"
             >
               <div
-                className={`w-9 h-9 rounded-lg ${btn.color} flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform`}
+                className={`w-10 h-10 rounded-xl ${btn.color} flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs`}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className="w-5 h-5" />
               </div>
               <div className="flex-1 min-w-0">
-                <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate">
+                <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate group-hover:text-[#0F5132]">
                   {btn.title}
                 </span>
                 <span className="text-[10px] text-slate-500 block truncate">

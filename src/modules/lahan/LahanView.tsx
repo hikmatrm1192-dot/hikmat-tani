@@ -66,7 +66,7 @@ export function LahanView({
           <button
             type="button"
             onClick={onOpenAddLand}
-            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[48px] bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-xs"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[48px] bg-[#0F5132] hover:bg-[#0B3D26] active:bg-[#072417] text-white font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-xs"
           >
             <Plus className="w-4 h-4" />
             <span>Tambah Lahan</span>
@@ -81,8 +81,8 @@ export function LahanView({
           onClick={() => setFilterTab('ACTIVE')}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all min-h-[40px] flex items-center gap-2 ${
             filterTab === 'ACTIVE'
-              ? 'bg-emerald-800 text-white shadow-xs'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              ? 'bg-[#0F5132] text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
@@ -95,7 +95,7 @@ export function LahanView({
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all min-h-[40px] flex items-center gap-2 ${
             filterTab === 'ARCHIVED'
               ? 'bg-slate-800 text-white shadow-xs'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
           <Archive className="w-3.5 h-3.5" />

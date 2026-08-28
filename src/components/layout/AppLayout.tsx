@@ -20,7 +20,7 @@ interface AppLayoutProps {
 
 export function AppLayout({ activeTab, onSelectTab, children }: AppLayoutProps) {
   return (
-    <div className="min-h-screen bg-slate-100/70 text-slate-800 flex flex-col md:flex-row antialiased overflow-x-hidden">
+    <div className="min-h-screen bg-[#F7F6F0] text-slate-800 flex flex-col md:flex-row antialiased overflow-x-hidden">
       {/* Desktop & Tablet Sidebar */}
       <DesktopSidebar activeTab={activeTab} onSelectTab={onSelectTab} />
 
