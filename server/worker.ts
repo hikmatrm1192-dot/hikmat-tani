@@ -11,6 +11,7 @@
  */
 
 import { createD1Client, d1Schema } from './db/d1/index.ts';
+import { durableOutboxConsumer } from './services/outboxConsumer.ts';
 
 export interface Env {
   DB: any; // Cloudflare D1 Database binding
@@ -128,4 +129,40 @@ export default {
       headers: { 'Content-Type': 'text/plain', ...corsHeaders },
     });
   },
+
+  /**
+   * Cloudflare Cron Trigger Scheduled Handler (Edge Background Execution)
+   * 
+   * Dijalankan secara otomatis oleh Cloudflare scheduler untuk memproses
+   * event replikasi outbox PostgreSQL -> D1 tanpa memerlukan request user.
+   */
+  async scheduled(controller: any, env: Env, ctx: any): Promise<void> {
+    const runDrain = async () => {
+      if (!env.DB) {
+        console.warn('[Worker Scheduler] DB binding tidak tersedia untuk drain.');
+        return;
+      }
+
+      try {
+        const db = env.DB?.prepare ? (createD1Client(env.DB)) : env.DB;
+        if (db) {
+          durableOutboxConsumer.setD1Db(db);
+        }
+
+        const workerNodeId = `cf_worker_${controller.cron || 'cron'}_${controller.scheduledTime || Date.now()}`;
+        const result = await durableOutboxConsumer.drainPendingEvents(workerNodeId, 20);
+
+        console.log(`[Worker Scheduler] Outbox drain completed: ${result.completed} completed, ${result.failed} failed, ${result.deadLetter} dead-letter.`);
+      } catch (err: any) {
+        console.error('[Worker Scheduler] Outbox drain error:', err?.message || err);
+      }
+    };
+
+    if (ctx?.waitUntil) {
+      ctx.waitUntil(runDrain());
+    } else {
+      await runDrain();
+    }
+  },
 };
+

@@ -16,6 +16,10 @@ compatibility_flags = ["nodejs_compat"]
 directory = "./dist"
 binding = "ASSETS"
 
+# Scheduled Cron Triggers (Outbox Consumer Engine)
+[triggers]
+crons = ["* * * * *"]
+
 # ==============================================================================
 # Cloudflare D1 Database Binding
 # ==============================================================================

@@ -13,6 +13,13 @@ import * as d1Schema from './schema.ts';
  * 2. Paralel (Migrasi Cloudflare): Cloudflare D1 (/server/db/d1/index.ts)
  */
 
+export interface D1Database {
+  prepare(query: string): any;
+  dump(): Promise<ArrayBuffer>;
+  batch<T = unknown>(statements: any[]): Promise<any[]>;
+  exec(query: string): Promise<any>;
+}
+
 export interface D1Status {
   configured: boolean;
   connected: boolean;

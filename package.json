@@ -12,12 +12,14 @@
     "lint": "tsc --noEmit",
     "db:migrate": "tsx server/db/migrate.ts",
     "db:d1:migrate": "tsx server/db/d1/migrate.ts",
-    "test": "tsx tests/final-smoke-test.test.ts && tsx tests/cost-calculation.test.ts && tsx tests/backend.test.ts && tsx tests/d1-schema.test.ts && tsx tests/sync.test.ts && tsx tests/knowledge.test.ts && tsx tests/weather.test.ts && tsx tests/admin.test.ts && tsx tests/e2e-integration.test.ts && tsx tests/production-startup.test.ts",
+    "test": "tsx tests/final-smoke-test.test.ts && tsx tests/cost-calculation.test.ts && tsx tests/backend.test.ts && tsx tests/d1-schema.test.ts && tsx tests/sync.test.ts && tsx tests/replication.test.ts && tsx tests/outboxConsumer.test.ts && tsx tests/knowledge.test.ts && tsx tests/weather.test.ts && tsx tests/admin.test.ts && tsx tests/e2e-integration.test.ts && tsx tests/production-startup.test.ts",
     "test:smoke": "tsx tests/final-smoke-test.test.ts",
     "test:cost": "tsx tests/cost-calculation.test.ts",
     "test:backend": "tsx tests/backend.test.ts",
     "test:d1": "tsx tests/d1-schema.test.ts",
     "test:sync": "tsx tests/sync.test.ts",
+    "test:replication": "tsx tests/replication.test.ts",
+    "test:outbox": "tsx tests/outboxConsumer.test.ts",
     "test:knowledge": "tsx tests/knowledge.test.ts",
     "test:weather": "tsx tests/weather.test.ts",
     "test:admin": "tsx tests/admin.test.ts",
@@ -51,6 +53,7 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "wrangler": "^4.127.1"
   }
 }

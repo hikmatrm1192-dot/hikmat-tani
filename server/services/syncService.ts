@@ -1,16 +1,22 @@
 /**
- * HIKMAT TANI - Two-Way Sync Service (Server Side)
+ * HIKMAT TANI - Two-Way Sync Service (Persistent D1 Backend)
  * 
  * Prinsip:
- * 1. Idempotency mutlak via operationId.
+ * 1. Idempotency mutlak via D1 table `processed_operations`.
  * 2. Validasi kepemilikan data (Ownership Authorization) per farmerId.
  * 3. Pemisahan data operasional vs data master knowledge.
- * 4. Incremental pull berbasis server cursor/timestamp.
- * 5. Perlindungan data actualActions (catatan historis petani tidak boleh hilang).
+ * 4. Incremental pull berbasis D1 table `sync_journal` dengan ordering server_timestamp ASC.
+ * 5. Perlindungan kedaulatan petani: ACTUAL_ACTION DELETE diblokir secara tegas.
  * 6. Tombstone synchronization untuk penyebaran penghapusan aman antar perangkat.
+ * 7. Bebas dari in-memory state ephemeral di level production.
  */
 
+import { eq, and, gt, asc, desc } from 'drizzle-orm';
+import { DrizzleD1Database } from 'drizzle-orm/d1';
 import { AuthSessionPayload } from './authService.ts';
+import { d1DbService, d1Schema } from '../db/d1/index.ts';
+import { processedOperations, syncJournal } from '../db/d1/schema.ts';
+import { createTestD1Client, InMemoryD1Database } from '../db/d1/testD1.ts';
 
 export type SyncEntityType =
   | 'FARMER'
@@ -65,33 +71,69 @@ export const ALLOWED_SYNC_ENTITIES = new Set<string>([
 
 export class SyncService {
   private static instance: SyncService;
+  private db: DrizzleD1Database<typeof d1Schema> | null = null;
+  private testEngine: InMemoryD1Database | null = null;
 
-  // In-memory backing store for processed operations and journal entries
-  // (mirrors the PostgreSQL schema for reliable operation in all environments)
-  private processedOps: Map<string, { userId: string; farmerId: string; processedAt: string }> = new Map();
-  private journal: SyncJournalEntry[] = [];
-  private entityStore: Map<string, { farmerId: string; updatedAt: string; data: Record<string, any>; isDeleted: boolean }> = new Map();
+  public constructor(db?: DrizzleD1Database<typeof d1Schema>) {
+    if (db) {
+      this.db = db;
+    }
+  }
 
-  private constructor() {}
-
-  public static getInstance(): SyncService {
+  public static getInstance(db?: DrizzleD1Database<typeof d1Schema>): SyncService {
     if (!SyncService.instance) {
-      SyncService.instance = new SyncService();
+      SyncService.instance = new SyncService(db);
+    } else if (db) {
+      SyncService.instance.setDb(db);
     }
     return SyncService.instance;
   }
 
   /**
-   * Reset store (untuk keperluan testing / isolasi)
+   * Set D1 Database Client secara eksplisit (misal dari Cloudflare Worker env.DB)
    */
-  public resetStore(): void {
-    this.processedOps.clear();
-    this.journal = [];
-    this.entityStore.clear();
+  public setDb(db: DrizzleD1Database<typeof d1Schema>): void {
+    this.db = db;
   }
 
   /**
-   * Memproses batch push dari client
+   * Mengambil instance D1 client aktif
+   */
+  public getDb(): DrizzleD1Database<typeof d1Schema> {
+    if (this.db) {
+      return this.db;
+    }
+    const globalClient = d1DbService.getClient();
+    if (globalClient) {
+      this.db = globalClient;
+      return this.db;
+    }
+    // Fallback in-memory D1 engine untuk test runner / local environment
+    if (!this.testEngine) {
+      this.testEngine = new InMemoryD1Database();
+    }
+    this.db = createTestD1Client();
+    return this.db;
+  }
+
+  /**
+   * Reset store (hanya digunakan untuk keperluan unit testing)
+   */
+  public async resetStore(): Promise<void> {
+    const db = this.getDb();
+    try {
+      await db.delete(processedOperations);
+      await db.delete(syncJournal);
+    } catch {
+      // Abaikan jika database baru belum memiliki baris
+    }
+    if (this.testEngine) {
+      this.testEngine.reset();
+    }
+  }
+
+  /**
+   * Memproses batch push dari client dengan persistensi D1
    */
   public async processPush(
     user: AuthSessionPayload,
@@ -106,6 +148,7 @@ export class SyncService {
     const serverTimestamp = new Date().toISOString();
     const acknowledgedOperationIds: string[] = [];
     let processedCount = 0;
+    const db = this.getDb();
 
     for (const item of items) {
       // 1. Validasi struktur wajib item
@@ -127,7 +170,6 @@ export class SyncService {
       }
 
       // 3. Validasi Hak Milik (Ownership Authorization)
-      // Jika payload memiliki farmerId eksplisit, pastikan sama dengan farmerId user
       if (item.payload && item.payload.farmerId && item.payload.farmerId !== userFarmerId) {
         throw {
           statusCode: 403,
@@ -136,19 +178,44 @@ export class SyncService {
         };
       }
 
-      // 4. Pemeriksaan Idempotency
-      if (this.processedOps.has(item.operationId)) {
-        // Operasi sudah pernah diproses sebelumnya -> acknowledge tanpa duplikasi
+      // 4. Perlindungan Mutlak ACTUAL_ACTION: Penghapusan dilarang keras
+      if (item.entityType === 'ACTUAL_ACTION' && item.action === 'DELETE') {
+        throw {
+          statusCode: 400,
+          code: 'ACTUAL_ACTION_PROTECTED',
+          message: 'Kedaulatan Petani: Catatan tindakan aktual mandiri petani dilindungi dan tidak boleh dihapus.',
+        };
+      }
+
+      // 5. Pemeriksaan Idempotency persisten di tabel processed_operations
+      const existingOp = await db
+        .select()
+        .from(processedOperations)
+        .where(eq(processedOperations.operationId, item.operationId))
+        .limit(1);
+
+      if (existingOp.length > 0) {
+        // Operasi sudah pernah diproses secara persisten -> acknowledge tanpa duplikasi mutasi
         acknowledgedOperationIds.push(item.operationId);
         continue;
       }
 
-      // 5. Conflict Resolution & Pemrosesan Mutasi
-      const storeKey = `${item.entityType}:${item.entityId}`;
-      const existingEntity = this.entityStore.get(storeKey);
+      // 6. Conflict Resolution (LWW) & Ownership verifikasi terhadap entitas sebelumnya di journal
+      const existingEntries = await db
+        .select()
+        .from(syncJournal)
+        .where(
+          and(
+            eq(syncJournal.entityType, item.entityType),
+            eq(syncJournal.entityId, item.entityId)
+          )
+        )
+        .orderBy(desc(syncJournal.serverTimestamp), desc(syncJournal.id))
+        .limit(1);
 
-      // Verifikasi hak milik atas entity yang sudah ada sebelumnya
-      if (existingEntity && existingEntity.farmerId !== userFarmerId) {
+      const latestEntry = existingEntries[0];
+
+      if (latestEntry && latestEntry.farmerId !== userFarmerId) {
         throw {
           statusCode: 403,
           code: 'UNAUTHORIZED_ENTITY_ACCESS',
@@ -156,58 +223,53 @@ export class SyncService {
         };
       }
 
-      // Aturan Khusus: ACTUAL_ACTION tidak boleh terhapus sembarangan
-      if (item.entityType === 'ACTUAL_ACTION' && item.action === 'DELETE' && existingEntity && !existingEntity.isDeleted) {
-        // Tindakan aktual historis petani dilindungi
-        console.warn(`[SyncService] Menolak penghapusan sembarangan atas actualAction ${item.entityId}`);
-      }
-
-      // Resolusi Konflik LWW untuk Update
       let shouldApply = true;
-      if (existingEntity && item.action === 'UPDATE') {
+      if (latestEntry && item.action === 'UPDATE') {
         const incomingUpdatedAt = item.payload?.updatedAt || item.createdAt || serverTimestamp;
-        if (existingEntity.updatedAt && new Date(existingEntity.updatedAt).getTime() > new Date(incomingUpdatedAt).getTime()) {
-          // Versi server lebih baru -> skip overwrite data server tapi tetap tandai operationId sebagai processed
+        const latestTime = new Date(latestEntry.serverTimestamp).getTime();
+        const incomingTime = new Date(incomingUpdatedAt).getTime();
+
+        if (!isNaN(latestTime) && !isNaN(incomingTime) && latestTime > incomingTime) {
+          // Versi di database lebih baru -> Last-Write-Wins mencegah overwrite data usang
           shouldApply = false;
         }
       }
 
+      // 7. Simpan mutasi ke sync_journal persisten
       if (shouldApply) {
         const isDelete = item.action === 'DELETE';
-        const mergedData = isDelete
-          ? {}
-          : { ...(existingEntity?.data || {}), ...(item.payload || {}) };
+        const journalId = `jn_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        const mergedPayload = isDelete ? {} : (item.payload || {});
 
-        this.entityStore.set(storeKey, {
+        await db.insert(syncJournal).values({
+          id: journalId,
           farmerId: userFarmerId,
-          updatedAt: item.payload?.updatedAt || serverTimestamp,
-          data: mergedData,
-          isDeleted: isDelete,
-        });
-
-        // 6. Catat ke Jurnal Sinkronisasi untuk disebarkan ke perangkat lain
-        const journalEntry: SyncJournalEntry = {
-          id: `jn-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-          farmerId: userFarmerId,
-          operationId: item.operationId,
           entityType: item.entityType,
           entityId: item.entityId,
           action: item.action,
-          payload: mergedData,
+          payload: mergedPayload,
           isTombstone: isDelete,
-          serverTimestamp,
-        };
+          serverTimestamp: serverTimestamp,
+        });
 
-        this.journal.push(journalEntry);
         processedCount++;
       }
 
-      // 7. Tandai operationId sebagai telah diproses secara permanen (Idempotent)
-      this.processedOps.set(item.operationId, {
-        userId: user.userId,
-        farmerId: userFarmerId,
-        processedAt: serverTimestamp,
-      });
+      // 8. Simpan operationId ke processed_operations secara persisten (Idempotency Lock)
+      try {
+        await db.insert(processedOperations).values({
+          operationId: item.operationId,
+          userId: user.userId,
+          farmerId: userFarmerId,
+          entityType: item.entityType,
+          entityId: item.entityId,
+          action: item.action,
+          processedAt: serverTimestamp,
+        });
+      } catch (insertErr: any) {
+        // Tangani race condition jika concurrent push sudah memasukkan operationId yang sama
+        console.warn(`[SyncService] Concurrent duplicate operationId detected for ${item.operationId}:`, insertErr?.message || insertErr);
+      }
 
       acknowledgedOperationIds.push(item.operationId);
     }
@@ -221,7 +283,7 @@ export class SyncService {
   }
 
   /**
-   * Memproses incremental pull untuk client
+   * Memproses incremental pull untuk client langsung dari tabel sync_journal D1
    */
   public async processPull(
     user: AuthSessionPayload,
@@ -234,40 +296,77 @@ export class SyncService {
   }> {
     const userFarmerId = user.farmerId || `farmer_${user.userId}`;
     const currentServerTimestamp = new Date().toISOString();
+    const db = this.getDb();
 
-    let sinceDateMs = 0;
+    let entries: any[] = [];
     if (since) {
-      const parsed = new Date(since).getTime();
-      if (!isNaN(parsed)) {
-        sinceDateMs = parsed;
-      }
+      entries = await db
+        .select()
+        .from(syncJournal)
+        .where(
+          and(
+            eq(syncJournal.farmerId, userFarmerId),
+            gt(syncJournal.serverTimestamp, since)
+          )
+        )
+        .orderBy(asc(syncJournal.serverTimestamp), asc(syncJournal.id));
+    } else {
+      entries = await db
+        .select()
+        .from(syncJournal)
+        .where(eq(syncJournal.farmerId, userFarmerId))
+        .orderBy(asc(syncJournal.serverTimestamp), asc(syncJournal.id));
     }
 
-    // Filter perubahan milik farmer yang terjadi setelah `since`
-    const relevantChanges = this.journal.filter((entry) => {
-      if (entry.farmerId !== userFarmerId) return false;
-      const entryTimeMs = new Date(entry.serverTimestamp).getTime();
-      return entryTimeMs > sinceDateMs;
+    const changes: SyncJournalEntry[] = entries.map((entry) => {
+      let parsedPayload: Record<string, any> = {};
+      if (typeof entry.payload === 'string') {
+        try {
+          parsedPayload = JSON.parse(entry.payload);
+        } catch {
+          parsedPayload = {};
+        }
+      } else if (entry.payload && typeof entry.payload === 'object') {
+        parsedPayload = entry.payload;
+      }
+
+      return {
+        id: entry.id,
+        farmerId: entry.farmerId,
+        operationId: '',
+        entityType: entry.entityType as SyncEntityType,
+        entityId: entry.entityId,
+        action: entry.action as SyncAction,
+        payload: parsedPayload,
+        isTombstone: Boolean(entry.isTombstone),
+        serverTimestamp: entry.serverTimestamp,
+      };
     });
 
     return {
       success: true,
-      changes: relevantChanges,
+      changes,
       serverTimestamp: currentServerTimestamp,
       hasMore: false,
     };
   }
 
   /**
-   * Mendapatkan status jurnal sinkronisasi (untuk keperluan inspeksi)
+   * Mendapatkan status statistik sinkronisasi langsung dari database
    */
-  public getStats(farmerId?: string) {
+  public async getStats(farmerId?: string): Promise<{
+    totalProcessedOps: number;
+    totalJournalEntries: number;
+  }> {
+    const db = this.getDb();
+    const ops = await db.select().from(processedOperations);
+    const journalEntries = farmerId
+      ? await db.select().from(syncJournal).where(eq(syncJournal.farmerId, farmerId))
+      : await db.select().from(syncJournal);
+
     return {
-      totalProcessedOps: this.processedOps.size,
-      totalJournalEntries: farmerId
-        ? this.journal.filter((j) => j.farmerId === farmerId).length
-        : this.journal.length,
-      activeEntitiesCount: this.entityStore.size,
+      totalProcessedOps: ops.length,
+      totalJournalEntries: journalEntries.length,
     };
   }
 }

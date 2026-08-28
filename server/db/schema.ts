@@ -288,3 +288,29 @@ export const adminAuditLogs = pgTable('admin_audit_logs', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// ==========================================
+// 5. TRANSACTIONAL REPLICATION OUTBOX
+// ==========================================
+
+export const replicationOutbox = pgTable('replication_outbox', {
+  id: text('id').primaryKey(),
+  operationId: text('operation_id').unique().notNull(),
+  entityType: text('entity_type').notNull(), // 'FARMER' | 'LAND' | 'CROP_SEASON' | 'ACTIVITY' | etc.
+  entityId: text('entity_id').notNull(),
+  farmerId: text('farmer_id').notNull(),
+  action: text('action').notNull(), // 'CREATE' | 'UPDATE' | 'DELETE'
+  payload: jsonb('payload').notNull(),
+  version: integer('version').default(1).notNull(),
+  status: text('status').default('PENDING').notNull(), // 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  retryCount: integer('retry_count').default(0).notNull(),
+  maxRetries: integer('max_retries').default(5).notNull(),
+  nextRetryAt: timestamp('next_retry_at', { withTimezone: true }),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
+  lockedBy: text('locked_by'),
+  lastError: text('last_error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+});
+
+

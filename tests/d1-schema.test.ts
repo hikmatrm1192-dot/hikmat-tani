@@ -60,10 +60,12 @@ export async function runD1SchemaTests(): Promise<{
     'adminUsers',
     'appConfigs',
     'adminAuditLogs',
+    'replicationOutbox',
   ];
 
-  // 1. Keberadaan seluruh 21 tabel di D1 Schema
-  await test('1. Seluruh 21 tabel D1 terdefinisi dalam schema Drizzle SQLite', () => {
+
+  // 1. Keberadaan seluruh 22 tabel di D1 Schema
+  await test('1. Seluruh 22 tabel D1 terdefinisi dalam schema Drizzle SQLite', () => {
     for (const table of expectedTables) {
       if (!(table in d1Schema)) {
         throw new Error(`Tabel D1 schema tidak ditemukan: ${table}`);
@@ -74,6 +76,7 @@ export async function runD1SchemaTests(): Promise<{
       }
     }
   });
+
 
   // 2. Paritas 1:1 antara tabel PostgreSQL dan tabel D1
   await test('2. Paritas 1:1 sempurna antara PostgreSQL schema dan D1 SQLite schema', () => {
@@ -124,9 +127,10 @@ export async function runD1SchemaTests(): Promise<{
     if (!status.engine.includes('Cloudflare D1') || !status.engine.includes('SQLite')) {
       throw new Error(`Nama engine D1 tidak valid: ${status.engine}`);
     }
-    if (status.tableCount !== 21) {
-      throw new Error(`Jumlah tabel D1 harus 21, didapat: ${status.tableCount}`);
+    if (status.tableCount !== 22) {
+      throw new Error(`Jumlah tabel D1 harus 22, didapat: ${status.tableCount}`);
     }
+
   });
 
   // 5. File migrasi D1 SQL (0000_init_d1.sql)

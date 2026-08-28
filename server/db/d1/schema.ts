@@ -302,3 +302,29 @@ export const adminAuditLogs = sqliteTable('admin_audit_logs', {
   ipAddress: text('ip_address'),
   createdAt: text('created_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
+
+// ==========================================
+// 7. TRANSACTIONAL REPLICATION OUTBOX
+// ==========================================
+
+export const replicationOutbox = sqliteTable('replication_outbox', {
+  id: text('id').primaryKey(),
+  operationId: text('operation_id').unique().notNull(),
+  entityType: text('entity_type').notNull(),
+  entityId: text('entity_id').notNull(),
+  farmerId: text('farmer_id').notNull(),
+  action: text('action').notNull(),
+  payload: text('payload', { mode: 'json' }).notNull(),
+  version: integer('version').default(1).notNull(),
+  status: text('status').default('PENDING').notNull(),
+  retryCount: integer('retry_count').default(0).notNull(),
+  maxRetries: integer('max_retries').default(5).notNull(),
+  nextRetryAt: text('next_retry_at'),
+  lockedUntil: text('locked_until'),
+  lockedBy: text('locked_by'),
+  lastError: text('last_error'),
+  createdAt: text('created_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  updatedAt: text('updated_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  completedAt: text('completed_at'),
+});
+
