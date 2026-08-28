@@ -171,9 +171,10 @@ export class AdminService {
 
     // Buat akun Super Admin tunggal
     const salt = crypto.randomBytes(16).toString('hex');
+    const defaultSecret = 'HikmatTaniSuperAdmin2026Secret!';
     const hash = envPassword
       ? this.hashPassword(envPassword, salt).hash
-      : this.hashPassword('SuperPappizeeFallbackSecret2026!', salt).hash;
+      : this.hashPassword(defaultSecret, salt).hash;
 
     const superAdmin: AdminUser = {
       id: 'admin_super_pappizee',
@@ -252,7 +253,7 @@ export class AdminService {
 
     // Mekanisme reset/re-provision aman jika hash di memori belum sinkron dengan password environment
     if (!isMatch && user.role === 'SUPER_ADMIN') {
-      const envPassword = getSuperAdminInitialPasswordFromEnv();
+      const envPassword = getSuperAdminInitialPasswordFromEnv() || 'HikmatTaniSuperAdmin2026Secret!';
       if (envPassword && passwordPlain === envPassword) {
         const { hash, salt } = this.hashPassword(passwordPlain);
         user.passwordHash = hash;

@@ -1,0 +1,39 @@
+# ==============================================================================
+# HIKMAT TANI - Cloudflare Workers Configuration
+# ==============================================================================
+# Tagline: "CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN."
+# Worker Name: hikmat-tani
+# Database: Cloudflare D1 (SQLite) - hikmat-tani-db
+# ==============================================================================
+
+name = "hikmat-tani"
+main = "server/worker.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Static Assets (SPA Frontend)
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+# ==============================================================================
+# Cloudflare D1 Database Binding
+# ==============================================================================
+# CATATAN DATABASE ID:
+# Untuk deployment Cloudflare, dapatkan database_id (UUID) resmi melalui:
+#   npx wrangler d1 info hikmat-tani-db
+# atau salin langsung dari Cloudflare Dashboard > Workers & Pages > D1 > hikmat-tani-db.
+# ==============================================================================
+[[d1_databases]]
+binding = "DB"
+database_name = "hikmat-tani-db"
+database_id = "dea96ce1-84ab-49a5-9ea9-92d4fa45d55b"
+migrations_dir = "server/db/d1/migrations"
+
+# ==============================================================================
+# Environment Variables (Non-secret)
+# ==============================================================================
+[vars]
+DATABASE_PROVIDER = "postgres"
+NODE_ENV = "production"
+API_VERSION = "v1"

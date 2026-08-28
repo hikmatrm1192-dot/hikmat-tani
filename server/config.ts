@@ -8,5 +8,6 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'hikmat-tani-local-secure-dev-secret-key-2026',
   corsOrigin: process.env.CORS_ORIGIN || '*',
   databaseUrl: process.env.DATABASE_URL || '',
+  databaseProvider: (process.env.DATABASE_PROVIDER as 'postgres' | 'd1') || 'postgres',
   apiVersion: 'v1',
 };
