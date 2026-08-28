@@ -242,35 +242,6 @@ export async function runAdminTests(): Promise<{
     }
   });
 
-    if (newManager.username !== 'manager_karawang') {
-      throw new Error('Gagal membuat akun manager baru');
-    }
-
-    // List Managers
-    const list = adminService.listManagers(superAdminSession);
-    const found = list.find((m) => m.username === 'manager_karawang');
-    if (!found) {
-      throw new Error('Manager yang baru dibuat tidak ditemukan dalam daftar.');
-    }
-
-    // Update Manager
-    const updated = adminService.updateManager(superAdminSession, newManager.id, {
-      fullName: 'Pengelola Senior Karawang',
-    });
-    if (updated.fullName !== 'Pengelola Senior Karawang') {
-      throw new Error('Gagal memperbarui profil manager');
-    }
-
-    // Delete Manager
-    const deleted = adminService.deleteManager(superAdminSession, newManager.id);
-    if (!deleted) throw new Error('Gagal menghapus akun manager');
-
-    const listAfter = adminService.listManagers(superAdminSession);
-    if (listAfter.some((m) => m.id === newManager.id)) {
-      throw new Error('Akun manager seharusnya sudah terhapus');
-    }
-  });
-
   // 5. Token tanpa role valid ditolak
   await test('5. Sesi/Token tanpa role valid ditolak dari area pengelola', () => {
     const invalidTokenSession = {
@@ -339,7 +310,10 @@ export async function runAdminTests(): Promise<{
 
   // 9. Perubahan konfigurasi tercatat dalam Audit Log
   await test('9. Perubahan konfigurasi dan aksi administratif tercatat di Audit Log', () => {
-    const superAdminLogin = adminService.authenticateAdmin('pappizee', 'HikmatTani2026!');
+    const superAdminLogin = adminService.authenticateAdmin('pappizee', currentSecret || 'HikmatTaniSuperAdmin2026Secret!');
+    if (!superAdminLogin.success || !superAdminLogin.token) {
+      throw new Error(`Login super admin gagal: ${superAdminLogin.error}`);
+    }
     const session = authService.verifyToken(superAdminLogin.token!)!;
 
     // Ubah status donasi

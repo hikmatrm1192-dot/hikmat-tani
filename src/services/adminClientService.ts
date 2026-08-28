@@ -21,6 +21,9 @@ export interface AdminAppConfig {
   appName: string;
   slogan: string;
   logoUrl: string;
+  logoPrimary: string;
+  logoHorizontal: string;
+  appIcon: string;
   description: string;
   contactPhone: string;
   contactEmail: string;

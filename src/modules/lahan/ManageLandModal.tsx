@@ -48,6 +48,20 @@ export function ManageLandModal({
   const [confirmDeleteText, setConfirmDeleteText] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
 
+  React.useEffect(() => {
+    if (land) {
+      setName(land.name || '');
+      setAreaHa(land.areaHa || 0.5);
+      setLandType(land.landType || 'LOWLAND_PADDY');
+      setWaterSource(land.waterSource || 'IRRIGATION_TECHNICAL');
+      setLocation(land.location || '');
+      setNotes(land.notes || '');
+      setConfirmDeleteText('');
+      setErrorMsg('');
+      setActiveTab('EDIT');
+    }
+  }, [land]);
+
   if (!isOpen || !land) return null;
 
   const isArchived = land.status === 'ARCHIVED';

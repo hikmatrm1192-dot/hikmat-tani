@@ -1,11 +1,16 @@
 /**
- * HIKMAT TANI - Brand Logo & Identity Component
+ * HIKMAT TANI - Brand Logo & Identity Component (Langkah 15 & 16)
  * 
- * Tagline Resmi: "CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN."
- * Aset Resmi:
- * - Logo Horizontal Lengkap: /logo-hikmat-tani-full.png
- * - Logo Emblem Utama: /logo-hikmat-tani-1024.png / /icon-192.png
+ * Mendukung konfigurasi identitas visual dinamis dari Portal Pengelola & offline cache:
+ * - Logo Utama (Emblem/Primary)
+ * - Logo Horizontal (Full)
+ * - Ikon Aplikasi (App Icon)
+ * - Nama Aplikasi Dinamis
+ * - Tagline Resmi Dinamis (Default: "CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.")
  */
+
+import React from 'react';
+import { useBrandConfig } from '../../services/publicConfigService.ts';
 
 interface BrandLogoProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
@@ -13,6 +18,9 @@ interface BrandLogoProps {
   className?: string;
   variant?: 'light' | 'dark' | 'full';
   useFullLogo?: boolean;
+  customLogoUrl?: string;
+  customAppName?: string;
+  customSlogan?: string;
 }
 
 export function BrandLogo({
@@ -21,7 +29,17 @@ export function BrandLogo({
   className = '',
   variant = 'dark',
   useFullLogo = false,
+  customLogoUrl,
+  customAppName,
+  customSlogan,
 }: BrandLogoProps) {
+  const brandConfig = useBrandConfig();
+
+  const appName = customAppName || brandConfig.appName || 'HIKMAT TANI';
+  const slogan = customSlogan || brandConfig.slogan || 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.';
+  const primaryLogo = customLogoUrl || brandConfig.logoPrimary || brandConfig.logoUrl || '/icon-512.png';
+  const horizontalLogo = brandConfig.logoHorizontal || '/logo-hikmat-tani-full.png';
+
   const iconSizes = {
     sm: 'w-7 h-7',
     md: 'w-9 h-9',
@@ -45,18 +63,18 @@ export function BrandLogo({
 
   const isLight = variant === 'light';
 
-  // Jika diminta logo horizontal lengkap dari aset resmi
+  // 1. Render Logo Horizontal Lengkap jika diminta
   if (useFullLogo) {
     return (
       <div className={`flex flex-col items-center justify-center ${className}`}>
         <img
-          src="/logo-hikmat-tani-full.png"
-          alt="HIKMAT TANI — CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN."
+          src={horizontalLogo}
+          alt={`${appName} — ${slogan}`}
           className={`${fullLogoHeights[size]} w-auto object-contain`}
           onError={(e) => {
             const target = e.target as HTMLImageElement;
-            if (!target.src.includes('/logo-hikmat-tani-1024.png')) {
-              target.src = '/logo-hikmat-tani-1024.png';
+            if (!target.src.includes('/logo-hikmat-tani-full.png') && !target.src.includes('/icon-512.png')) {
+              target.src = '/logo-hikmat-tani-full.png';
             }
           }}
         />
@@ -64,20 +82,25 @@ export function BrandLogo({
     );
   }
 
+  // Pisahkan kata pertama dan sisanya untuk styling aksen visual
+  const nameParts = appName.trim().split(/\s+/);
+  const firstWord = nameParts[0] || 'HIKMAT';
+  const restWords = nameParts.slice(1).join(' ') || (nameParts.length === 1 ? '' : 'TANI');
+
   return (
     <div className={`flex items-center gap-2.5 sm:gap-3 ${className}`}>
-      {/* Official HIKMAT TANI Emblem Icon */}
+      {/* Official Emblem / Icon */}
       <div
         className={`${iconSizes[size]} shrink-0 flex items-center justify-center rounded-xl overflow-hidden shadow-xs bg-emerald-950/20 border border-emerald-600/30 p-0.5`}
       >
         <img
-          src="/logo-hikmat-tani-1024.png"
-          alt="Logo Utama HIKMAT TANI"
+          src={primaryLogo}
+          alt={`Logo ${appName}`}
           className="w-full h-full object-contain"
           onError={(e) => {
             const target = e.target as HTMLImageElement;
-            if (!target.src.includes('/icon-192.png')) {
-              target.src = '/icon-192.png';
+            if (!target.src.includes('/icon-512.png') && !target.src.includes('/icon-192.png')) {
+              target.src = '/icon-512.png';
             }
           }}
         />
@@ -90,7 +113,12 @@ export function BrandLogo({
               isLight ? 'text-white' : 'text-emerald-950'
             }`}
           >
-            HIKMAT <span className="text-emerald-500 font-bold">TANI</span>
+            {firstWord}{' '}
+            {restWords && (
+              <span className={isLight ? 'text-emerald-300 font-bold' : 'text-emerald-600 font-bold'}>
+                {restWords}
+              </span>
+            )}
           </span>
         </div>
         {showSlogan && (
@@ -99,11 +127,12 @@ export function BrandLogo({
               isLight ? 'text-emerald-200/90' : 'text-slate-600'
             }`}
           >
-            CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.
+            {slogan}
           </span>
         )}
       </div>
     </div>
   );
 }
+
 

@@ -79,8 +79,44 @@ export function BerandaView({
   const [selectedRecommendation, setSelectedRecommendation] = useState<EvaluatedRecommendation | null>(null);
   const [farmerDecisions, setFarmerDecisions] = useState<FarmerDecision[]>([]);
 
+  // Tentukan Lahan Terpilih & Musim Tanam Aktif
+  const activeLand =
+    lands.find((l) => l.id === selectedLandId) ||
+    lands.find((l) => activeSeasons.some((s) => s.landId === l.id)) ||
+    lands[0] ||
+    null;
+
+  const activeSeason = activeLand
+    ? activeSeasons.find((s) => s.landId === activeLand.id && s.status === 'ACTIVE') || null
+    : null;
+
+  // Muat riwayat keputusan petani pada musim tanam aktif (selalu dipanggil secara konsisten di top level)
+  useEffect(() => {
+    let isMounted = true;
+    async function loadDecisions() {
+      if (activeSeason?.id) {
+        try {
+          const decs = await recommendationRepository.getDecisionsByCropSeason(activeSeason.id);
+          if (isMounted) {
+            setFarmerDecisions(decs);
+          }
+        } catch (err) {
+          console.error('Gagal memuat keputusan petani:', err);
+        }
+      } else {
+        if (isMounted) {
+          setFarmerDecisions([]);
+        }
+      }
+    }
+    loadDecisions();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeSeason?.id, allActivities]);
+
   // 1. Empty State Utama: Belum ada lahan terdaftar sama sekali
-  if (lands.length === 0) {
+  if (lands.length === 0 || !activeLand) {
     return (
       <div className="space-y-6">
         <div className="text-center sm:text-left">
@@ -104,33 +140,6 @@ export function BerandaView({
       </div>
     );
   }
-
-  // 2. Tentukan Lahan Terpilih & Musim Tanam Aktif
-  const activeLand =
-    lands.find((l) => l.id === selectedLandId) ||
-    lands.find((l) => activeSeasons.some((s) => s.landId === l.id)) ||
-    lands[0];
-
-  const activeSeason = activeLand
-    ? activeSeasons.find((s) => s.landId === activeLand.id && s.status === 'ACTIVE') || null
-    : null;
-
-  // Muat riwayat keputusan petani pada musim tanam aktif
-  useEffect(() => {
-    async function loadDecisions() {
-      if (activeSeason?.id) {
-        try {
-          const decs = await recommendationRepository.getDecisionsByCropSeason(activeSeason.id);
-          setFarmerDecisions(decs);
-        } catch (err) {
-          console.error('Gagal memuat keputusan petani:', err);
-        }
-      } else {
-        setFarmerDecisions([]);
-      }
-    }
-    loadDecisions();
-  }, [activeSeason?.id, allActivities]);
 
   // Temukan umur varietas dari master knowledge data
   const matchedVariety = varieties.find(

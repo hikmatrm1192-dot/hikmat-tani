@@ -15,6 +15,7 @@ import {
   BookOpen,
   Building,
   Check,
+  CheckCircle,
   CheckCircle2,
   Clock,
   CreditCard,
@@ -22,7 +23,9 @@ import {
   Edit2,
   Eye,
   EyeOff,
+  FileImage,
   History,
+  Image as ImageIcon,
   Info,
   KeyRound,
   Lock,
@@ -33,6 +36,7 @@ import {
   Plus,
   QrCode,
   RefreshCw,
+  RotateCcw,
   Save,
   Server,
   Settings,
@@ -50,6 +54,11 @@ import {
   X,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal.tsx';
+import { BrandLogo } from '../../components/common/BrandLogo.tsx';
+import {
+  publicConfigService,
+  DEFAULT_OFFICIAL_CONFIG,
+} from '../../services/publicConfigService.ts';
 import {
   adminClientService,
   AdminProfile,
@@ -91,6 +100,12 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
   const [appName, setAppName] = useState<string>('HIKMAT TANI');
   const [slogan, setSlogan] = useState<string>('CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.');
   const [description, setDescription] = useState<string>('');
+  const [logoPrimary, setLogoPrimary] = useState<string>('/icon-512.png');
+  const [logoHorizontal, setLogoHorizontal] = useState<string>('/logo-hikmat-tani-full.png');
+  const [appIcon, setAppIcon] = useState<string>('/icon-192.png');
+  const [brandUploadError, setBrandUploadError] = useState<string | null>(null);
+  const [brandSuccessMsg, setBrandSuccessMsg] = useState<string | null>(null);
+
   const [supportTitle, setSupportTitle] = useState<string>('Dukung HIKMAT TANI');
   const [supportDescription, setSupportDescription] = useState<string>('Inisiatif Mandiri Teknologi Pertanian Padi Nusantara');
   const [donationActive, setDonationActive] = useState<boolean>(true);
@@ -155,6 +170,10 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
         setAppName(res.data.appName || 'HIKMAT TANI');
         setSlogan(res.data.slogan || 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.');
         setDescription(res.data.description || '');
+        setLogoPrimary(res.data.logoPrimary || res.data.logoUrl || '/icon-512.png');
+        setLogoHorizontal(res.data.logoHorizontal || '/logo-hikmat-tani-full.png');
+        setAppIcon(res.data.appIcon || '/icon-192.png');
+
         setSupportTitle(res.data.supportTitle || 'Dukung HIKMAT TANI');
         setSupportDescription(res.data.supportDescription || 'Inisiatif Mandiri Teknologi Pertanian Padi Nusantara');
         setDonationActive(res.data.donationActive);
@@ -232,6 +251,129 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
     setActiveTab('identitas');
   };
 
+  // Handler: Upload Berkas Logo (Validasi format PNG, JPG/JPEG, WebP & ukuran maks 3MB)
+  const handleLogoUpload = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: 'primary' | 'horizontal' | 'appIcon'
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setBrandUploadError(null);
+    setBrandSuccessMsg(null);
+
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!validTypes.includes(file.type.toLowerCase()) && !file.name.match(/\.(png|jpe?g|webp)$/i)) {
+      setBrandUploadError('Format tidak valid. Hanya mendukung berkas PNG, JPG/JPEG, dan WebP.');
+      e.target.value = '';
+      return;
+    }
+
+    const maxSize = 3 * 1024 * 1024; // 3 MB
+    if (file.size > maxSize) {
+      setBrandUploadError(`Ukuran file (${(file.size / (1024 * 1024)).toFixed(1)} MB) terlalu besar. Maksimal 3.0 MB.`);
+      e.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      if (type === 'primary') {
+        setLogoPrimary(base64);
+        setBrandSuccessMsg('Logo Utama berhasil diunggah dan siap disimpan.');
+      } else if (type === 'horizontal') {
+        setLogoHorizontal(base64);
+        setBrandSuccessMsg('Logo Horizontal berhasil diunggah dan siap disimpan.');
+      } else if (type === 'appIcon') {
+        setAppIcon(base64);
+        setBrandSuccessMsg('Ikon Aplikasi berhasil diunggah dan siap disimpan.');
+      }
+      setTimeout(() => setBrandSuccessMsg(null), 4000);
+    };
+    reader.onerror = () => {
+      setBrandUploadError('Gagal membaca berkas gambar. Silakan coba lagi.');
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  // Handler: Kembalikan Logo Tertentu ke Default
+  const handleResetSingleLogo = (type: 'primary' | 'horizontal' | 'appIcon') => {
+    if (type === 'primary') {
+      setLogoPrimary('/icon-512.png');
+      setBrandSuccessMsg('Logo Utama dikembalikan ke default resmi.');
+    } else if (type === 'horizontal') {
+      setLogoHorizontal('/logo-hikmat-tani-full.png');
+      setBrandSuccessMsg('Logo Horizontal dikembalikan ke default resmi.');
+    } else if (type === 'appIcon') {
+      setAppIcon('/icon-192.png');
+      setBrandSuccessMsg('Ikon Aplikasi dikembalikan ke default resmi.');
+    }
+    setTimeout(() => setBrandSuccessMsg(null), 3000);
+  };
+
+  // Handler: Kembalikan Seluruh Identitas ke Setelan Default Resmi
+  const handleResetIdentityToDefault = async () => {
+    if (!window.confirm('Kembalikan seluruh identitas visual, logo, nama, dan tagline ke setelan default resmi HIKMAT TANI?')) {
+      return;
+    }
+
+    const defaultAppName = DEFAULT_OFFICIAL_CONFIG.appName;
+    const defaultSlogan = DEFAULT_OFFICIAL_CONFIG.slogan;
+    const defaultDescription = DEFAULT_OFFICIAL_CONFIG.description;
+    const defaultPrimary = DEFAULT_OFFICIAL_CONFIG.logoPrimary;
+    const defaultHorizontal = DEFAULT_OFFICIAL_CONFIG.logoHorizontal;
+    const defaultAppIcon = DEFAULT_OFFICIAL_CONFIG.appIcon;
+
+    setAppName(defaultAppName);
+    setSlogan(defaultSlogan);
+    setDescription(defaultDescription);
+    setLogoPrimary(defaultPrimary);
+    setLogoHorizontal(defaultHorizontal);
+    setAppIcon(defaultAppIcon);
+
+    setIsSavingConfig(true);
+    setBrandUploadError(null);
+    setBrandSuccessMsg(null);
+
+    try {
+      const payload: Partial<AdminAppConfig> = {
+        appName: defaultAppName,
+        slogan: defaultSlogan,
+        description: defaultDescription,
+        logoPrimary: defaultPrimary,
+        logoHorizontal: defaultHorizontal,
+        appIcon: defaultAppIcon,
+        logoUrl: defaultPrimary,
+      };
+
+      const res = await adminClientService.updateConfig(payload);
+      if (res.success && res.data) {
+        setConfig(res.data);
+        publicConfigService.updateLocalConfig({
+          appName: defaultAppName,
+          slogan: defaultSlogan,
+          description: defaultDescription,
+          logoPrimary: defaultPrimary,
+          logoHorizontal: defaultHorizontal,
+          appIcon: defaultAppIcon,
+          logoUrl: defaultPrimary,
+        });
+        setBrandSuccessMsg('Identitas aplikasi berhasil dikembalikan ke setelan resmi.');
+        onConfigUpdated?.();
+        loadAuditLogs();
+        setTimeout(() => setBrandSuccessMsg(null), 5000);
+      } else {
+        setBrandUploadError(res.error || 'Gagal menyimpan pemulihan identitas default.');
+      }
+    } catch (err: any) {
+      setBrandUploadError(err?.message || 'Terjadi kesalahan sistem.');
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
+
   // Handler: Upload QRIS Image (File reader to Base64)
   const handleQrisFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -256,18 +398,24 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
     e.target.value = '';
   };
 
-  // Handler: Simpan Konfigurasi
-  const handleSaveConfig = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Handler: Simpan Konfigurasi Lengkap / Identitas
+  const handleSaveConfig = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setIsSavingConfig(true);
     setConfigSuccessMsg(null);
     setConfigErrorMsg(null);
+    setBrandUploadError(null);
+    setBrandSuccessMsg(null);
 
     try {
       const payload: Partial<AdminAppConfig> = {
         appName,
         slogan,
         description,
+        logoPrimary,
+        logoHorizontal,
+        appIcon,
+        logoUrl: logoPrimary,
         supportTitle,
         supportDescription,
         donationActive,
@@ -284,15 +432,30 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
       const res = await adminClientService.updateConfig(payload);
       if (res.success && res.data) {
         setConfig(res.data);
-        setConfigSuccessMsg('Konfigurasi berhasil disimpan dan diperbarui.');
+        publicConfigService.updateLocalConfig({
+          appName,
+          slogan,
+          description,
+          logoPrimary,
+          logoHorizontal,
+          appIcon,
+          logoUrl: logoPrimary,
+        });
+        setConfigSuccessMsg('Identitas & Konfigurasi HIKMAT TANI berhasil disimpan.');
+        setBrandSuccessMsg('Identitas visual aplikasi berhasil diperbarui secara menyeluruh.');
         onConfigUpdated?.();
         loadAuditLogs();
-        setTimeout(() => setConfigSuccessMsg(null), 5000);
+        setTimeout(() => {
+          setConfigSuccessMsg(null);
+          setBrandSuccessMsg(null);
+        }, 5000);
       } else {
         setConfigErrorMsg(res.error || 'Gagal menyimpan konfigurasi.');
+        setBrandUploadError(res.error || 'Gagal menyimpan konfigurasi.');
       }
     } catch (err: any) {
       setConfigErrorMsg(err?.message || 'Terjadi kesalahan sistem.');
+      setBrandUploadError(err?.message || 'Terjadi kesalahan sistem.');
     } finally {
       setIsSavingConfig(false);
     }
@@ -431,29 +594,7 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
           <form onSubmit={handleLogin} className="space-y-4">
             {/* Official Logo Banner */}
             <div className="bg-gradient-to-br from-emerald-900 via-emerald-950 to-slate-950 text-white rounded-2xl p-5 border border-emerald-800/80 flex items-center justify-between shadow-xs">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-emerald-950/60 border border-emerald-500/40 p-1 flex items-center justify-center overflow-hidden shrink-0">
-                  <img
-                    src="/logo-hikmat-tani-1024.png"
-                    alt="Logo HIKMAT TANI"
-                    className="w-full h-full object-contain"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      if (!target.src.includes('/icon-192.png')) {
-                        target.src = '/icon-192.png';
-                      }
-                    }}
-                  />
-                </div>
-                <div>
-                  <h3 className="text-base font-black tracking-tight text-white">
-                    HIKMAT <span className="text-emerald-400">TANI</span>
-                  </h3>
-                  <p className="text-xs text-emerald-200/90 font-medium">
-                    CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.
-                  </p>
-                </div>
-              </div>
+              <BrandLogo variant="light" size="md" showSlogan />
               <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-800/80 text-emerald-200 rounded-full border border-emerald-600/50">
                 Portal Resmi
               </span>
@@ -662,100 +803,351 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
             {/* MENU 1: IDENTITAS & BRANDING */}
             {/* ========================================================================= */}
             {activeTab === 'identitas' && (
-              <form onSubmit={handleSaveConfig} className="space-y-4">
-                {/* Visual Identity Showcase */}
-                <div className="p-5 bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-900 text-white rounded-2xl border border-emerald-800/80 shadow-xs space-y-4">
+              <div className="space-y-6">
+                {/* Status Notifikasi Khusus Branding */}
+                {brandSuccessMsg && (
+                  <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-300 flex items-center gap-2.5 text-xs font-bold text-emerald-950 shadow-xs">
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{brandSuccessMsg}</span>
+                  </div>
+                )}
+
+                {brandUploadError && (
+                  <div className="p-3.5 bg-rose-50 rounded-2xl border border-rose-200 flex items-center gap-2.5 text-xs font-bold text-rose-900 shadow-xs">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>{brandUploadError}</span>
+                  </div>
+                )}
+
+                {/* 1. Live Interactive Identity Showcase */}
+                <div className="p-5 bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-900 text-white rounded-3xl border border-emerald-800/80 shadow-md space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
                       <Sparkles className="w-4 h-4 text-amber-300" />
-                      Identitas Visual Resmi
+                      Pratinjau Langsung Identitas Aplikasi
                     </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-800/80 text-emerald-200 rounded-full border border-emerald-600/50">
-                      Terverifikasi
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 bg-emerald-800/80 text-emerald-200 rounded-full border border-emerald-600/50">
+                      Aktif & Reaktif
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap bg-emerald-950/60 p-4 rounded-xl border border-emerald-700/40">
-                    <div className="w-16 h-16 rounded-xl bg-emerald-950 border border-emerald-400/40 p-1 flex items-center justify-center shrink-0">
+                  {/* Desktop / Full Header Live Preview */}
+                  <div className="bg-emerald-950/80 p-4 sm:p-5 rounded-2xl border border-emerald-700/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5 min-w-0 w-full sm:w-auto">
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-emerald-950 border-2 border-emerald-500/40 p-1 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
+                        <img
+                          src={logoPrimary || '/icon-512.png'}
+                          alt="Logo Utama"
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            if (!target.src.includes('/icon-512.png')) {
+                              target.src = '/icon-512.png';
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-lg sm:text-xl font-black tracking-tight text-white truncate">
+                          {appName || 'HIKMAT TANI'}
+                        </h4>
+                        <p className="text-xs text-emerald-300 font-bold tracking-wide mt-0.5 truncate">
+                          {slogan || 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.'}
+                        </p>
+                        <p className="text-[11px] text-slate-300 mt-1 line-clamp-2 leading-relaxed">
+                          {description || 'Sistem Rekomendasi Budidaya Padi & Catatan Lapang Mandiri 100% Offline.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 flex items-center gap-2 bg-emerald-900/60 px-3 py-1.5 rounded-xl border border-emerald-700/50 text-[11px] text-emerald-200">
+                      <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>Mode Offline Siap</span>
+                    </div>
+                  </div>
+
+                  {/* Horizontal Logo Live Preview */}
+                  <div className="bg-slate-900/80 p-3.5 rounded-2xl border border-slate-800 flex flex-col items-center justify-center space-y-1.5">
+                    <span className="text-[10px] font-semibold uppercase text-slate-400 tracking-wider">
+                      Pratinjau Logo Horizontal (Header & Banner)
+                    </span>
+                    <div className="h-12 max-w-full flex items-center justify-center p-1">
                       <img
-                        src="/logo-hikmat-tani-1024.png"
-                        alt="Emblem Resmi HIKMAT TANI"
-                        className="w-full h-full object-contain"
+                        src={logoHorizontal || '/logo-hikmat-tani-full.png'}
+                        alt="Logo Horizontal"
+                        className="max-h-10 w-auto object-contain"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          if (!target.src.includes('/logo-hikmat-tani-full.png')) {
+                            target.src = '/logo-hikmat-tani-full.png';
+                          }
+                        }}
                       />
                     </div>
+                  </div>
+                </div>
+
+                {/* 2. PANEL: ATUR IDENTITAS APLIKASI */}
+                <form onSubmit={handleSaveConfig} className="p-5 bg-white rounded-3xl border border-slate-200 shadow-xs space-y-6">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div>
-                      <h4 className="text-base font-black tracking-tight text-white">
-                        HIKMAT <span className="text-emerald-400">TANI</span>
-                      </h4>
-                      <p className="text-xs text-emerald-200 font-bold mt-0.5">
-                        CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.
-                      </p>
-                      <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
-                        Sistem Rekomendasi Budidaya Padi & Catatan Lapang Mandiri 100% Offline Petani Indonesia.
+                      <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                        <Palette className="w-4 h-4 text-emerald-700" />
+                        Atur Identitas Aplikasi
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Kelola aset logo, ikon, nama, tagline resmi, dan deskripsi aplikasi untuk seluruh tampilan sistem.
                       </p>
                     </div>
                   </div>
-                </div>
 
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                    Pengaturan Nama & Tagline Aplikasi
-                  </h4>
+                  {/* Upload Section: 3 Aset Logo Utama, Horizontal, dan Ikon */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* A. Logo Utama */}
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col justify-between space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
+                            Logo Utama
+                          </label>
+                          <span className="text-[10px] font-mono text-slate-500">Square / 1:1</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                          Digunakan pada splash screen, kartu brand, dan logo display.
+                        </p>
+                      </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Nama Aplikasi
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={appName}
-                      onChange={(e) => setAppName(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
-                    />
+                      {/* Thumbnail Preview */}
+                      <div className="w-full h-28 bg-emerald-950/20 rounded-xl border border-emerald-200 flex items-center justify-center p-2 overflow-hidden">
+                        <img
+                          src={logoPrimary || '/icon-512.png'}
+                          alt="Logo Utama"
+                          className="max-h-full max-w-full object-contain"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            if (!target.src.includes('/icon-512.png')) {
+                              target.src = '/icon-512.png';
+                            }
+                          }}
+                        />
+                      </div>
+
+                      {/* Upload Controls */}
+                      <div className="space-y-2 pt-1">
+                        <label className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-800 hover:bg-emerald-700 active:bg-emerald-900 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs min-h-[38px]">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Upload Logo Utama</span>
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg,image/webp"
+                            className="hidden"
+                            onChange={(e) => handleLogoUpload(e, 'primary')}
+                          />
+                        </label>
+                        {logoPrimary !== '/icon-512.png' && (
+                          <button
+                            type="button"
+                            onClick={() => handleResetSingleLogo('primary')}
+                            className="w-full flex items-center justify-center gap-1 py-1.5 text-[11px] font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Reset Logo Utama</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* B. Logo Horizontal */}
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col justify-between space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <FileImage className="w-3.5 h-3.5 text-emerald-600" />
+                            Logo Horizontal
+                          </label>
+                          <span className="text-[10px] font-mono text-slate-500">Wide / Banner</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                          Digunakan pada kop laporan, banner resmi, dan desktop header.
+                        </p>
+                      </div>
+
+                      {/* Thumbnail Preview */}
+                      <div className="w-full h-28 bg-emerald-950/20 rounded-xl border border-emerald-200 flex items-center justify-center p-2 overflow-hidden">
+                        <img
+                          src={logoHorizontal || '/logo-hikmat-tani-full.png'}
+                          alt="Logo Horizontal"
+                          className="max-h-full max-w-full object-contain"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            if (!target.src.includes('/logo-hikmat-tani-full.png')) {
+                              target.src = '/logo-hikmat-tani-full.png';
+                            }
+                          }}
+                        />
+                      </div>
+
+                      {/* Upload Controls */}
+                      <div className="space-y-2 pt-1">
+                        <label className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-800 hover:bg-emerald-700 active:bg-emerald-900 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs min-h-[38px]">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Upload Logo Horizontal</span>
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg,image/webp"
+                            className="hidden"
+                            onChange={(e) => handleLogoUpload(e, 'horizontal')}
+                          />
+                        </label>
+                        {logoHorizontal !== '/logo-hikmat-tani-full.png' && (
+                          <button
+                            type="button"
+                            onClick={() => handleResetSingleLogo('horizontal')}
+                            className="w-full flex items-center justify-center gap-1 py-1.5 text-[11px] font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Reset Logo Horizontal</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* C. Ikon Aplikasi */}
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col justify-between space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                            Ikon Aplikasi
+                          </label>
+                          <span className="text-[10px] font-mono text-slate-500">192x192 / PWA</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                          Ikon favicon browser, shortcut home screen petani, & PWA.
+                        </p>
+                      </div>
+
+                      {/* Thumbnail Preview */}
+                      <div className="w-full h-28 bg-emerald-950/20 rounded-xl border border-emerald-200 flex items-center justify-center p-2 overflow-hidden">
+                        <img
+                          src={appIcon || '/icon-192.png'}
+                          alt="Ikon Aplikasi"
+                          className="w-14 h-14 object-contain rounded-xl shadow-xs"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            if (!target.src.includes('/icon-192.png')) {
+                              target.src = '/icon-192.png';
+                            }
+                          }}
+                        />
+                      </div>
+
+                      {/* Upload Controls */}
+                      <div className="space-y-2 pt-1">
+                        <label className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-800 hover:bg-emerald-700 active:bg-emerald-900 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs min-h-[38px]">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Upload Ikon Aplikasi</span>
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg,image/webp"
+                            className="hidden"
+                            onChange={(e) => handleLogoUpload(e, 'appIcon')}
+                          />
+                        </label>
+                        {appIcon !== '/icon-192.png' && (
+                          <button
+                            type="button"
+                            onClick={() => handleResetSingleLogo('appIcon')}
+                            className="w-full flex items-center justify-center gap-1 py-1.5 text-[11px] font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Reset Ikon Aplikasi</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Slogan / Tagline Resmi
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={slogan}
-                      onChange={(e) => setSlogan(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
-                    />
+                  {/* Format & Size validation note */}
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600 flex items-center gap-2">
+                    <Info className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span>Format gambar yang didukung: <strong>PNG</strong>, <strong>JPG/JPEG</strong>, dan <strong>WebP</strong> (Maksimal ukuran 3.0 MB per berkas). Rasio aspek dipertahankan otomatis.</span>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Deskripsi Aplikasi Resmi
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-700 outline-hidden"
-                    />
-                  </div>
-                </div>
+                  {/* Textual Identity Fields */}
+                  <div className="space-y-4 pt-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-800 mb-1">
+                          Nama Aplikasi <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={appName}
+                          onChange={(e) => setAppName(e.target.value)}
+                          placeholder="HIKMAT TANI"
+                          className="w-full px-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-300 text-slate-900 text-sm font-semibold focus:ring-2 focus:ring-emerald-700 focus:bg-white outline-hidden transition-all"
+                        />
+                      </div>
 
-                <div className="flex justify-end pt-2">
-                  <button
-                    type="submit"
-                    disabled={isSavingConfig}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 min-h-[44px] bg-emerald-800 hover:bg-emerald-700 active:bg-emerald-900 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer disabled:opacity-50"
-                  >
-                    {isSavingConfig ? (
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Save className="w-4 h-4" />
-                    )}
-                    <span>Simpan Identitas & Branding</span>
-                  </button>
-                </div>
-              </form>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-800 mb-1">
+                          Tagline / Slogan Resmi <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={slogan}
+                          onChange={(e) => setSlogan(e.target.value)}
+                          placeholder="CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN."
+                          className="w-full px-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-300 text-slate-900 text-sm font-semibold focus:ring-2 focus:ring-emerald-700 focus:bg-white outline-hidden transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        Deskripsi Singkat Aplikasi
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="Sistem Rekomendasi Budidaya Padi & Catatan Lapang Mandiri 100% Offline untuk Petani Nusantara."
+                        className="w-full px-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-300 text-slate-900 text-xs leading-relaxed focus:ring-2 focus:ring-emerald-700 focus:bg-white outline-hidden transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Actions Bar */}
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-100 flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={handleResetIdentityToDefault}
+                      disabled={isSavingConfig}
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer border border-slate-300 disabled:opacity-50"
+                    >
+                      <RotateCcw className="w-4 h-4 text-slate-600" />
+                      <span>Kembalikan ke Default</span>
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={isSavingConfig}
+                      className="inline-flex items-center gap-2 px-6 py-2.5 min-h-[44px] bg-emerald-800 hover:bg-emerald-700 active:bg-emerald-900 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                    >
+                      {isSavingConfig ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      <span>Simpan Identitas</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
             )}
 
             {/* ========================================================================= */}

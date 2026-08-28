@@ -13,6 +13,7 @@ import {
   BookOpen,
   Calculator,
   CheckCircle2,
+  Coins,
   Droplets,
   FlaskConical,
   Info,
@@ -24,6 +25,7 @@ import {
 import { Modal } from '../../components/common/Modal.tsx';
 import { Fertilizer, Reference } from '../../types/index.ts';
 import { ReferenceBadge } from './ReferenceBadge.tsx';
+import { DEFAULT_COST_BENCHMARKS } from '../../engine/costCalculator.ts';
 
 interface FertilizerDetailModalProps {
   isOpen: boolean;
@@ -39,6 +41,15 @@ export function FertilizerDetailModal({
   allReferences = [],
 }: FertilizerDetailModalProps) {
   const [simulatedKg, setSimulatedKg] = useState<number>(50);
+
+  // Ambil benchmark default yang cocok dengan nama pupuk (misal Urea, NPK, SP36, KCl, dll)
+  const matchedBenchmark = DEFAULT_COST_BENCHMARKS.find((b) =>
+    fertilizer ? fertilizer.name.toLowerCase().includes(b.itemLabel.toLowerCase().split(' ')[1] || 'xxx') ||
+    b.itemLabel.toLowerCase().includes(fertilizer.name.toLowerCase()) : false
+  );
+
+  const initialPrice = matchedBenchmark ? matchedBenchmark.recommendedUnitPriceRp : 2500;
+  const [simulatedPricePerKg, setSimulatedPricePerKg] = useState<string>(String(initialPrice));
 
   if (!isOpen || !fertilizer) return null;
 
@@ -233,6 +244,44 @@ export function FertilizerDetailModal({
                 {calculatedS.toFixed(1)} kg
               </span>
             </div>
+          </div>
+
+          {/* Simulasi Biaya Pembelian Pupuk */}
+          <div className="pt-2 border-t border-slate-800 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-bold text-emerald-300 flex items-center gap-1">
+                <Coins className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Simulasi Biaya Pembelian:</span>
+              </span>
+              <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                Rekomendasi (Dapat Diubah)
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 bg-slate-800/90 p-2.5 rounded-xl border border-slate-700">
+              <div className="flex items-center gap-1.5 text-xs text-slate-300">
+                <span>Harga / kg:</span>
+                <span className="text-slate-400 font-bold">Rp</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={simulatedPricePerKg}
+                  onChange={(e) => setSimulatedPricePerKg(e.target.value)}
+                  className="w-24 px-2 py-1 bg-slate-900 border border-slate-600 rounded-lg text-xs font-bold text-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                />
+              </div>
+
+              <div className="text-right">
+                <span className="text-[10px] text-slate-400 block">Perkiraan Biaya Total:</span>
+                <span className="text-xs sm:text-sm font-mono font-black text-emerald-300">
+                  Rp {(simulatedKg * (parseFloat(simulatedPricePerKg) || 0)).toLocaleString('id-ID')}
+                </span>
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-400">
+              Keterangan: Nilai rekomendasi acuan. Anda bebas menentukan harga lebih rendah, lebih tinggi, atau Rp 0 saat mencatat transaksi riil.
+            </p>
           </div>
         </div>
 

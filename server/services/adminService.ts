@@ -35,6 +35,9 @@ export interface OfficialAppConfig {
   appName: string;
   slogan: string;
   logoUrl: string;
+  logoPrimary: string;
+  logoHorizontal: string;
+  appIcon: string;
   description: string;
   contactPhone: string;
   contactEmail: string;
@@ -87,7 +90,10 @@ export class AdminService {
     this.officialConfig = {
       appName: 'HIKMAT TANI',
       slogan: 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.',
-      logoUrl: '/logo-hikmat-tani-1024.png',
+      logoUrl: '/icon-512.png',
+      logoPrimary: '/icon-512.png',
+      logoHorizontal: '/logo-hikmat-tani-full.png',
+      appIcon: '/icon-192.png',
       description: 'Sistem Rekomendasi Budidaya Padi & Catatan Lapang Mandiri 100% Offline untuk Petani Nusantara.',
       contactPhone: '+62 812-3456-7890',
       contactEmail: 'kontak@hikmattani.id',
@@ -374,6 +380,9 @@ export class AdminService {
     appName: string;
     slogan: string;
     logoUrl: string;
+    logoPrimary: string;
+    logoHorizontal: string;
+    appIcon: string;
     description: string;
     supportTitle: string;
     supportDescription: string;
@@ -392,6 +401,9 @@ export class AdminService {
       appName: this.officialConfig.appName,
       slogan: this.officialConfig.slogan,
       logoUrl: this.officialConfig.logoUrl,
+      logoPrimary: this.officialConfig.logoPrimary || this.officialConfig.logoUrl,
+      logoHorizontal: this.officialConfig.logoHorizontal || '/logo-hikmat-tani-full.png',
+      appIcon: this.officialConfig.appIcon || '/icon-192.png',
       description: this.officialConfig.description,
       supportTitle: this.officialConfig.supportTitle,
       supportDescription: this.officialConfig.supportDescription,
@@ -432,6 +444,20 @@ export class AdminService {
     if (payload.appName) this.officialConfig.appName = payload.appName.trim();
     if (payload.slogan) this.officialConfig.slogan = payload.slogan.trim();
     if (payload.description) this.officialConfig.description = payload.description.trim();
+    if (payload.logoPrimary !== undefined) {
+      this.officialConfig.logoPrimary = payload.logoPrimary;
+      this.officialConfig.logoUrl = payload.logoPrimary;
+    }
+    if (payload.logoHorizontal !== undefined) {
+      this.officialConfig.logoHorizontal = payload.logoHorizontal;
+    }
+    if (payload.appIcon !== undefined) {
+      this.officialConfig.appIcon = payload.appIcon;
+    }
+    if (payload.logoUrl !== undefined && payload.logoPrimary === undefined) {
+      this.officialConfig.logoUrl = payload.logoUrl;
+      this.officialConfig.logoPrimary = payload.logoUrl;
+    }
     if (payload.supportTitle) this.officialConfig.supportTitle = payload.supportTitle.trim();
     if (payload.supportDescription) this.officialConfig.supportDescription = payload.supportDescription.trim();
     if (payload.contactPhone !== undefined) this.officialConfig.contactPhone = payload.contactPhone.trim();

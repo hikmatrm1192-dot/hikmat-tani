@@ -49,11 +49,15 @@ import {
   Reference,
   RiceVariety,
 } from './types/index.ts';
+import { useBrandConfig } from './services/publicConfigService.ts';
 import { runDatabaseTests } from '../tests/index.test.ts';
 import { runEngineTests } from '../tests/engine.test.ts';
 import { runBackupTests } from '../tests/backup.test.ts';
 
 export default function App() {
+  // Brand configuration
+  const brandConfig = useBrandConfig();
+
   // Navigation tab state
   const [activeTab, setActiveTab] = useState<MainNavTab>('beranda');
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
@@ -146,15 +150,18 @@ export default function App() {
       setArticles(arts);
       setReferences(refs);
 
-      if (allLands.length > 0 && !selectedLandId) {
-        setSelectedLandId(allLands[0].id);
-      }
+      setSelectedLandId((prev) => {
+        if (prev && allLands.some((l) => l.id === prev)) {
+          return prev;
+        }
+        return allLands.length > 0 ? allLands[0].id : null;
+      });
     } catch (err) {
       console.error('[HIKMAT TANI] Error loading data from Dexie:', err);
     } finally {
       setIsLoading(false);
     }
-  }, [selectedLandId]);
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -176,10 +183,17 @@ export default function App() {
     landData: Omit<Land, 'id' | 'farmerId' | 'createdAt' | 'updatedAt'>
   ) => {
     const now = new Date().toISOString();
+    let currentFarmerId = farmer?.id;
+    if (!currentFarmerId) {
+      const activeFarmer = await farmerRepository.getFirstActive();
+      currentFarmerId = activeFarmer?.id || 'farmer-default';
+    }
+
     const newLand: Land = {
       ...landData,
       id: `land-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      farmerId: farmer?.id || 'farmer-default',
+      farmerId: currentFarmerId,
+      status: 'ACTIVE',
       createdAt: now,
       updatedAt: now,
     };
@@ -269,19 +283,23 @@ export default function App() {
   };
 
   if (isLoading) {
+    const splashNameParts = (brandConfig.appName || 'HIKMAT TANI').trim().split(/\s+/);
+    const splashFirst = splashNameParts[0] || 'HIKMAT';
+    const splashRest = splashNameParts.slice(1).join(' ') || (splashNameParts.length === 1 ? '' : 'TANI');
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-emerald-950 via-slate-950 to-slate-900 text-white flex flex-col items-center justify-center p-6 space-y-6">
         <div className="relative flex flex-col items-center text-center space-y-4 max-w-sm">
           {/* Logo Utama / Lengkap */}
           <div className="w-24 h-24 rounded-3xl bg-emerald-950/80 border-2 border-emerald-500/40 p-2 shadow-2xl flex items-center justify-center overflow-hidden">
             <img
-              src="/logo-hikmat-tani-1024.png"
-              alt="Logo Resmi HIKMAT TANI"
+              src={brandConfig.logoPrimary || brandConfig.logoUrl || '/icon-512.png'}
+              alt={`Logo ${brandConfig.appName || 'HIKMAT TANI'}`}
               className="w-full h-full object-contain p-1"
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
-                if (!target.src.includes('/icon-192.png')) {
-                  target.src = '/icon-192.png';
+                if (!target.src.includes('/icon-512.png') && !target.src.includes('/icon-192.png')) {
+                  target.src = '/icon-512.png';
                 }
               }}
             />
@@ -289,10 +307,11 @@ export default function App() {
 
           <div className="space-y-1">
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-              HIKMAT <span className="text-emerald-400">TANI</span>
+              {splashFirst}{' '}
+              {splashRest && <span className="text-emerald-400">{splashRest}</span>}
             </h1>
             <p className="text-xs sm:text-sm font-semibold text-emerald-200 tracking-wide uppercase">
-              CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.
+              {brandConfig.slogan || 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.'}
             </p>
           </div>
 

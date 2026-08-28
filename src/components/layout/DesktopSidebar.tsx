@@ -7,6 +7,7 @@
 import { BookOpen, CalendarDays, Home, Layers, User } from 'lucide-react';
 import { BrandLogo } from '../common/BrandLogo.tsx';
 import { ConnectionStatus } from '../common/ConnectionStatus.tsx';
+import { useBrandConfig } from '../../services/publicConfigService.ts';
 import { MainNavTab } from './BottomNav.tsx';
 
 interface DesktopSidebarProps {
@@ -15,6 +16,7 @@ interface DesktopSidebarProps {
 }
 
 export function DesktopSidebar({ activeTab, onSelectTab }: DesktopSidebarProps) {
+  const brandConfig = useBrandConfig();
   const navItems: { id: MainNavTab; label: string; icon: typeof Home; description: string }[] = [
     { id: 'beranda', label: 'Beranda', icon: Home, description: 'Kondisi lapang & saran' },
     { id: 'lahan', label: 'Lahan Saya', icon: Layers, description: 'Petak & musim tanam' },
@@ -72,8 +74,8 @@ export function DesktopSidebar({ activeTab, onSelectTab }: DesktopSidebarProps) 
         <div className="flex justify-center">
           <ConnectionStatus />
         </div>
-        <p className="text-[10px] text-center text-emerald-400/60 font-medium">
-          HIKMAT TANI • Offline-First
+        <p className="text-[10px] text-center text-emerald-400/60 font-medium truncate px-2">
+          {brandConfig.appName || 'HIKMAT TANI'} • Offline-First
         </p>
       </div>
     </aside>

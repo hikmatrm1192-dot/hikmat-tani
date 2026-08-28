@@ -44,6 +44,7 @@ import {
 import { backupService } from '../../backup/index.ts';
 import { BrandLogo } from '../../components/common/BrandLogo.tsx';
 import { PageHeader } from '../../components/common/PageHeader.tsx';
+import { useBrandConfig } from '../../services/publicConfigService.ts';
 import { syncEngine, SyncEngineStateInfo } from '../../sync/index.ts';
 import { outboxRepository } from '../../db/repositories/outboxRepository.ts';
 import {
@@ -112,6 +113,7 @@ export function SayaView({
   const [installPromptEvent, setInstallPromptEvent] = useState<any>(null);
   const [syncInfo, setSyncInfo] = useState<SyncEngineStateInfo>(() => syncEngine.getStateInfo());
   const [isManualSyncing, setIsManualSyncing] = useState<boolean>(false);
+  const brandConfig = useBrandConfig();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -609,7 +611,7 @@ export function SayaView({
 
         <div className="space-y-2 text-xs sm:text-sm text-emerald-100/90 leading-relaxed">
           <p>
-            <strong>HIKMAT TANI</strong> adalah inisiatif mandiri untuk mendampingi petani padi Indonesia mengambil keputusan agronomi secara bijaksana, berbasis kaidah riset resmi yang santun dan adaptif.
+            <strong>{brandConfig.appName || 'HIKMAT TANI'}</strong> adalah inisiatif mandiri untuk mendampingi petani padi Indonesia mengambil keputusan agronomi secara bijaksana, berbasis kaidah riset resmi yang santun dan adaptif.
           </p>
           <p className="text-emerald-200/80 text-xs">
             Aplikasi ini dibangun tanpa iklan komersial yang mengganggu, tidak menjual data pribadi petani ke korporasi manapun, dan sepenuhnya dirancang untuk kemaslahatan petani Nusantara.
@@ -664,7 +666,7 @@ export function SayaView({
         {/* Footer Versi & Catatan Ilmiah */}
         <div className="pt-2 border-t border-emerald-800/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px] text-emerald-400">
           <span>Versi 1.0.0 • Offline Agronomy Engine</span>
-          <span className="italic">"CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN."</span>
+          <span className="italic">"{brandConfig.slogan || 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.'}"</span>
         </div>
       </div>
 

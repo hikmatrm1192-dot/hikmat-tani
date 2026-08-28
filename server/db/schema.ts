@@ -257,7 +257,10 @@ export const appConfigs = pgTable('app_configs', {
   id: text('id').primaryKey(), // singleton id e.g. 'official_config'
   appName: text('app_name').default('HIKMAT TANI').notNull(),
   slogan: text('slogan').default('CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.').notNull(),
-  logoUrl: text('logo_url').default('/logo-hikmat-tani-1024.png').notNull(),
+  logoUrl: text('logo_url').default('/icon-512.png').notNull(),
+  logoPrimary: text('logo_primary').default('/icon-512.png').notNull(),
+  logoHorizontal: text('logo_horizontal').default('/logo-hikmat-tani-full.png').notNull(),
+  appIcon: text('app_icon').default('/icon-192.png').notNull(),
   description: text('description').notNull(),
   contactPhone: text('contact_phone'),
   contactEmail: text('contact_email'),

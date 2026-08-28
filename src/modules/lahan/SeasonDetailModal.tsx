@@ -31,6 +31,10 @@ import {
   SeasonExpenseReport,
   Seedbed,
 } from '../../types/index.ts';
+import {
+  calculateFarmEconomics,
+  RECOMMENDED_GRAIN_PRICE_PER_KG,
+} from '../../engine/costCalculator.ts';
 
 interface SeasonDetailModalProps {
   isOpen: boolean;
@@ -52,6 +56,9 @@ export function SeasonDetailModal({
   const [isCompleting, setIsCompleting] = useState<boolean>(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState<boolean>(false);
   const [yieldInput, setYieldInput] = useState<string>('');
+  const [grainPriceInput, setGrainPriceInput] = useState<string>(
+    String(RECOMMENDED_GRAIN_PRICE_PER_KG)
+  );
 
   const [seedbeds, setSeedbeds] = useState<Seedbed[]>([]);
   const [expenseReport, setExpenseReport] = useState<SeasonExpenseReport | null>(null);
@@ -254,20 +261,77 @@ export function SeasonDetailModal({
               </div>
             </div>
 
-            <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                Perkiraan Hasil Panen Gabah (kg, opsional):
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                value={yieldInput}
-                onChange={(e) => setYieldInput(e.target.value)}
-                placeholder="Contoh: 3200"
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-emerald-600 focus:outline-none"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Hasil Panen Gabah (kg, opsional):
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={yieldInput}
+                  onChange={(e) => setYieldInput(e.target.value)}
+                  placeholder="Contoh: 3500"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-700">
+                    Harga Gabah (Rp/kg):
+                  </label>
+                  <span className="text-[9px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded">
+                    Rekomendasi
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={grainPriceInput}
+                  onChange={(e) => setGrainPriceInput(e.target.value)}
+                  placeholder="Contoh: 6500"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                />
+              </div>
             </div>
+
+            {/* Real-time Economic Outcome Preview */}
+            {parseFloat(yieldInput) > 0 && (
+              <div className="p-2.5 bg-white rounded-xl border border-amber-200 text-xs space-y-1.5">
+                {(() => {
+                  const y = parseFloat(yieldInput) || 0;
+                  const p = parseFloat(grainPriceInput) || 0;
+                  const rev = y * p;
+                  const cost = expenseReport?.totalExpenseRp || 0;
+                  const profit = rev - cost;
+                  const isProfit = profit >= 0;
+                  return (
+                    <div className="grid grid-cols-3 gap-1.5 text-center">
+                      <div className="p-1.5 bg-slate-50 rounded-lg">
+                        <span className="text-[10px] text-slate-500 block">Pendapatan:</span>
+                        <span className="font-extrabold text-slate-800 text-[11px]">
+                          Rp {rev.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <div className="p-1.5 bg-slate-50 rounded-lg">
+                        <span className="text-[10px] text-slate-500 block">Total Biaya:</span>
+                        <span className="font-extrabold text-slate-800 text-[11px]">
+                          Rp {cost.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <div className={`p-1.5 rounded-lg ${isProfit ? 'bg-emerald-50 text-emerald-900' : 'bg-rose-50 text-rose-900'}`}>
+                        <span className="text-[10px] block">Laba Bersih:</span>
+                        <span className="font-black text-[11px]">
+                          {isProfit ? '+' : '-'}Rp {Math.abs(profit).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
 
             <div className="flex items-center justify-end gap-2 pt-1">
               <button

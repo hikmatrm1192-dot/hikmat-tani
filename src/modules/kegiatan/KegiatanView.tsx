@@ -530,7 +530,7 @@ export function KegiatanView({
             <div className="space-y-4">
               {/* Ringkasan Akumulasi Biaya */}
               {expenseReport && (
-                <ExpenseSummaryCard report={expenseReport} land={currentLand} />
+                <ExpenseSummaryCard report={expenseReport} land={currentLand} season={currentSeason} />
               )}
 
               {/* Daftar Transaksi Biaya */}

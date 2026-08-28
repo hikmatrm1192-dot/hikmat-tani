@@ -2,19 +2,26 @@
  * HIKMAT TANI - Expense (Biaya Usaha Tani) Form Modal
  * 
  * Prinsip:
- * - Pencatatan transaksi riil biaya budidaya
- * - Format mata uang Rupiah Indonesia (Rp)
- * - Target sentuh minimal 48px
- * - Kategori standar budidaya padi
+ * - PENGGUNA MEMEGANG KENDALI PENUH: Semua nilai biaya dan harga ditentukan sepenuhnya oleh pengguna.
+ * - REKOMENDASI BUKAN PAKSAAN: Sistem menyediakan nilai default/acuan rekomendasi pasar/Kementan,
+ *   namun pengguna bebas menerima, mengubah lebih tinggi, mengubah lebih rendah, atau mengisi Rp 0 (bantuan).
+ * - Tidak ada batasan hardcoded harga semena-mena.
+ * - Format mata uang Rupiah Indonesia (Rp).
+ * - Target sentuh minimal 48px, ramah petani di lapangan.
  */
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useState, useEffect } from 'react';
 import {
   AlertCircle,
+  Calculator,
   Calendar,
   Check,
+  Coins,
   DollarSign,
   FileText,
+  HelpCircle,
+  Info,
+  Sparkles,
   Tag,
   X,
 } from 'lucide-react';
@@ -25,6 +32,11 @@ import {
   ExpenseCategory,
   Land,
 } from '../../types/index.ts';
+import {
+  DEFAULT_COST_BENCHMARKS,
+  CostBenchmark,
+  validateExpenseNominal,
+} from '../../engine/costCalculator.ts';
 
 interface ExpenseFormModalProps {
   isOpen: boolean;
@@ -39,22 +51,22 @@ const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string; desc: string }[]
   {
     id: 'SEED_SEEDBED',
     label: 'Benih & Persemaian',
-    desc: 'Pembelian benih bersertifikat, kantong, plastik semai, upah sebar benih',
+    desc: 'Pembelian benih bersertifikat, plastik semai, bambu, upah sebar benih',
   },
   {
     id: 'LAND_PREPARATION',
     label: 'Pengolahan Lahan',
-    desc: 'Sewa traktor bajak, rotary, perataan lumpur, perbaikan pematang',
+    desc: 'Sewa traktor bajak, singkal, rotary, perataan lumpur, perbaikan pematang',
   },
   {
     id: 'PLANTING',
     label: 'Tanam',
-    desc: 'Upah tenaga kerja tanam / sewa mesin transplanter',
+    desc: 'Upah tenaga kerja tanam (tandur/borongan) / sewa mesin transplanter',
   },
   {
     id: 'FERTILIZER',
     label: 'Pupuk & Nutrisi',
-    desc: 'Pembelian pupuk anorganik (Urea, NPK, SP36, KCl) & pupuk kandang/organik',
+    desc: 'Pembelian pupuk anorganik (Urea, NPK, SP-36, KCl) & pupuk organik/kandang',
   },
   {
     id: 'PEST_CONTROL',
@@ -79,7 +91,7 @@ const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string; desc: string }[]
   {
     id: 'OTHER',
     label: 'Biaya Lainnya',
-    desc: 'Transportasi angkut gabah, konsumsi kerja lapang, atau biaya tak terduga',
+    desc: 'Transportasi angkut gabah, konsumsi kerja lapang, sewa lahan, atau biaya tak terduga',
   },
 ];
 
@@ -102,7 +114,7 @@ export function ExpenseFormModal({
     editExpense?.category || 'FERTILIZER'
   );
   const [amountRp, setAmountRp] = useState<string>(
-    editExpense?.amountRp ? String(editExpense.amountRp) : ''
+    editExpense?.amountRp !== undefined ? String(editExpense.amountRp) : ''
   );
   const [description, setDescription] = useState<string>(
     editExpense?.description || ''
@@ -111,20 +123,78 @@ export function ExpenseFormModal({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Mode Kalkulator Satuan (Opsional untuk mempermudah perhitungan: Jumlah x Harga Satuan)
+  const [showUnitCalc, setShowUnitCalc] = useState<boolean>(false);
+  const [calcQuantity, setCalcQuantity] = useState<string>('50');
+  const [calcUnitPrice, setCalcUnitPrice] = useState<string>('2500');
+  const [selectedBenchmarkId, setSelectedBenchmarkId] = useState<string | null>(null);
+
+  // Rekomendasi acuan yang relevan dengan kategori aktif
+  const relevantBenchmarks = DEFAULT_COST_BENCHMARKS.filter((b) => b.category === category);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (editExpense) {
+        setExpenseDate(editExpense.expenseDate.split('T')[0]);
+        setCategory(editExpense.category);
+        setAmountRp(String(editExpense.amountRp));
+        setDescription(editExpense.description);
+        setNotes(editExpense.notes || '');
+      } else {
+        setExpenseDate(new Date().toISOString().split('T')[0]);
+        setCategory('FERTILIZER');
+        setAmountRp('');
+        setDescription('');
+        setNotes('');
+        setShowUnitCalc(false);
+        setSelectedBenchmarkId(null);
+      }
+      setErrorMessage(null);
+    }
+  }, [isOpen, editExpense]);
+
   if (!isOpen) return null;
+
+  // Handle ketika pengguna memilih rekomendasi acuan
+  const handleSelectBenchmark = (bench: CostBenchmark) => {
+    setSelectedBenchmarkId(bench.id);
+    setCalcUnitPrice(String(bench.recommendedUnitPriceRp));
+    setShowUnitCalc(true);
+
+    // Hitung perkiraan awal jika quantity sudah ada
+    const q = parseFloat(calcQuantity) || 1;
+    const total = q * bench.recommendedUnitPriceRp;
+    setAmountRp(String(total));
+
+    if (!description || description.startsWith('Pembelian') || description.startsWith('Biaya') || description.startsWith('Sewa') || description.startsWith('Upah')) {
+      setDescription(`${bench.itemLabel} (${q} ${bench.unit} @ Rp ${bench.recommendedUnitPriceRp.toLocaleString('id-ID')})`);
+    }
+  };
+
+  // Recalculate jika quantity atau unit price diubah pengguna secara bebas
+  const handleRecalculateFromUnits = (newQStr: string, newPStr: string) => {
+    setCalcQuantity(newQStr);
+    setCalcUnitPrice(newPStr);
+    const q = parseFloat(newQStr);
+    const p = parseFloat(newPStr);
+    if (!isNaN(q) && !isNaN(p) && q >= 0 && p >= 0) {
+      const calculatedTotal = Number((q * p).toFixed(0));
+      setAmountRp(String(calculatedTotal));
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    const nominal = parseFloat(amountRp);
-    if (isNaN(nominal) || nominal <= 0) {
-      setErrorMessage('Masukkan nominal biaya riil (Rp) yang lebih dari 0.');
+    const validation = validateExpenseNominal(amountRp, true);
+    if (!validation.isValid) {
+      setErrorMessage(validation.error || 'Masukkan nominal biaya yang valid.');
       return;
     }
 
     if (!description.trim()) {
-      setErrorMessage('Keterangan / rincian biaya tidak boleh kosong.');
+      setErrorMessage('Keterangan / rincian transaksi biaya tidak boleh kosong.');
       return;
     }
 
@@ -132,11 +202,11 @@ export function ExpenseFormModal({
     try {
       const now = new Date().toISOString();
       const expenseData: CultivationExpense = {
-        id: editExpense?.id || crypto.randomUUID(),
+        id: editExpense?.id || `exp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         cropSeasonId: activeSeason.id,
         expenseDate: new Date(expenseDate).toISOString(),
         category,
-        amountRp: nominal,
+        amountRp: validation.parsedValue,
         description: description.trim(),
         notes: notes.trim() || undefined,
         createdAt: editExpense?.createdAt || now,
@@ -159,12 +229,13 @@ export function ExpenseFormModal({
     }
   };
 
-  const formattedPreview = amountRp && !isNaN(parseFloat(amountRp))
+  const currentAmountNum = parseFloat(amountRp);
+  const formattedPreview = !isNaN(currentAmountNum) && currentAmountNum >= 0
     ? new Intl.NumberFormat('id-ID', {
         style: 'currency',
         currency: 'IDR',
         maximumFractionDigits: 0,
-      }).format(parseFloat(amountRp))
+      }).format(currentAmountNum)
     : null;
 
   return (
@@ -177,14 +248,14 @@ export function ExpenseFormModal({
         <div className="px-6 py-5 bg-emerald-800 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-900/60 border border-emerald-600 flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-emerald-300" />
+              <Coins className="w-5 h-5 text-emerald-300" />
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
-                {editExpense ? 'Edit Catatan Biaya' : 'Catat Biaya Usaha Tani'}
+                {editExpense ? 'Edit Catatan Biaya Usaha Tani' : 'Catat Biaya Usaha Tani'}
               </h3>
               <p className="text-xs text-emerald-200 font-medium">
-                {land.name} • {activeSeason.varietyName || 'Padi Sawah'}
+                {land.name} • {activeSeason.varietyName || 'Padi Sawah'} ({land.areaHa} ha)
               </p>
             </div>
           </div>
@@ -210,7 +281,7 @@ export function ExpenseFormModal({
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-emerald-700" />
-              <span>Tanggal Pengeluaran Biaya *</span>
+              <span>Tanggal Transaksi Biaya *</span>
             </label>
             <input
               type="date"
@@ -229,7 +300,11 @@ export function ExpenseFormModal({
             </label>
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
+              onChange={(e) => {
+                const newCat = e.target.value as ExpenseCategory;
+                setCategory(newCat);
+                setSelectedBenchmarkId(null);
+              }}
               className="w-full px-3.5 py-2.5 min-h-[48px] bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-700"
             >
               {EXPENSE_CATEGORIES.map((c) => (
@@ -243,32 +318,136 @@ export function ExpenseFormModal({
             </p>
           </div>
 
-          {/* Nominal Biaya */}
+          {/* Rekomendasi Acuan Nilai (Benchmark Helper) */}
+          {relevantBenchmarks.length > 0 && (
+            <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Nilai Rekomendasi Acuan Standar</span>
+                </span>
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                  Rekomendasi (Dapat Diubah)
+                </span>
+              </div>
+              <p className="text-[11px] text-emerald-900 leading-relaxed">
+                Pilih acuan di bawah untuk mengisi otomatis, atau tentukan harga sendiri secara bebas:
+              </p>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {relevantBenchmarks.map((bench) => {
+                  const isSelected = selectedBenchmarkId === bench.id;
+                  return (
+                    <button
+                      key={bench.id}
+                      type="button"
+                      onClick={() => handleSelectBenchmark(bench)}
+                      className={`text-left px-3 py-1.5 rounded-xl text-xs transition-all border ${
+                        isSelected
+                          ? 'bg-emerald-700 text-white font-bold border-emerald-800 shadow-xs'
+                          : 'bg-white text-emerald-950 font-medium hover:bg-emerald-100/50 border-emerald-200'
+                      }`}
+                    >
+                      <span>{bench.itemLabel}</span>
+                      <span className="ml-1.5 font-mono font-bold text-[11px] opacity-90">
+                        [Rp {bench.recommendedUnitPriceRp.toLocaleString('id-ID')}/{bench.unit}]
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Toggle Kalkulator Satuan (Jumlah x Harga Satuan) */}
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setShowUnitCalc(!showUnitCalc)}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 hover:text-emerald-950 transition-colors"
+            >
+              <Calculator className="w-3.5 h-3.5" />
+              <span>{showUnitCalc ? 'Tutup Kalkulator Satuan' : '+ Hitung via Jumlah Satuan x Harga'}</span>
+            </button>
+          </div>
+
+          {/* Kalkulator Satuan Terbuka */}
+          {showUnitCalc && (
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Jumlah Satuan (kg / ha / HOK)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={calcQuantity}
+                    onChange={(e) => handleRecalculateFromUnits(e.target.value, calcUnitPrice)}
+                    placeholder="Contoh: 50"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-700"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Harga Satuan (Rp / unit)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={calcUnitPrice}
+                    onChange={(e) => handleRecalculateFromUnits(calcQuantity, e.target.value)}
+                    placeholder="Contoh: 2500"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-700"
+                  />
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-500 bg-white p-2 rounded-xl border border-slate-200 flex items-center justify-between">
+                <span>Hasil perkalian otomatis:</span>
+                <span className="font-bold text-emerald-800">
+                  {calcQuantity || '0'} × Rp {Number(calcUnitPrice || 0).toLocaleString('id-ID')} = Rp {(Number(calcQuantity || 0) * Number(calcUnitPrice || 0)).toLocaleString('id-ID')}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Nominal Biaya Akhir (Bebas diisi / diubah oleh pengguna) */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
-              <DollarSign className="w-3.5 h-3.5 text-emerald-700" />
-              <span>Nominal Biaya Nyata (Rp) *</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <DollarSign className="w-3.5 h-3.5 text-emerald-700" />
+                <span>Nominal Biaya Nyata (Rp) *</span>
+              </label>
+              <span className="text-[11px] text-slate-500 font-medium">
+                (Isi 0 jika bantuan/gratis)
+              </span>
+            </div>
+
             <div className="relative">
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400">
                 Rp
               </span>
               <input
                 type="number"
-                step="1000"
-                min="500"
+                step="any"
+                min="0"
                 value={amountRp}
                 onChange={(e) => setAmountRp(e.target.value)}
-                placeholder="Contoh: 350000"
+                placeholder="0 atau nominal biaya riil"
                 required
                 className="w-full pl-12 pr-3.5 py-2.5 min-h-[48px] bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-700"
               />
             </div>
+
             {formattedPreview && (
               <p className="text-xs font-extrabold text-emerald-700 mt-1 pl-1">
-                Terbaca: {formattedPreview}
+                Terbaca: {formattedPreview} {currentAmountNum === 0 ? '(Bebas Biaya / Bantuan)' : ''}
               </p>
             )}
+            <p className="text-[11px] text-slate-500 mt-1 pl-1">
+              Keterangan: Pengguna memegang kendali penuh. Anda bebas menentukan harga lebih rendah, lebih tinggi, atau Rp 0.
+            </p>
           </div>
 
           {/* Keterangan / Uraian Biaya */}
@@ -296,7 +475,7 @@ export function ExpenseFormModal({
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Misal: Nota disimpan di lemari, dibayar tunai via toko tani..."
+              placeholder="Misal: Nota disimpan di lemari, dibayar tunai via kios tani desa..."
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-700"
             />
           </div>

@@ -6,10 +6,11 @@
  * - Menyajikan rekapitulasi petak sawah, musim tanam, pemupukan, dan pengamatan OPT.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Calendar,
   CheckCircle2,
+  Coins,
   Copy,
   FileText,
   MapPin,
@@ -20,9 +21,11 @@ import {
   Wheat,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal.tsx';
+import { db } from '../../db/database.ts';
 import {
   Activity,
   CropSeason,
+  CultivationExpense,
   Farmer,
   FertilizerApplication,
   Land,
@@ -51,8 +54,29 @@ export function CultivationReportModal({
   optObservations = [],
 }: CultivationReportModalProps) {
   const [copied, setCopied] = useState<boolean>(false);
+  const [expenses, setExpenses] = useState<CultivationExpense[]>([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const fetchExpenses = async () => {
+      try {
+        const list = await db.expenses.toArray();
+        setExpenses(list);
+      } catch (err) {
+        console.error('Error fetching expenses for report:', err);
+      }
+    };
+    fetchExpenses();
+  }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const totalExpenseRp = expenses.reduce((sum, exp) => sum + (Number(exp.amountRp) || 0), 0);
+  const formattedTotalExpense = new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    maximumFractionDigits: 0,
+  }).format(totalExpenseRp);
 
   const todayFormatted = new Date().toLocaleDateString('id-ID', {
     day: 'numeric',
@@ -104,7 +128,8 @@ export function CultivationReportModal({
       }\n`;
     });
 
-    text += `\n*TOTAL KEGIATAN TERCATAT:* ${activities.length} Kegiatan\n`;
+    text += `\n*TOTAL BIAYA USAHA TANI:* ${formattedTotalExpense} (${expenses.length} Transaksi)\n`;
+    text += `*TOTAL KEGIATAN TERCATAT:* ${activities.length} Kegiatan\n`;
     text += `*APLIKASI PEMUPUKAN:* ${fertilizerApps.length} Kali Catatan\n`;
     text += `*PENGAMATAN OPT:* ${optObservations.length} Kali Catatan\n\n`;
     text += `_Disusun otomatis melalui Sistem Keputusan Agronomi HIKMAT TANI._`;
@@ -240,6 +265,51 @@ export function CultivationReportModal({
               </div>
             )}
           </div>
+
+          {/* Rekapitulasi Biaya Usaha Tani Riil */}
+          {expenses.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Coins className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Rekapitulasi Biaya Usaha Tani Riil</span>
+                </h4>
+                <span className="text-xs font-extrabold text-slate-900">
+                  Total: {formattedTotalExpense} ({expenses.length} Transaksi)
+                </span>
+              </div>
+
+              <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold text-[11px]">
+                    <tr>
+                      <th className="p-2">Tanggal</th>
+                      <th className="p-2">Kategori</th>
+                      <th className="p-2">Uraian Transaksi</th>
+                      <th className="p-2 text-right">Nominal (Rp)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {expenses.slice(0, 6).map((exp) => (
+                      <tr key={exp.id} className="hover:bg-slate-50">
+                        <td className="p-2 text-slate-600">
+                          {new Date(exp.expenseDate).toLocaleDateString('id-ID', {
+                            day: 'numeric',
+                            month: 'short',
+                          })}
+                        </td>
+                        <td className="p-2 font-medium text-slate-700">{exp.category}</td>
+                        <td className="p-2 font-bold text-slate-900">{exp.description}</td>
+                        <td className="p-2 text-right font-mono font-bold text-slate-900">
+                          Rp {Number(exp.amountRp).toLocaleString('id-ID')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Ringkasan Kejadian Budidaya Terkini */}
           <div className="space-y-2">

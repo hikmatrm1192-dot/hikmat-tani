@@ -26,6 +26,7 @@ import { BrandLogo } from '../../components/common/BrandLogo.tsx';
 import { Modal } from '../../components/common/Modal.tsx';
 import {
   publicConfigService,
+  useBrandConfig,
   PublicAppConfig,
 } from '../../services/publicConfigService.ts';
 
@@ -38,22 +39,22 @@ export function SupportModal({ isOpen, onClose }: SupportModalProps) {
   const [copiedRekening, setCopiedRekening] = useState<boolean>(false);
   const [copiedEwallet, setCopiedEwallet] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
-  const [config, setConfig] = useState<PublicAppConfig>(() =>
-    publicConfigService.getCachedConfigSync()
-  );
+  const brandConfig = useBrandConfig();
+  const config = brandConfig;
 
   useEffect(() => {
     if (!isOpen) return;
-    publicConfigService.getPublicConfig().then((latest) => {
-      setConfig(latest);
-    });
+    publicConfigService.getPublicConfig();
   }, [isOpen]);
 
+  const appName = brandConfig.appName || 'HIKMAT TANI';
+  const slogan = brandConfig.slogan || 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.';
+
   const handleShareWa = () => {
-    const text = `Aplikasi HIKMAT TANI — CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.\nKalkulator pupuk berimbang, rekomendasi OPT PHT, dan catatan budidaya 100% offline gratis tanpa iklan.\nKunjungi: ${window.location.origin}`;
+    const text = `Aplikasi ${appName} — ${slogan}\nKalkulator pupuk berimbang, rekomendasi OPT PHT, dan catatan budidaya 100% offline gratis tanpa iklan.\nKunjungi: ${window.location.origin}`;
     if (navigator.share) {
       navigator.share({
-        title: 'HIKMAT TANI — CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.',
+        title: `${appName} — ${slogan}`,
         text,
         url: window.location.origin,
       }).catch(() => {});
@@ -70,16 +71,16 @@ export function SupportModal({ isOpen, onClose }: SupportModalProps) {
   };
 
   const handleCopyRekening = () => {
-    if (config.donationAccountNumber) {
-      navigator.clipboard?.writeText(config.donationAccountNumber.replace(/[^0-9]/g, ''));
+    if (brandConfig.donationAccountNumber) {
+      navigator.clipboard?.writeText(brandConfig.donationAccountNumber.replace(/[^0-9]/g, ''));
     }
     setCopiedRekening(true);
     setTimeout(() => setCopiedRekening(false), 2500);
   };
 
   const handleCopyEwallet = () => {
-    if (config.donationEwalletNumber) {
-      navigator.clipboard?.writeText(config.donationEwalletNumber);
+    if (brandConfig.donationEwalletNumber) {
+      navigator.clipboard?.writeText(brandConfig.donationEwalletNumber);
     }
     setCopiedEwallet(true);
     setTimeout(() => setCopiedEwallet(false), 2500);
@@ -89,16 +90,16 @@ export function SupportModal({ isOpen, onClose }: SupportModalProps) {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={config.supportTitle || 'Dukung HIKMAT TANI'}
-      subtitle={config.supportDescription || 'Inisiatif Mandiri Teknologi Pertanian Padi Nusantara'}
+      title={brandConfig.supportTitle || `Dukung ${appName}`}
+      subtitle={brandConfig.supportDescription || 'Inisiatif Mandiri Teknologi Pertanian Padi Nusantara'}
       maxWidth="lg"
     >
       <div className="space-y-5">
         {/* Banner Identitas & Misi */}
-        <div className="bg-gradient-to-br from-emerald-900 via-emerald-950 to-slate-950 text-white rounded-2xl p-5 sm:p-6 border border-emerald-800 shadow-sm space-y-3">
+        <div className="bg-gradient-to-br from-emerald-900 via-emerald-950 to-slate-950 text-white rounded-2xl p-5 sm:p-6 border border-emerald-800 shadow-xs space-y-3">
           <BrandLogo size="md" showSlogan variant="light" />
           <p className="text-xs sm:text-sm text-emerald-100/90 leading-relaxed pt-1">
-            <strong>HIKMAT TANI</strong> didedikasikan untuk kemandirian petani padi Indonesia. Aplikasi ini bebas dari iklan komersial, tidak mengunci fitur apapun, dan bekerja 100% offline di pelosok sawah.
+            <strong>{appName}</strong> didedikasikan untuk kemandirian petani padi Indonesia. Aplikasi ini bebas dari iklan komersial, tidak mengunci fitur apapun, dan bekerja 100% offline di pelosok sawah.
           </p>
         </div>
 

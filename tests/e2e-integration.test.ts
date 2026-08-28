@@ -29,7 +29,7 @@ import { evaluateRecommendations } from '../src/engine/recommendation/evaluator.
 import { syncService, SyncPushItem } from '../server/services/syncService.ts';
 import { authService, AuthSessionPayload } from '../server/services/authService.ts';
 import { weatherService } from '../server/services/weatherService.ts';
-import { adminService } from '../server/services/adminService.ts';
+import { adminService, getSuperAdminInitialPasswordFromEnv } from '../server/services/adminService.ts';
 import {
   Activity,
   CropSeason,
@@ -596,7 +596,8 @@ export async function runE2EIntegrationTests(): Promise<{
   // 11. DONATION & OFFICIAL ADMIN CONFIG FLOW
   // =========================================================================
   await test('11. Donation Flow: Konfigurasi resmi oleh Pengelola -> Terpapar aman di publik -> Proteksi Petani', async () => {
-    const superAdminLogin = adminService.authenticateAdmin('pappizee', 'HikmatTani2026!');
+    const adminPass = getSuperAdminInitialPasswordFromEnv() || 'HikmatTaniSuperAdmin2026Secret!';
+    const superAdminLogin = adminService.authenticateAdmin('pappizee', adminPass);
     if (!superAdminLogin.success || !superAdminLogin.token) {
       throw new Error('Login superadmin gagal');
     }
