@@ -39,33 +39,34 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    // 2. Health check endpoints
-    if (url.pathname === '/api/v1/health' || url.pathname === '/api/health') {
-      let d1Status = {
-        configured: Boolean(env.DB),
-        connected: Boolean(env.DB),
-        engine: 'Cloudflare D1 (SQLite Drizzle ORM)',
-        schemaVersion: '1.0.0',
-        tableCount: Object.keys(d1Schema).length,
-      };
+    try {
+      // 2. Health check endpoints
+      if (url.pathname === '/api/v1/health' || url.pathname === '/api/health') {
+        let d1Status = {
+          configured: Boolean(env.DB),
+          connected: Boolean(env.DB),
+          engine: 'Cloudflare D1 (SQLite Drizzle ORM)',
+          schemaVersion: '1.0.0',
+          tableCount: Object.keys(d1Schema).length,
+        };
 
-      return new Response(
-        JSON.stringify({
-          status: 'ok',
-          app: 'HIKMAT TANI',
-          runtime: 'Cloudflare Workers (Edge)',
-          database: d1Status,
-          timestamp: new Date().toISOString(),
-        }),
-        {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders,
-          },
-        }
-      );
-    }
+        return new Response(
+          JSON.stringify({
+            status: 'ok',
+            app: 'HIKMAT TANI',
+            runtime: 'Cloudflare Workers (Edge)',
+            database: d1Status,
+            timestamp: new Date().toISOString(),
+          }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              ...corsHeaders,
+            },
+          }
+        );
+      }
 
     // 3. API D1 Routes placeholder (dapat diperluas bertahap)
     if (url.pathname.startsWith('/api/')) {
@@ -266,14 +267,40 @@ export default {
 
     // 4. Static assets handling (SPA)
     if (env.ASSETS) {
-      return env.ASSETS.fetch(request);
+      try {
+        const response = await env.ASSETS.fetch(request);
+        // SPA Fallback: Jika asset tidak ditemukan (404) untuk request halaman browser GET (bukan asset ekstensi), sajikan index.html
+        if (response.status === 404 && request.method === 'GET' && !url.pathname.includes('.')) {
+          const indexUrl = new URL('/index.html', request.url);
+          return await env.ASSETS.fetch(new Request(indexUrl.toString(), request));
+        }
+        return response;
+      } catch (assetErr: any) {
+        console.error('[Worker Assets Error]', assetErr?.message || assetErr);
+      }
     }
 
     return new Response('HIKMAT TANI Cloudflare Worker Gateway', {
       status: 200,
       headers: { 'Content-Type': 'text/plain', ...corsHeaders },
     });
-  },
+  } catch (globalErr: any) {
+    console.error('[Worker Unhandled Error]', globalErr?.message || globalErr);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: {
+          code: 'WORKER_INTERNAL_ERROR',
+          message: globalErr?.message || 'Terjadi kesalahan pada Cloudflare Worker Edge Runtime',
+        },
+      }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      }
+    );
+  }
+},
 
   /**
    * Cloudflare Cron Trigger Scheduled Handler (Edge Background Execution)
