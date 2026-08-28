@@ -47,11 +47,12 @@ class SyncEngine {
   private listeners: Set<(info: SyncEngineStateInfo) => void> = new Set();
   private syncInProgress = false;
   private isInitialized = false;
+  private debounceTimer: any = null;
 
   private constructor() {
     if (typeof window !== 'undefined') {
       this.lastSyncAt = localStorage.getItem(STORAGE_KEYS.LAST_SYNC_AT);
-      this.isOnline = navigator.onLine;
+      this.isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
       window.addEventListener('online', () => {
         this.isOnline = true;
@@ -70,6 +71,13 @@ class SyncEngine {
           this.syncNow().catch(() => {});
         }
       });
+
+      // Background sync periodic timer (every 60s)
+      setInterval(() => {
+        if (this.isOnline && !this.syncInProgress) {
+          this.syncNow().catch(() => {});
+        }
+      }, 60000);
     }
   }
 
@@ -95,6 +103,23 @@ class SyncEngine {
         this.syncNow().catch(() => {});
       }, 1500);
     }
+  }
+
+  /**
+   * Notifikasi adanya mutasi lokal baru dari repository
+   */
+  public notifyMutation(): void {
+    this.refreshPendingCount().catch(() => {});
+    if (this.isOnline) {
+      this.debounceSync();
+    }
+  }
+
+  private debounceSync(): void {
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    this.debounceTimer = setTimeout(() => {
+      this.syncNow().catch(() => {});
+    }, 1000);
   }
 
   /**
@@ -127,7 +152,7 @@ class SyncEngine {
     }
 
     try {
-      const resp = await fetch('/api/v1/auth/anonymous', {
+      const resp = await fetch('/api/v1/auth/anonymous-or-register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ anonymousId: anonId }),
@@ -174,6 +199,7 @@ class SyncEngine {
 
     let pushedCount = 0;
     let pulledCount = 0;
+    let itemsToPush: any[] = [];
 
     try {
       const token = await this.getOrFetchAuthToken();
@@ -185,6 +211,8 @@ class SyncEngine {
       // 1. PUSH: Kirim outbox lokal ke server
       // ==========================================
       const pendingItems = await outboxRepository.getPending();
+      itemsToPush = [...pendingItems];
+
       if (pendingItems.length > 0) {
         // Tandai item sedang diproses
         for (const item of pendingItems) {
@@ -214,7 +242,7 @@ class SyncEngine {
             await outboxRepository.clearSynced(item.id);
             pushedCount++;
           } else {
-            await outboxRepository.updateStatus(item.id, 'FAILED', 'Tidak di-acknowledge server');
+            await outboxRepository.updateStatus(item.id, 'PENDING', 'Tidak di-acknowledge server');
           }
         }
       }
@@ -263,10 +291,9 @@ class SyncEngine {
         pulledCount,
       };
     } catch (err: any) {
-      // Pada saat gagal, jangan hapus outbox, catat status FAILED
-      const pendingItems = await outboxRepository.getPending();
-      for (const item of pendingItems) {
-        await outboxRepository.updateStatus(item.id, 'FAILED', err?.message || 'Koneksi gagal');
+      // Pada saat gagal, kembalikan status item ke PENDING agar dapat dicoba lagi
+      for (const item of itemsToPush) {
+        await outboxRepository.updateStatus(item.id, 'PENDING', err?.message || 'Koneksi gagal');
       }
 
       this.state = 'ERROR';

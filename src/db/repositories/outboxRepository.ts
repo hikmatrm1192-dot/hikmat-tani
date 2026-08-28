@@ -4,6 +4,7 @@
 
 import { SyncOutboxItem, SyncStatus } from '../../types/index.ts';
 import { db } from '../database.ts';
+import { syncEngine } from '../../sync/syncEngine.ts';
 
 export const outboxRepository = {
   /**
@@ -16,7 +17,9 @@ export const outboxRepository = {
         return existing.id;
       }
     }
-    return await db.syncOutbox.add(item);
+    const id = await db.syncOutbox.add(item);
+    syncEngine.notifyMutation();
+    return id;
   },
 
   /**

@@ -235,7 +235,7 @@ export class SyncService {
         }
       }
 
-      // 7. Simpan mutasi ke sync_journal persisten
+      // 7. Simpan mutasi ke sync_journal persisten & entity replica
       if (shouldApply) {
         const isDelete = item.action === 'DELETE';
         const journalId = `jn_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -251,6 +251,9 @@ export class SyncService {
           isTombstone: isDelete,
           serverTimestamp: serverTimestamp,
         });
+
+        // Tulis ke replica table D1
+        await this.applyEntityReplica(db, item, userFarmerId, serverTimestamp);
 
         processedCount++;
       }
@@ -368,6 +371,215 @@ export class SyncService {
       totalProcessedOps: ops.length,
       totalJournalEntries: journalEntries.length,
     };
+  }
+
+  /**
+   * Menulis mutasi ke replica table D1 secara konsisten
+   */
+  private async applyEntityReplica(
+    db: DrizzleD1Database<typeof d1Schema>,
+    item: SyncPushItem,
+    farmerId: string,
+    serverTimestamp: string
+  ): Promise<void> {
+    const isDelete = item.action === 'DELETE';
+    const payload = item.payload || {};
+
+    try {
+      switch (item.entityType) {
+        case 'LAND': {
+          if (isDelete) {
+            await db.delete(d1Schema.lands).where(eq(d1Schema.lands.id, item.entityId));
+          } else if (item.action === 'CREATE') {
+            const existing = await db.select().from(d1Schema.lands).where(eq(d1Schema.lands.id, item.entityId)).limit(1);
+            const landRecord = {
+              id: item.entityId,
+              farmerId: payload.farmerId || farmerId,
+              name: payload.name || 'Lahan',
+              areaM2: payload.areaM2 !== undefined && payload.areaM2 !== null ? Number(payload.areaM2) : 1000,
+              soilType: payload.soilType || 'Lempung Berliat',
+              irrigationType: payload.irrigationType || 'Irigasi Teknis',
+              village: payload.village || 'Sukamaju',
+              district: payload.district || '',
+              regency: payload.regency || '',
+              latitude: payload.latitude !== undefined && payload.latitude !== null ? Number(payload.latitude) : null,
+              longitude: payload.longitude !== undefined && payload.longitude !== null ? Number(payload.longitude) : null,
+              status: payload.status || 'ACTIVE',
+              createdAt: payload.createdAt || serverTimestamp,
+              updatedAt: payload.updatedAt || serverTimestamp,
+            };
+            if (existing.length > 0) {
+              await db.update(d1Schema.lands).set(landRecord).where(eq(d1Schema.lands.id, item.entityId));
+            } else {
+              await db.insert(d1Schema.lands).values(landRecord);
+            }
+          } else if (item.action === 'UPDATE') {
+            const updateRecord: Record<string, any> = {
+              updatedAt: payload.updatedAt || serverTimestamp,
+            };
+            if (payload.name) updateRecord.name = payload.name;
+            if (payload.areaM2 !== undefined && payload.areaM2 !== null) updateRecord.areaM2 = Number(payload.areaM2);
+            if (payload.soilType) updateRecord.soilType = payload.soilType;
+            if (payload.irrigationType) updateRecord.irrigationType = payload.irrigationType;
+            if (payload.village) updateRecord.village = payload.village;
+            if (payload.district) updateRecord.district = payload.district;
+            if (payload.regency) updateRecord.regency = payload.regency;
+            if (payload.latitude !== undefined && payload.latitude !== null) updateRecord.latitude = Number(payload.latitude);
+            if (payload.longitude !== undefined && payload.longitude !== null) updateRecord.longitude = Number(payload.longitude);
+            if (payload.status) updateRecord.status = payload.status;
+            await db.update(d1Schema.lands).set(updateRecord).where(eq(d1Schema.lands.id, item.entityId));
+          }
+          break;
+        }
+        case 'FARMER': {
+          if (isDelete) {
+            await db.delete(d1Schema.farmers).where(eq(d1Schema.farmers.id, item.entityId));
+          } else if (item.action === 'CREATE') {
+            const existing = await db.select().from(d1Schema.farmers).where(eq(d1Schema.farmers.id, item.entityId)).limit(1);
+            const farmerRecord = {
+              id: item.entityId,
+              name: payload.name || 'Petani Mandiri',
+              phoneNumber: payload.phoneNumber || null,
+              village: payload.village || 'Sukamaju',
+              district: payload.district || null,
+              regency: payload.regency || null,
+              province: payload.province || null,
+              farmerGroupName: payload.farmerGroupName || null,
+              authUserId: payload.authUserId || null,
+              createdAt: payload.createdAt || serverTimestamp,
+              updatedAt: payload.updatedAt || serverTimestamp,
+            };
+            if (existing.length > 0) {
+              await db.update(d1Schema.farmers).set(farmerRecord).where(eq(d1Schema.farmers.id, item.entityId));
+            } else {
+              await db.insert(d1Schema.farmers).values(farmerRecord);
+            }
+          } else if (item.action === 'UPDATE') {
+            await db.update(d1Schema.farmers).set({
+              ...payload,
+              updatedAt: payload.updatedAt || serverTimestamp,
+            }).where(eq(d1Schema.farmers.id, item.entityId));
+          }
+          break;
+        }
+        case 'CROP_SEASON': {
+          if (isDelete) {
+            await db.delete(d1Schema.cropSeasons).where(eq(d1Schema.cropSeasons.id, item.entityId));
+          } else if (item.action === 'CREATE') {
+            const existing = await db.select().from(d1Schema.cropSeasons).where(eq(d1Schema.cropSeasons.id, item.entityId)).limit(1);
+            const seasonRecord = {
+              id: item.entityId,
+              landId: payload.landId,
+              seasonNumber: payload.seasonNumber !== undefined && payload.seasonNumber !== null ? Number(payload.seasonNumber) : 1,
+              varietyId: payload.varietyId || 'inapri-32',
+              plantingDate: payload.plantingDate || serverTimestamp,
+              harvestDate: payload.harvestDate || null,
+              targetYieldTon: payload.targetYieldTon !== undefined && payload.targetYieldTon !== null ? Number(payload.targetYieldTon) : 5,
+              actualYieldTon: payload.actualYieldTon !== undefined && payload.actualYieldTon !== null ? Number(payload.actualYieldTon) : null,
+              status: payload.status || 'ACTIVE',
+              notes: payload.notes || null,
+              createdAt: payload.createdAt || serverTimestamp,
+              updatedAt: payload.updatedAt || serverTimestamp,
+            };
+            if (existing.length > 0) {
+              await db.update(d1Schema.cropSeasons).set(seasonRecord).where(eq(d1Schema.cropSeasons.id, item.entityId));
+            } else {
+              await db.insert(d1Schema.cropSeasons).values(seasonRecord);
+            }
+          } else if (item.action === 'UPDATE') {
+            await db.update(d1Schema.cropSeasons).set({
+              ...payload,
+              updatedAt: payload.updatedAt || serverTimestamp,
+            }).where(eq(d1Schema.cropSeasons.id, item.entityId));
+          }
+          break;
+        }
+        case 'ACTIVITY': {
+          if (isDelete) {
+            await db.delete(d1Schema.activities).where(eq(d1Schema.activities.id, item.entityId));
+          } else if (item.action === 'CREATE') {
+            const existing = await db.select().from(d1Schema.activities).where(eq(d1Schema.activities.id, item.entityId)).limit(1);
+            const actRecord = {
+              id: item.entityId,
+              cropSeasonId: payload.cropSeasonId,
+              date: payload.activityDate || payload.date || serverTimestamp,
+              hst: payload.hst !== undefined && payload.hst !== null ? Number(payload.hst) : 0,
+              activityType: payload.activityType || payload.category || 'OTHER',
+              notes: payload.notes || payload.description || null,
+              photoUrl: payload.photoUrl || null,
+              costRupiah: payload.costRupiah !== undefined && payload.costRupiah !== null ? Number(payload.costRupiah) : null,
+              createdAt: payload.createdAt || serverTimestamp,
+              updatedAt: payload.updatedAt || serverTimestamp,
+            };
+            if (existing.length > 0) {
+              await db.update(d1Schema.activities).set(actRecord).where(eq(d1Schema.activities.id, item.entityId));
+            } else {
+              await db.insert(d1Schema.activities).values(actRecord);
+            }
+          } else if (item.action === 'UPDATE') {
+            await db.update(d1Schema.activities).set({
+              ...payload,
+              updatedAt: payload.updatedAt || serverTimestamp,
+            }).where(eq(d1Schema.activities.id, item.entityId));
+          }
+          break;
+        }
+        case 'RECOMMENDATION': {
+          if (item.action === 'CREATE') {
+            const existing = await db.select().from(d1Schema.recommendations).where(eq(d1Schema.recommendations.id, item.entityId)).limit(1);
+            if (existing.length === 0) {
+              await db.insert(d1Schema.recommendations).values({
+                id: item.entityId,
+                cropSeasonId: payload.cropSeasonId,
+                hst: payload.hst || 0,
+                recommendationType: payload.recommendationType || 'IRRIGATION',
+                title: payload.title || 'Rekomendasi',
+                description: payload.description || '',
+                priority: payload.priority || 'MEDIUM',
+                sourceRuleId: payload.sourceRuleId || null,
+                referenceId: payload.referenceId || null,
+                payload: payload.payload || null,
+                createdAt: payload.createdAt || serverTimestamp,
+              });
+            }
+          }
+          break;
+        }
+        case 'FARMER_DECISION': {
+          if (item.action === 'CREATE') {
+            const existing = await db.select().from(d1Schema.farmerDecisions).where(eq(d1Schema.farmerDecisions.id, item.entityId)).limit(1);
+            if (existing.length === 0) {
+              await db.insert(d1Schema.farmerDecisions).values({
+                id: item.entityId,
+                recommendationId: payload.recommendationId || null,
+                decision: payload.decision || 'ACCEPTED',
+                reason: payload.reason || null,
+                adjustedData: payload.adjustedData || null,
+                decidedAt: payload.decidedAt || serverTimestamp,
+              });
+            }
+          }
+          break;
+        }
+        case 'ACTUAL_ACTION': {
+          if (item.action === 'CREATE') {
+            const existing = await db.select().from(d1Schema.actualActions).where(eq(d1Schema.actualActions.id, item.entityId)).limit(1);
+            if (existing.length === 0) {
+              await db.insert(d1Schema.actualActions).values({
+                id: item.entityId,
+                decisionId: payload.decisionId || null,
+                activityId: payload.activityId || null,
+                actionDescription: payload.actionDescription || 'Tindakan Aktual Lapang',
+                executedAt: payload.executedAt || serverTimestamp,
+              });
+            }
+          }
+          break;
+        }
+      }
+    } catch (replicaErr: any) {
+      console.warn(`[SyncService] Entity replica write notice for ${item.entityType}:${item.entityId}:`, replicaErr?.message || replicaErr);
+    }
   }
 }
 

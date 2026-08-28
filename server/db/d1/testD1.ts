@@ -149,7 +149,42 @@ class InMemoryD1PreparedStatement {
       return [];
     }
 
-    // 3. SELECT statement
+    // 3. UPDATE statement
+    if (/^UPDATE/i.test(sql)) {
+      const updateMatch = sql.match(/UPDATE\s+[`"]?([a-zA-Z0-9_]+)[`"]?\s+SET\s+([^WHERE]+)(?:\s+WHERE\s+(.+))?/i);
+      if (updateMatch) {
+        const tableName = updateMatch[1];
+        const setClause = updateMatch[2];
+        const whereClause = updateMatch[3] || '';
+        const tableMap = this.db.getTableMap(tableName);
+
+        const setCols = setClause.split(',').map((s) => s.split('=')[0].trim().replace(/[`"]/g, ''));
+        let paramIdx = 0;
+        const updates: Record<string, any> = {};
+        for (const col of setCols) {
+          updates[col] = this.params[paramIdx++];
+        }
+
+        let whereId: string | null = null;
+        if (/id["`]?\s*=\s*\?/i.test(whereClause)) {
+          whereId = String(this.params[paramIdx++]);
+        }
+
+        if (whereId && tableMap.has(whereId)) {
+          const existing = tableMap.get(whereId)!;
+          const merged = { ...existing, ...updates };
+          tableMap.set(whereId, merged);
+          return [merged];
+        } else if (!whereClause) {
+          for (const [k, v] of tableMap.entries()) {
+            tableMap.set(k, { ...v, ...updates });
+          }
+        }
+      }
+      return [];
+    }
+
+    // 4. SELECT statement
     if (/^SELECT/i.test(sql)) {
       const fromMatch = sql.match(/FROM\s+[`"]?([a-zA-Z0-9_]+)[`"]?/i);
       if (!fromMatch) return [];
@@ -160,6 +195,12 @@ class InMemoryD1PreparedStatement {
       // Check WHERE conditions
       if (/WHERE/i.test(sql)) {
         let paramIdx = 0;
+
+        // Specific filter for id = ?
+        if (/WHERE\s+[`"]?id[`"]?\s*=\s*\?/i.test(sql)) {
+          const targetId = this.params[paramIdx++];
+          rows = rows.filter((r) => String(r.id) === String(targetId));
+        }
 
         // Specific filter for operation_id
         if (/operation_id["`]?\s*=\s*\?/i.test(sql)) {
@@ -221,13 +262,20 @@ class InMemoryD1PreparedStatement {
       return rows;
     }
 
-    // 4. DELETE statement (e.g. reset)
+    // 5. DELETE statement (e.g. reset or targeted delete)
     if (/^DELETE\s+FROM/i.test(sql)) {
-      const fromMatch = sql.match(/FROM\s+[`"]?([a-zA-Z0-9_]+)[`"]?/i);
+      const fromMatch = sql.match(/FROM\s+[`"]?([a-zA-Z0-9_]+)[`"]?(?:\s+WHERE\s+(.+))?/i);
       if (fromMatch) {
         const tableName = fromMatch[1];
+        const whereClause = fromMatch[2];
         const tableMap = this.db.getTableMap(tableName);
-        tableMap.clear();
+
+        if (whereClause && /id["`]?\s*=\s*\?/i.test(whereClause)) {
+          const targetId = String(this.params[0]);
+          tableMap.delete(targetId);
+        } else {
+          tableMap.clear();
+        }
       }
       return [];
     }

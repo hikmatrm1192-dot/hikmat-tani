@@ -4,6 +4,7 @@
 
 import { CropSeason, CropSeasonStatus } from '../../types/index.ts';
 import { db } from '../database.ts';
+import { outboxRepository } from './outboxRepository.ts';
 
 export const cropSeasonRepository = {
   async getById(id: string): Promise<CropSeason | undefined> {
@@ -30,24 +31,36 @@ export const cropSeasonRepository = {
   },
 
   async create(cropSeason: CropSeason): Promise<string> {
-    return await db.cropSeasons.add(cropSeason);
+    const now = new Date().toISOString();
+    const item: CropSeason = {
+      ...cropSeason,
+      createdAt: cropSeason.createdAt || now,
+      updatedAt: cropSeason.updatedAt || now,
+    };
+    await db.cropSeasons.add(item);
+    await outboxRepository.recordMutation('CROP_SEASON', item.id, 'CREATE', item);
+    return item.id;
   },
 
   async updateStatus(id: string, status: CropSeasonStatus): Promise<number> {
-    return await db.cropSeasons.update(id, {
-      status,
-      updatedAt: new Date().toISOString(),
-    });
+    return await this.update(id, { status });
   },
 
   async update(id: string, updates: Partial<CropSeason>): Promise<number> {
-    return await db.cropSeasons.update(id, {
+    const now = new Date().toISOString();
+    const count = await db.cropSeasons.update(id, {
       ...updates,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
     });
+    const updated = await db.cropSeasons.get(id);
+    if (updated) {
+      await outboxRepository.recordMutation('CROP_SEASON', id, 'UPDATE', updated);
+    }
+    return count;
   },
 
   async delete(id: string): Promise<void> {
     await db.cropSeasons.delete(id);
+    await outboxRepository.recordMutation('CROP_SEASON', id, 'DELETE', { id });
   },
 };

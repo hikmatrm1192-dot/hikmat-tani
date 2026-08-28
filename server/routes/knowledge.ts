@@ -1,14 +1,17 @@
 /**
- * HIKMAT TANI - Knowledge & Information API Routes (Langkah 11C)
+ * HIKMAT TANI - Knowledge & Information API Routes (Langkah 9 & 11)
  * 
  * Endpoints:
- * - GET /api/v1/knowledge/version   (Cek versi cepat hemat bandwidth)
- * - GET /api/v1/knowledge/bundle    (Unduh full bundle untuk instalasi awal / recovery)
- * - GET /api/v1/knowledge/updates   (Unduh pembaruan inkremental sejak versi/timestamp tertentu)
+ * - GET /api/v1/knowledge/version           (Cek versi cepat hemat bandwidth)
+ * - GET /api/v1/knowledge/bundle            (Unduh full bundle untuk instalasi awal / recovery)
+ * - GET /api/v1/knowledge/updates           (Unduh pembaruan inkremental sejak versi/timestamp tertentu)
+ * - GET /api/v1/knowledge/field-aggregates  (Agregasi pengetahuan lapangan teranonimkan & k-anonymity)
+ * - GET /api/v1/knowledge/field-insights    (Peta peringatan dini & tren agronomi per wilayah)
  */
 
 import { Router, Request, Response } from 'express';
 import { knowledgeService } from '../services/knowledgeService.ts';
+import { fieldKnowledgeService } from '../services/fieldKnowledgeService.ts';
 
 const router = Router();
 
@@ -74,6 +77,56 @@ router.get('/updates', (req: Request, res: Response) => {
       error: {
         code: 'KNOWLEDGE_UPDATES_ERROR',
         message: error?.message || 'Gagal mengambil pembaruan knowledge',
+      },
+    });
+  }
+});
+
+/**
+ * GET /api/v1/knowledge/field-aggregates
+ * Mengambil data agregasi statistik & pola lapangan multi-petani (Anonymized & K-Anonymity Guarded)
+ */
+router.get('/field-aggregates', (req: Request, res: Response) => {
+  try {
+    const { regency, optId, includeSuppressed } = req.query;
+    const result = fieldKnowledgeService.getPublishedKnowledge({
+      regency: typeof regency === 'string' ? regency : undefined,
+      optId: typeof optId === 'string' ? optId : undefined,
+      includeSuppressed: includeSuppressed === 'true',
+    });
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'FIELD_AGGREGATES_ERROR',
+        message: error?.message || 'Gagal mengambil agregasi pengetahuan lapangan',
+      },
+    });
+  }
+});
+
+/**
+ * GET /api/v1/knowledge/field-insights
+ * Ringkasan peringatan dini penyebaran OPT dan tren lapangan per wilayah
+ */
+router.get('/field-insights', (_req: Request, res: Response) => {
+  try {
+    const insights = fieldKnowledgeService.getRegionalFieldInsights();
+    res.json({
+      success: true,
+      data: insights,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'FIELD_INSIGHTS_ERROR',
+        message: error?.message || 'Gagal mengambil ringkasan wawasan lapangan',
       },
     });
   }

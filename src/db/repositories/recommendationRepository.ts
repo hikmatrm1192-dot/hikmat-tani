@@ -15,11 +15,14 @@ import {
   Recommendation,
 } from '../../types/index.ts';
 import { db } from '../database.ts';
+import { outboxRepository } from './outboxRepository.ts';
 
 export const recommendationRepository = {
   // --- Lapisan 1: Recommendation ---
   async createRecommendation(rec: Recommendation): Promise<string> {
-    return await db.recommendations.add(rec);
+    const id = await db.recommendations.add(rec);
+    await outboxRepository.recordMutation('RECOMMENDATION', rec.id, 'CREATE', rec);
+    return id;
   },
 
   async getRecommendationsByCropSeason(
@@ -42,7 +45,9 @@ export const recommendationRepository = {
 
   // --- Lapisan 2: Farmer Decision ---
   async recordFarmerDecision(decision: FarmerDecision): Promise<string> {
-    return await db.farmerDecisions.add(decision);
+    const id = await db.farmerDecisions.add(decision);
+    await outboxRepository.recordMutation('FARMER_DECISION', decision.id, 'CREATE', decision);
+    return id;
   },
 
   async getDecisionsByCropSeason(cropSeasonId: string): Promise<FarmerDecision[]> {
@@ -55,7 +60,9 @@ export const recommendationRepository = {
 
   // --- Lapisan 3: Actual Action ---
   async recordActualAction(action: ActualAction): Promise<string> {
-    return await db.actualActions.add(action);
+    const id = await db.actualActions.add(action);
+    await outboxRepository.recordMutation('ACTUAL_ACTION', action.id, 'CREATE', action);
+    return id;
   },
 
   async getActualActionsByCropSeason(cropSeasonId: string): Promise<ActualAction[]> {

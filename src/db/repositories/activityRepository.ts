@@ -14,6 +14,7 @@ import {
   OptObservation,
 } from '../../types/index.ts';
 import { db } from '../database.ts';
+import { outboxRepository } from './outboxRepository.ts';
 
 export const activityRepository = {
   async getById(id: string): Promise<Activity | undefined> {
@@ -37,7 +38,15 @@ export const activityRepository = {
   },
 
   async create(activity: Activity): Promise<string> {
-    return await db.activities.add(activity);
+    const now = new Date().toISOString();
+    const item: Activity = {
+      ...activity,
+      createdAt: activity.createdAt || now,
+      updatedAt: activity.updatedAt || now,
+    };
+    await db.activities.add(item);
+    await outboxRepository.recordMutation('ACTIVITY', item.id, 'CREATE', item);
+    return item.id;
   },
 
   /**
@@ -47,12 +56,25 @@ export const activityRepository = {
     activity: Activity,
     fertilizerApp: FertilizerApplication
   ): Promise<{ activityId: string; fertilizerAppId: string }> {
-    return await db.transaction('rw', [db.activities, db.fertilizerApplications], async () => {
-      await db.activities.add(activity);
-      await db.fertilizerApplications.add(fertilizerApp);
+    const now = new Date().toISOString();
+    const actItem: Activity = {
+      ...activity,
+      createdAt: activity.createdAt || now,
+      updatedAt: activity.updatedAt || now,
+    };
+    const fertItem: FertilizerApplication = {
+      ...fertilizerApp,
+      createdAt: fertilizerApp.createdAt || now,
+    };
+
+    return await db.transaction('rw', [db.activities, db.fertilizerApplications, db.syncOutbox], async () => {
+      await db.activities.add(actItem);
+      await db.fertilizerApplications.add(fertItem);
+      await outboxRepository.recordMutation('ACTIVITY', actItem.id, 'CREATE', actItem);
+      await outboxRepository.recordMutation('FERTILIZER_APPLICATION', fertItem.id, 'CREATE', fertItem);
       return {
-        activityId: activity.id,
-        fertilizerAppId: fertilizerApp.id,
+        activityId: actItem.id,
+        fertilizerAppId: fertItem.id,
       };
     });
   },
@@ -64,12 +86,25 @@ export const activityRepository = {
     activity: Activity,
     optObservation: OptObservation
   ): Promise<{ activityId: string; optObservationId: string }> {
-    return await db.transaction('rw', [db.activities, db.optObservations], async () => {
-      await db.activities.add(activity);
-      await db.optObservations.add(optObservation);
+    const now = new Date().toISOString();
+    const actItem: Activity = {
+      ...activity,
+      createdAt: activity.createdAt || now,
+      updatedAt: activity.updatedAt || now,
+    };
+    const optItem: OptObservation = {
+      ...optObservation,
+      createdAt: optObservation.createdAt || now,
+    };
+
+    return await db.transaction('rw', [db.activities, db.optObservations, db.syncOutbox], async () => {
+      await db.activities.add(actItem);
+      await db.optObservations.add(optItem);
+      await outboxRepository.recordMutation('ACTIVITY', actItem.id, 'CREATE', actItem);
+      await outboxRepository.recordMutation('OPT_OBSERVATION', optItem.id, 'CREATE', optItem);
       return {
-        activityId: activity.id,
-        optObservationId: optObservation.id,
+        activityId: actItem.id,
+        optObservationId: optItem.id,
       };
     });
   },
@@ -84,5 +119,6 @@ export const activityRepository = {
 
   async delete(id: string): Promise<void> {
     await db.activities.delete(id);
+    await outboxRepository.recordMutation('ACTIVITY', id, 'DELETE', { id });
   },
 };

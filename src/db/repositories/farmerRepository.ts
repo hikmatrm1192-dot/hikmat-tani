@@ -4,6 +4,7 @@
 
 import { Farmer } from '../../types/index.ts';
 import { db } from '../database.ts';
+import { outboxRepository } from './outboxRepository.ts';
 
 export const farmerRepository = {
   async getById(id: string): Promise<Farmer | undefined> {
@@ -19,17 +20,32 @@ export const farmerRepository = {
   },
 
   async create(farmer: Farmer): Promise<string> {
-    return await db.farmers.add(farmer);
+    const now = new Date().toISOString();
+    const item: Farmer = {
+      ...farmer,
+      createdAt: farmer.createdAt || now,
+      updatedAt: farmer.updatedAt || now,
+    };
+    await db.farmers.add(item);
+    await outboxRepository.recordMutation('FARMER', item.id, 'CREATE', item);
+    return item.id;
   },
 
   async update(id: string, updates: Partial<Farmer>): Promise<number> {
-    return await db.farmers.update(id, {
+    const now = new Date().toISOString();
+    const count = await db.farmers.update(id, {
       ...updates,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
     });
+    const updated = await db.farmers.get(id);
+    if (updated) {
+      await outboxRepository.recordMutation('FARMER', id, 'UPDATE', updated);
+    }
+    return count;
   },
 
   async delete(id: string): Promise<void> {
     await db.farmers.delete(id);
+    await outboxRepository.recordMutation('FARMER', id, 'DELETE', { id });
   },
 };

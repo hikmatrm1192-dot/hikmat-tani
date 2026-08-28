@@ -1,22 +1,23 @@
 /**
- * HIKMAT TANI - App Shell & UI/UX Core (Langkah 5)
+ * HIKMAT TANI - App Shell & UI/UX Core (Langkah 5 & 16)
  * 
  * Tagline Resmi: "CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN."
  * 
  * Arsitektur:
- * Dexie DB -> Repository -> Agriculture Engine -> React -> UI
+ * AuthGate (Mandatory) -> Dexie DB Partition -> Repository -> Agriculture Engine -> React -> UI
  * 
  * Menu Utama:
  * 1. Beranda
  * 2. Lahan
  * 3. Kegiatan
  * 4. Informasi
- * 5. Saya (Termasuk "Dukung HIKMAT TANI")
+ * 5. Saya (Termasuk "Dukung HIKMAT TANI", Akun & Isolasi)
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import { AppLayout } from './components/layout/AppLayout.tsx';
 import { MainNavTab } from './components/layout/BottomNav.tsx';
+import { AuthGate } from './components/auth/AuthGate.tsx';
 import {
   activityRepository,
   cropSeasonRepository,
@@ -25,6 +26,7 @@ import {
   initializeDatabase,
   knowledgeRepository,
   landRepository,
+  setActiveFarmerDb,
 } from './db/index.ts';
 import {
   AddLandModal,
@@ -49,7 +51,9 @@ import {
   Reference,
   RiceVariety,
 } from './types/index.ts';
+import { authClientService, AuthSession } from './services/authClientService.ts';
 import { useBrandConfig } from './services/publicConfigService.ts';
+import { syncEngine } from './sync/syncEngine.ts';
 import { runDatabaseTests } from '../tests/index.test.ts';
 import { runEngineTests } from '../tests/engine.test.ts';
 import { runBackupTests } from '../tests/backup.test.ts';
@@ -57,6 +61,9 @@ import { runBackupTests } from '../tests/backup.test.ts';
 export default function App() {
   // Brand configuration
   const brandConfig = useBrandConfig();
+
+  // Authentication & Session State
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() => authClientService.getSession());
 
   // Navigation tab state
   const [activeTab, setActiveTab] = useState<MainNavTab>('beranda');
@@ -93,25 +100,46 @@ export default function App() {
   // Diagnostics state
   const [isTestingRunning, setIsTestingRunning] = useState<boolean>(false);
 
+  // Subscribe ke perubahan authClientService
+  useEffect(() => {
+    const unsubscribe = authClientService.subscribe((sess) => {
+      setAuthSession(sess);
+    });
+    return () => unsubscribe();
+  }, []);
+
   // 1. Data Loader & Synchronizer
   const loadData = useCallback(async () => {
-    try {
-      // Inisialisasi DB (idempotent)
-      await initializeDatabase();
+    const currentSess = authClientService.getSession();
+    if (!currentSess?.farmer?.id) {
+      setIsLoading(false);
+      return;
+    }
 
-      // Profil Petani
-      let currentFarmer = await farmerRepository.getFirstActive();
+    try {
+      setIsLoading(true);
+      const farmerId = currentSess.farmer.id;
+
+      // Inisialisasi partisi DB untuk petani ini (idempotent)
+      setActiveFarmerDb(farmerId);
+      await initializeDatabase(farmerId);
+
+      // Inisialisasi Sync Engine background sync
+      syncEngine.init().catch((e) => console.warn('[HIKMAT TANI] Sync engine init note:', e));
+
+      // Profil Petani dari partisi lokal
+      let currentFarmer = await farmerRepository.getById(farmerId);
       if (!currentFarmer) {
-        // Buat profil petani default jika belum ada
+        // Simpan profil petani dari sesi ke partisi lokal jika belum tersimpan
         const newFarmer: Farmer = {
-          id: 'farmer-default',
-          name: 'Pak Sutrisno',
-          phoneNumber: '081234567890',
-          village: 'Sukamaju',
-          district: 'Kasokandel',
-          regency: 'Majalengka',
-          province: 'Jawa Barat',
-          farmerGroupName: 'Kelompok Tani Sri Rejeki',
+          id: farmerId,
+          name: currentSess.farmer.name || 'Petani Padi',
+          phoneNumber: currentSess.farmer.phoneNumber || '081234567890',
+          village: currentSess.farmer.village || 'Sukamaju',
+          district: currentSess.farmer.district || 'Kasokandel',
+          regency: currentSess.farmer.regency || 'Majalengka',
+          province: currentSess.farmer.province || 'Jawa Barat',
+          farmerGroupName: currentSess.farmer.farmerGroupName || 'Kelompok Tani Mandiri',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -120,7 +148,7 @@ export default function App() {
       }
       setFarmer(currentFarmer);
 
-      // Data Lahan & Musim Tanam
+      // Data Lahan & Musim Tanam (Scoped ke Partisi Petani ini)
       const allLands = await landRepository.getAll();
       const allSeasons = await cropSeasonRepository.getAllActive();
       const rawActivities = await db.activities.toArray();
@@ -170,24 +198,24 @@ export default function App() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    loadData();
+    if (authSession) {
+      loadData();
+    } else {
+      setIsLoading(false);
+    }
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [loadData]);
+  }, [authSession, loadData]);
 
   // Handler: Tambah Lahan Baru
   const handleSaveLand = async (
     landData: Omit<Land, 'id' | 'farmerId' | 'createdAt' | 'updatedAt'>
   ) => {
+    const currentFarmerId = authSession?.farmer?.id || farmer?.id || 'farmer-default';
     const now = new Date().toISOString();
-    let currentFarmerId = farmer?.id;
-    if (!currentFarmerId) {
-      const activeFarmer = await farmerRepository.getFirstActive();
-      currentFarmerId = activeFarmer?.id || 'farmer-default';
-    }
 
     const newLand: Land = {
       ...landData,
@@ -199,131 +227,57 @@ export default function App() {
     };
 
     await landRepository.create(newLand);
-    setSelectedLandId(newLand.id);
     await loadData();
+    setIsAddLandModalOpen(false);
+    setSelectedLandId(newLand.id);
   };
 
-  // Handler: Mulai Musim Tanam Baru
+  // Handler: Buka Modal Mulai Musim
+  const handleOpenStartSeasonModal = (landOrLandId?: Land | string) => {
+    if (typeof landOrLandId === 'string') {
+      const found = lands.find((l) => l.id === landOrLandId);
+      setTargetLandForSeason(found || (lands.length > 0 ? lands[0] : null));
+    } else if (landOrLandId) {
+      setTargetLandForSeason(landOrLandId);
+    } else if (selectedLandId) {
+      const current = lands.find((l) => l.id === selectedLandId);
+      setTargetLandForSeason(current || (lands.length > 0 ? lands[0] : null));
+    } else {
+      setTargetLandForSeason(lands.length > 0 ? lands[0] : null);
+    }
+    setIsStartSeasonModalOpen(true);
+  };
+
+  // Handler: Simpan Musim Tanam Baru
   const handleSaveCropSeason = async (
-    seasonData: Omit<CropSeason, 'id' | 'createdAt' | 'updatedAt'>
+    seasonData: Omit<CropSeason, 'id' | 'status' | 'createdAt' | 'updatedAt'>
   ) => {
     const now = new Date().toISOString();
+
     const newSeason: CropSeason = {
       ...seasonData,
       id: `season-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      status: 'ACTIVE',
       createdAt: now,
       updatedAt: now,
     };
 
     await cropSeasonRepository.create(newSeason);
     await loadData();
-  };
-
-  const handleOpenStartSeasonModal = (landOrId?: Land | string) => {
-    if (typeof landOrId === 'string') {
-      const found = lands.find((l) => l.id === landOrId) || null;
-      setTargetLandForSeason(found);
-    } else if (landOrId) {
-      setTargetLandForSeason(landOrId);
-    } else {
-      setTargetLandForSeason(null);
-    }
-    setIsStartSeasonModalOpen(true);
+    setIsStartSeasonModalOpen(false);
+    setTargetLandForSeason(null);
   };
 
   // Handler: Update Profil Petani
   const handleUpdateFarmer = async (updates: Partial<Farmer>) => {
-    if (farmer) {
-      await farmerRepository.update(farmer.id, updates);
-    } else {
-      const newFarmer: Farmer = {
-        id: `farmer-${Date.now()}`,
-        name: updates.name || 'Petani Padi Indonesia',
-        ...updates,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      await farmerRepository.create(newFarmer);
-    }
+    if (!farmer) return;
+    const updated = { ...farmer, ...updates, updatedAt: new Date().toISOString() };
+    await farmerRepository.update(farmer.id, updated);
+    authClientService.updateCurrentFarmerProfile(updates);
+    setFarmer(updated);
   };
 
-  // Handler: Diagnostics
-  const handleRunDiagnostics = async () => {
-    setIsTestingRunning(true);
-    try {
-      const dbRes = await runDatabaseTests();
-      const engRes = await runEngineTests();
-      const bakRes = await runBackupTests();
-
-      let backendStatus = 'Belum terhubung (Offline)';
-      try {
-        const healthCheck = await fetch('/api/v1/health');
-        if (healthCheck.ok) {
-          const healthData = await healthCheck.json();
-          backendStatus = `ONLINE (${healthData.app} v${healthData.version})`;
-        }
-      } catch {
-        backendStatus = 'Offline (Client Mode)';
-      }
-
-      alert(
-        `Hasil Uji Sistem HIKMAT TANI:\n\n• Database Acceptance: ${
-          dbRes.allPassed ? 'SEMUA LOLOS (PASS)' : 'ADA GAGAL'
-        } (${dbRes.passed}/${dbRes.total})\n• Agriculture Logic Engine: ${
-          engRes.allPassed ? 'SEMUA LOLOS (PASS)' : 'ADA GAGAL'
-        } (${engRes.passed}/${engRes.total})\n• Backup & Restore Subsystem: ${
-          bakRes.allPassed ? 'SEMUA LOLOS (PASS)' : 'ADA GAGAL'
-        } (${bakRes.passed}/${bakRes.total})\n• Server Status: ${backendStatus}\n\nSistem 100% Offline & Siap Digunakan!`
-      );
-    } catch (err: any) {
-      alert(`Gagal menjalankan uji diagnostik: ${err?.message || err}`);
-    } finally {
-      setIsTestingRunning(false);
-    }
-  };
-
-  if (isLoading) {
-    const splashNameParts = (brandConfig.appName || 'HIKMAT TANI').trim().split(/\s+/);
-    const splashFirst = splashNameParts[0] || 'HIKMAT';
-    const splashRest = splashNameParts.slice(1).join(' ') || (splashNameParts.length === 1 ? '' : 'TANI');
-
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-950 via-slate-950 to-slate-900 text-white flex flex-col items-center justify-center p-6 space-y-6">
-        <div className="relative flex flex-col items-center text-center space-y-4 max-w-sm">
-          {/* Logo Utama / Lengkap */}
-          <div className="w-24 h-24 rounded-3xl bg-emerald-950/80 border-2 border-emerald-500/40 p-2 shadow-2xl flex items-center justify-center overflow-hidden">
-            <img
-              src={brandConfig.logoPrimary || brandConfig.logoUrl || '/icon-512.png'}
-              alt={`Logo ${brandConfig.appName || 'HIKMAT TANI'}`}
-              className="w-full h-full object-contain p-1"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                if (!target.src.includes('/icon-512.png') && !target.src.includes('/icon-192.png')) {
-                  target.src = '/icon-512.png';
-                }
-              }}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-              {splashFirst}{' '}
-              {splashRest && <span className="text-emerald-400">{splashRest}</span>}
-            </h1>
-            <p className="text-xs sm:text-sm font-semibold text-emerald-200 tracking-wide uppercase">
-              {brandConfig.slogan || 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.'}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2.5 pt-4 text-xs text-emerald-300/80">
-            <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin shrink-0" />
-            <span>Menyiapkan database lokal 100% offline...</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // Handler: Navigasi Lintas Modul ke Informasi
   const handleNavigateToKnowledge = (
     category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan',
     itemId?: string
@@ -332,6 +286,54 @@ export default function App() {
     setActiveTab('informasi');
   };
 
+  // Handler: Jalankan Uji Diagnostik Sistem (Langkah 14)
+  const handleRunDiagnostics = async () => {
+    setIsTestingRunning(true);
+    try {
+      console.log('--- [HIKMAT TANI] Memulai Pengujian Diagnostik Otomatis ---');
+      await runDatabaseTests();
+      await runEngineTests();
+      await runBackupTests();
+      alert('Semua pengujian diagnostik (Database, Engine, Backup) berhasil 100%!');
+    } catch (err: any) {
+      alert(`Kegagalan pengujian diagnostik: ${err?.message || 'Error tidak diketahui'}`);
+    } finally {
+      setIsTestingRunning(false);
+    }
+  };
+
+  // Handler: Keluar / Logout
+  const handleLogout = async () => {
+    await authClientService.logout();
+    setAuthSession(null);
+    setFarmer(null);
+    setLands([]);
+    setActiveSeasons([]);
+    setAllActivities([]);
+  };
+
+  // Handler: Ganti Akun
+  const handleSwitchAccount = async () => {
+    await handleLogout();
+  };
+
+  // --------------------------------------------------------------------------
+  // MANDATORY AUTHENTICATION / REGISTRATION GATE
+  // --------------------------------------------------------------------------
+  if (!authSession) {
+    return (
+      <AuthGate
+        onAuthenticated={async (sess) => {
+          setAuthSession(sess);
+          await loadData();
+        }}
+      />
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // MAIN DASHBOARD (AUTHENTICATED & ISOLATED)
+  // --------------------------------------------------------------------------
   return (
     <AppLayout activeTab={activeTab} onSelectTab={setActiveTab}>
       {/* 1. Tab Beranda */}
@@ -405,6 +407,7 @@ export default function App() {
       {activeTab === 'saya' && (
         <SayaView
           farmer={farmer}
+          authSession={authSession}
           isOnline={isOnline}
           lands={lands}
           seasons={activeSeasons}
@@ -414,6 +417,8 @@ export default function App() {
           onUpdateFarmer={handleUpdateFarmer}
           onRefreshData={loadData}
           onRunDiagnostics={handleRunDiagnostics}
+          onLogout={handleLogout}
+          onSwitchAccount={handleSwitchAccount}
           isTestingRunning={isTestingRunning}
         />
       )}

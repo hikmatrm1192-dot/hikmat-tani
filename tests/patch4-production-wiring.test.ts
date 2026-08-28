@@ -195,7 +195,7 @@ export async function runProductionWiringTests(): Promise<{
     }
 
     const res = await durableOutboxConsumer.processClaimedRecord(expiredRecord);
-    if (expiredRecord.status !== 'COMPLETED') {
+    if ((expiredRecord.status as string) !== 'COMPLETED') {
       throw new Error(`Expired record gagal diselesaikan: ${expiredRecord.status}, error: ${expiredRecord.lastError}`);
     }
   });
