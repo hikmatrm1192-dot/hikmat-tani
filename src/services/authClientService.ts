@@ -94,6 +94,20 @@ export class AuthClientService {
   }
 
   /**
+   * Alias untuk getActiveFarmerId
+   */
+  public getCurrentFarmerId(): string | null {
+    return this.getActiveFarmerId();
+  }
+
+  /**
+   * Cek apakah ada sesi aktif yang valid
+   */
+  public isAuthenticated(): boolean {
+    return Boolean(this.getToken() && this.getActiveFarmerId());
+  }
+
+  /**
    * Berlangganan perubahan status login/logout
    */
   public subscribe(listener: (session: AuthSession | null) => void): () => void {
@@ -193,17 +207,36 @@ export class AuthClientService {
 
       const data = await resp.json().catch(() => ({}));
 
-      if (!resp.ok) {
+      // Ekstrak pesan error yang informatif dari berbagai kemungkinan struktur respon
+      const extractedError =
+        data?.error?.message ||
+        data?.message ||
+        (typeof data?.error === 'string' ? data.error : null);
+
+      if (!resp.ok || data?.success === false) {
         return {
           success: false,
-          error: data?.error?.message || `Registrasi gagal (HTTP ${resp.status})`,
+          error: extractedError || `Registrasi gagal (HTTP ${resp.status})`,
+        };
+      }
+
+      // Dukung struktur respon bersarang (data.data) maupun datar (data)
+      const payload = data?.data && typeof data.data === 'object' ? data.data : data;
+      const token = payload?.token;
+      const farmer = payload?.farmer;
+      const user = payload?.user || (farmer?.id ? { id: `usr_${farmer.id}`, role: farmer?.role || 'farmer', isAnonymous: false } : undefined);
+
+      if (!token || !farmer?.id) {
+        return {
+          success: false,
+          error: extractedError || 'Respon pendaftaran dari server tidak memuat kredensial sesi yang valid.',
         };
       }
 
       const session: AuthSession = {
-        token: data.data.token,
-        user: data.data.user,
-        farmer: data.data.farmer,
+        token,
+        user: user!,
+        farmer,
       };
 
       await this.persistSession(session);
@@ -234,17 +267,34 @@ export class AuthClientService {
 
       const data = await resp.json().catch(() => ({}));
 
-      if (!resp.ok) {
+      const extractedError =
+        data?.error?.message ||
+        data?.message ||
+        (typeof data?.error === 'string' ? data.error : null);
+
+      if (!resp.ok || data?.success === false) {
         return {
           success: false,
-          error: data?.error?.message || `Login gagal: NIK/Nomor HP atau PIN salah`,
+          error: extractedError || `Login gagal: NIK/Nomor HP atau PIN salah`,
+        };
+      }
+
+      const payload = data?.data && typeof data.data === 'object' ? data.data : data;
+      const token = payload?.token;
+      const farmer = payload?.farmer;
+      const user = payload?.user || (farmer?.id ? { id: `usr_${farmer.id}`, role: farmer?.role || 'farmer', isAnonymous: false } : undefined);
+
+      if (!token || !farmer?.id) {
+        return {
+          success: false,
+          error: extractedError || 'Respon login dari server tidak memuat token sesi yang valid.',
         };
       }
 
       const session: AuthSession = {
-        token: data.data.token,
-        user: data.data.user,
-        farmer: data.data.farmer,
+        token,
+        user: user!,
+        farmer,
       };
 
       await this.persistSession(session);
