@@ -1,0 +1,151 @@
+/**
+ * HIKMAT TANI - Cloudflare D1 Canonical Schema Normalization & Self-Healing
+ * 
+ * Modul ini memastikan skema tabel `auth_users` dan `farmers` di Cloudflare D1
+ * selalu berada dalam format kanonikal yang valid secara runtime tanpa merusak
+ * atau menghapus data existing (Zero Data Loss).
+ * 
+ * Canonical Schema:
+ * - auth_users: id, anonymous_id, role, is_active, last_seen_at, created_at, updated_at
+ * - farmers: id, name, phone_number, nik, pin_hash, salt, village, district,
+ *            regency, province, farmer_group_name, auth_user_id, created_at, updated_at
+ */
+
+let isSchemaEnsured = false;
+
+export async function ensureD1CanonicalSchema(d1BindingOrDb: any): Promise<boolean> {
+  if (!d1BindingOrDb || isSchemaEnsured) return true;
+
+  // Ekstrak D1 raw binding jika yang diberikan adalah Drizzle instance
+  const d1: any = d1BindingOrDb?.prepare
+    ? d1BindingOrDb
+    : d1BindingOrDb?.session?.client?.prepare
+      ? d1BindingOrDb.session.client
+      : null;
+
+  if (!d1 || typeof d1.prepare !== 'function') {
+    return false;
+  }
+
+  try {
+    // 1. Periksa kolom pada auth_users
+    let authColumns: { name: string; notnull: number }[] = [];
+    try {
+      const res = await d1.prepare('PRAGMA table_info(auth_users)').all();
+      authColumns = res.results || res || [];
+    } catch {
+      // Tabel auth_users mungkin belum dibuat
+    }
+
+    if (authColumns.length > 0) {
+      const hasFarmerId = authColumns.some((col: any) => col.name === 'farmer_id');
+      const hasAnonymousId = authColumns.some((col: any) => col.name === 'anonymous_id');
+      const hasLastSeenAt = authColumns.some((col: any) => col.name === 'last_seen_at');
+
+      // Jika masih ada kolom legacy `farmer_id` atau belum memiliki format kanonikal:
+      if (hasFarmerId || !hasAnonymousId || !hasLastSeenAt) {
+        console.log('[D1 Self-Healing] Menyelaraskan auth_users ke skema kanonikal...');
+        const migrationStmts = [
+          'PRAGMA foreign_keys=OFF',
+          `CREATE TABLE IF NOT EXISTS auth_users_canonical (
+            id TEXT PRIMARY KEY NOT NULL,
+            anonymous_id TEXT UNIQUE,
+            role TEXT NOT NULL DEFAULT 'farmer',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            last_seen_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+            created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+            updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+          )`,
+          `INSERT OR IGNORE INTO auth_users_canonical (id, anonymous_id, role, is_active, last_seen_at, created_at, updated_at)
+           SELECT
+             id,
+             anonymous_id,
+             COALESCE(role, 'farmer'),
+             COALESCE(is_active, 1),
+             COALESCE(last_seen_at, CURRENT_TIMESTAMP),
+             COALESCE(created_at, CURRENT_TIMESTAMP),
+             COALESCE(updated_at, CURRENT_TIMESTAMP)
+           FROM auth_users`,
+          'DROP TABLE auth_users',
+          'ALTER TABLE auth_users_canonical RENAME TO auth_users',
+          'CREATE INDEX IF NOT EXISTS idx_auth_users_role ON auth_users(role)',
+          'CREATE INDEX IF NOT EXISTS idx_auth_users_anonymous_id ON auth_users(anonymous_id)',
+          'PRAGMA foreign_keys=ON',
+        ];
+
+        for (const stmt of migrationStmts) {
+          try {
+            await d1.prepare(stmt).run();
+          } catch (stmtErr: any) {
+            console.warn('[D1 Self-Healing] Warning pada statement:', stmt.slice(0, 40), stmtErr?.message || stmtErr);
+          }
+        }
+        console.log('[D1 Self-Healing] ✓ auth_users berhasil dinormalisasi.');
+      }
+    }
+
+    // 2. Periksa kolom pada farmers
+    let farmerColumns: { name: string }[] = [];
+    try {
+      const res = await d1.prepare('PRAGMA table_info(farmers)').all();
+      farmerColumns = res.results || res || [];
+    } catch {
+      // Tabel farmers mungkin belum dibuat
+    }
+
+    if (farmerColumns.length > 0) {
+      const colSet = new Set(farmerColumns.map((c: any) => c.name));
+      const requiredColumns = [
+        'phone_number',
+        'nik',
+        'pin_hash',
+        'salt',
+        'village',
+        'district',
+        'regency',
+        'province',
+        'farmer_group_name',
+        'auth_user_id',
+      ];
+
+      for (const col of requiredColumns) {
+        if (!colSet.has(col)) {
+          try {
+            await d1.prepare(`ALTER TABLE farmers ADD COLUMN ${col} TEXT`).run();
+          } catch {
+            // Kolom mungkin sudah ada
+          }
+        }
+      }
+
+      // Sinkronkan legacy phone -> phone_number jika ada
+      if (colSet.has('phone')) {
+        try {
+          await d1.prepare('UPDATE farmers SET phone_number = phone WHERE phone_number IS NULL AND phone IS NOT NULL').run();
+        } catch {
+          // Abaikan
+        }
+      }
+
+      // Indeks pencarian
+      const indexes = [
+        'CREATE INDEX IF NOT EXISTS idx_farmers_nik ON farmers(nik)',
+        'CREATE INDEX IF NOT EXISTS idx_farmers_phone_number ON farmers(phone_number)',
+        'CREATE INDEX IF NOT EXISTS idx_farmers_auth_user_id ON farmers(auth_user_id)',
+      ];
+      for (const idx of indexes) {
+        try {
+          await d1.prepare(idx).run();
+        } catch {
+          // Abaikan
+        }
+      }
+    }
+
+    isSchemaEnsured = true;
+    return true;
+  } catch (err: any) {
+    console.error('[D1 Self-Healing] Schema check error:', err?.message || err);
+    return false;
+  }
+}

@@ -107,3 +107,4 @@ export function createD1Client(d1Binding: any): DrizzleD1Database<typeof d1Schem
 
 export const d1DbService = D1DatabaseService.getInstance();
 export { d1Schema };
+export { ensureD1CanonicalSchema } from './ensureCanonical.ts';

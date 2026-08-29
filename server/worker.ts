@@ -4,7 +4,7 @@
  * Edge gateway for the SPA, farmer API, and admin portal.
  */
 
-import { createD1Client, d1Schema } from './db/d1/index.ts';
+import { createD1Client, d1Schema, ensureD1CanonicalSchema } from './db/d1/index.ts';
 import { durableOutboxConsumer } from './services/outboxConsumer.ts';
 import { authService } from './services/authService.ts';
 import { adminService } from './services/adminService.ts';
@@ -193,6 +193,7 @@ export default {
           return jsonResponse({ success: false, error: 'Database D1 binding (env.DB) belum terkonfigurasi pada Worker.' }, 503, corsHeaders);
         }
 
+        await ensureD1CanonicalSchema(env.DB);
         const db = createD1Client(env.DB);
 
         if (url.pathname === '/api/v1/auth/register' && request.method === 'POST') {

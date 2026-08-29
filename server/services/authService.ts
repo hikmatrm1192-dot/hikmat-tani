@@ -13,6 +13,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { config } from '../config.ts';
 import * as d1Schema from '../db/d1/schema.ts';
+import { ensureD1CanonicalSchema } from '../db/d1/index.ts';
 import { eq, or, sql } from 'drizzle-orm';
 
 export interface AuthSessionPayload {
@@ -488,13 +489,15 @@ export class AuthService {
 
     // 8. Persist ke Database D1 jika tersedia
     if (d1Db) {
+      await ensureD1CanonicalSchema(d1Db);
       let authUserInserted = false;
       let targetTable = 'auth_users';
       try {
         targetTable = 'auth_users';
-        // Insert auth_users (Hanya kolom yang ada di D1 production: id, role, is_active, last_seen_at, created_at, updated_at)
+        // Insert auth_users (Hanya kolom kanonikal: id, anonymous_id, role, is_active, last_seen_at, created_at, updated_at)
         await d1Db.insert(d1Schema.authUsers).values({
           id: authUserId,
+          anonymousId: null,
           role: 'farmer',
           isActive: true,
           lastSeenAt: now,
@@ -504,7 +507,7 @@ export class AuthService {
         authUserInserted = true;
 
         targetTable = 'farmers';
-        // Insert farmers (Hanya kolom yang ada di D1 production)
+        // Insert farmers (Kolom kanonikal: id, name, phone_number, nik, pin_hash, salt, village, district, regency, province, farmer_group_name, auth_user_id, created_at, updated_at)
         await d1Db.insert(d1Schema.farmers).values({
           id: farmerId,
           name: newAccount.name,
@@ -522,34 +525,67 @@ export class AuthService {
           updatedAt: now,
         });
       } catch (err: any) {
-        const sqliteErrorCode = err?.code || err?.cause?.code || err?.sqliteCode || (err?.message?.includes('SQLITE') ? 'SQLITE_ERROR' : undefined) || 'D1_ERROR';
-        const sqliteMessage = err?.cause?.message || err?.message || 'Database write error';
-        const errorDetail = `[TargetTable: ${targetTable}] [Code: ${sqliteErrorCode}] ${sqliteMessage}`;
-
-        console.error(`[AuthService] Gagal persist pendaftaran ke basis data D1 pada tabel '${targetTable}':`, {
-          targetTable,
-          sqliteErrorCode,
-          message: err?.message,
-          cause: err?.cause?.message || err?.cause,
-          stack: err?.stack,
-        });
-
-        // Rollback / kompensasi: hapus auth_users jika sudah terlanjur di-insert
-        if (authUserInserted) {
-          try {
-            await d1Db.delete(d1Schema.authUsers).where(eq(d1Schema.authUsers.id, authUserId));
-          } catch (cleanupErr: any) {
-            console.error('[AuthService] Rollback auth_users gagal:', cleanupErr?.message || cleanupErr);
+        // Coba self-healing skema jika terjadi schema constraint failure
+        try {
+          await ensureD1CanonicalSchema(d1Db);
+          if (!authUserInserted) {
+            await d1Db.insert(d1Schema.authUsers).values({
+              id: authUserId,
+              anonymousId: null,
+              role: 'farmer',
+              isActive: true,
+              lastSeenAt: now,
+              createdAt: now,
+              updatedAt: now,
+            });
+            authUserInserted = true;
           }
-        }
+          await d1Db.insert(d1Schema.farmers).values({
+            id: farmerId,
+            name: newAccount.name,
+            phoneNumber: cleanPhone,
+            nik: cleanNik,
+            pinHash,
+            salt,
+            village: newAccount.village,
+            district: newAccount.district,
+            regency: newAccount.regency,
+            province: newAccount.province,
+            farmerGroupName: newAccount.farmerGroupName,
+            authUserId,
+            createdAt: now,
+            updatedAt: now,
+          });
+        } catch (retryErr: any) {
+          const finalErr = retryErr || err;
+          const sqliteErrorCode = finalErr?.code || finalErr?.cause?.code || finalErr?.sqliteCode || (finalErr?.message?.includes('SQLITE') ? 'SQLITE_ERROR' : undefined) || 'D1_ERROR';
+          const sqliteMessage = finalErr?.cause?.message || finalErr?.message || 'Database write error';
+          const errorDetail = `[TargetTable: ${targetTable}] [Code: ${sqliteErrorCode}] ${sqliteMessage}`;
 
-        // Jangan simpan ke cache memori, jangan buat JWT session token, gagalkan registrasi
-        throw {
-          statusCode: 500,
-          code: 'PERSISTENCE_FAILED',
-          message: 'Pendaftaran gagal disimpan ke basis data Cloudflare D1. Silakan coba beberapa saat lagi.',
-          detail: errorDetail,
-        };
+          console.error(`[AuthService] Gagal persist pendaftaran ke basis data D1 pada tabel '${targetTable}':`, {
+            targetTable,
+            sqliteErrorCode,
+            message: finalErr?.message,
+            cause: finalErr?.cause?.message || finalErr?.cause,
+          });
+
+          // Rollback / kompensasi: hapus auth_users jika sudah terlanjur di-insert
+          if (authUserInserted) {
+            try {
+              await d1Db.delete(d1Schema.authUsers).where(eq(d1Schema.authUsers.id, authUserId));
+            } catch (cleanupErr: any) {
+              console.error('[AuthService] Rollback auth_users gagal:', cleanupErr?.message || cleanupErr);
+            }
+          }
+
+          // Jangan simpan ke cache memori, jangan buat JWT session token, gagalkan registrasi
+          throw {
+            statusCode: 500,
+            code: 'PERSISTENCE_FAILED',
+            message: 'Pendaftaran gagal disimpan ke basis data Cloudflare D1. Silakan coba beberapa saat lagi.',
+            detail: errorDetail,
+          };
+        }
       }
     }
 
