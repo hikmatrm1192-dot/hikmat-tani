@@ -519,7 +519,8 @@ export class AuthService {
           updatedAt: now,
         });
       } catch (err: any) {
-        console.error('[AuthService] Gagal persist pendaftaran ke basis data D1:', err?.message || 'Database write error');
+        const errorDetail = err?.cause?.message || err?.message || 'Database write error';
+        console.error('[AuthService] Gagal persist pendaftaran ke basis data D1:', errorDetail);
 
         // Rollback / kompensasi: hapus auth_users jika sudah terlanjur di-insert
         if (authUserInserted) {
@@ -535,6 +536,7 @@ export class AuthService {
           statusCode: 500,
           code: 'PERSISTENCE_FAILED',
           message: 'Pendaftaran gagal disimpan ke basis data Cloudflare D1. Silakan coba beberapa saat lagi.',
+          detail: errorDetail,
         };
       }
     }
