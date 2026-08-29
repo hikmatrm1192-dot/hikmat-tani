@@ -40,6 +40,6 @@ migrations_dir = "server/db/d1/migrations"
 # Environment Variables (Non-secret)
 # ==============================================================================
 [vars]
-DATABASE_PROVIDER = "postgres"
+DATABASE_PROVIDER = "d1"
 NODE_ENV = "production"
 API_VERSION = "v1"
