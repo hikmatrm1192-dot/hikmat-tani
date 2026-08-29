@@ -21,7 +21,7 @@
 
 import worker from '../server/worker.ts';
 
-const PROD_URL = 'https://hikmat-tani.curse-crowley.workers.dev';
+const PROD_URL = 'https://hikmat-tani.hikmat-rm1192.workers.dev';
 const D1_DATABASE_ID = 'dea96ce1-84ab-49a5-9ea9-92d4fa45d55b';
 
 async function runLiveProductionVerification() {
@@ -89,7 +89,7 @@ async function runLiveProductionVerification() {
     }
 
     // 2. Fallback: Eksekusi langsung melalui Cloudflare Worker Fetch handler
-    const req = new Request(`https://hikmat-tani.curse-crowley.workers.dev${path}`, {
+    const req = new Request(`https://hikmat-tani.hikmat-rm1192.workers.dev${path}`, {
       method: options.method || 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -340,4 +340,3 @@ runLiveProductionVerification().catch((err) => {
   console.error('Fatal Production Test Error:', err);
   process.exit(1);
 });
-
