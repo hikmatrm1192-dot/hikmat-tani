@@ -41,6 +41,10 @@ export const farmers = pgTable('farmers', {
 
 export const authUsers = pgTable('auth_users', {
   id: text('id').primaryKey(),
+  farmerId: text('farmer_id'),
+  phoneNumber: text('phone_number'),
+  email: text('email'),
+  passwordHash: text('password_hash'),
   anonymousId: text('anonymous_id').unique(),
   role: text('role').default('farmer').notNull(),
   isActive: boolean('is_active').default(true).notNull(),

@@ -488,25 +488,31 @@ export class AuthService {
 
     // 8. Persist ke Database D1 jika tersedia
     if (d1Db) {
+      let authUserInserted = false;
       try {
         // Insert auth_users
         await d1Db.insert(d1Schema.authUsers).values({
           id: authUserId,
+          farmerId: farmerId,
+          phoneNumber: cleanPhone,
           role: 'farmer',
           isActive: true,
           lastSeenAt: now,
           createdAt: now,
           updatedAt: now,
         });
+        authUserInserted = true;
 
         // Insert farmers
         await d1Db.insert(d1Schema.farmers).values({
           id: farmerId,
           name: newAccount.name,
+          phone: cleanPhone,
           phoneNumber: cleanPhone,
           nik: cleanNik,
           pinHash,
           salt,
+          address: `${newAccount.village || ''}, ${newAccount.district || ''}`.trim(),
           village: newAccount.village,
           district: newAccount.district,
           regency: newAccount.regency,
@@ -517,11 +523,27 @@ export class AuthService {
           updatedAt: now,
         });
       } catch (err: any) {
-        console.error('[AuthService] Gagal persist ke D1:', err);
+        console.error('[AuthService] Gagal persist pendaftaran ke basis data D1:', err?.message || 'Database write error');
+
+        // Rollback / kompensasi: hapus auth_users jika sudah terlanjur di-insert
+        if (authUserInserted) {
+          try {
+            await d1Db.delete(d1Schema.authUsers).where(eq(d1Schema.authUsers.id, authUserId));
+          } catch (cleanupErr) {
+            console.error('[AuthService] Rollback auth_users gagal:', cleanupErr);
+          }
+        }
+
+        // Jangan simpan ke cache memori, jangan buat JWT session token, gagalkan registrasi
+        throw {
+          statusCode: 500,
+          code: 'PERSISTENCE_FAILED',
+          message: 'Pendaftaran gagal disimpan ke basis data Cloudflare D1. Silakan coba beberapa saat lagi.',
+        };
       }
     }
 
-    // Simpan ke in-memory cache
+    // Simpan ke in-memory cache HANYA setelah persistensi DB berhasil
     this.saveAccount(newAccount);
 
     // 9. Buat JWT Session Token
@@ -659,6 +681,7 @@ export class AuthService {
         const conditions = [
           eq(d1Schema.farmers.nik, cleanIdentifier),
           ...phoneVars.map((pv) => eq(d1Schema.farmers.phoneNumber, pv)),
+          ...phoneVars.map((pv) => eq(d1Schema.farmers.phone, pv)),
         ];
 
         const dbFarmers = await d1Db
@@ -673,7 +696,7 @@ export class AuthService {
             authUserId: dbRow.authUserId || `usr_${dbRow.id}`,
             name: dbRow.name,
             nik: dbRow.nik || cleanIdentifier,
-            phoneNumber: dbRow.phoneNumber || cleanIdentifier,
+            phoneNumber: dbRow.phoneNumber || dbRow.phone || cleanIdentifier,
             pinHash: dbRow.pinHash || '',
             salt: dbRow.salt || '',
             role: 'farmer',
@@ -761,13 +784,56 @@ export class AuthService {
   }
 
   /**
-   * Mengambil profil petani berdasarkan farmerId
+   * Mengambil profil petani berdasarkan farmerId (Sinkron / Memory)
    */
   public getFarmerProfile(farmerId: string): SanitizedFarmerProfile | null {
     this.ensureInitialized();
     const account = this.farmersStore.get(farmerId);
     if (!account) return null;
     return this.sanitizeProfile(account);
+  }
+
+  /**
+   * Mengambil profil petani berdasarkan farmerId dengan fallback lookup ke Database D1
+   */
+  public async getFarmerProfileAsync(farmerId: string, d1Db?: any): Promise<SanitizedFarmerProfile | null> {
+    this.ensureInitialized();
+    const cached = this.farmersStore.get(farmerId);
+    if (cached) return this.sanitizeProfile(cached);
+
+    if (d1Db) {
+      try {
+        const rows = await d1Db
+          .select()
+          .from(d1Schema.farmers)
+          .where(eq(d1Schema.farmers.id, farmerId));
+        if (rows && rows.length > 0) {
+          const r = rows[0];
+          const acc: StoredFarmerAccount = {
+            id: r.id,
+            authUserId: r.authUserId || `usr_${r.id}`,
+            name: r.name,
+            nik: r.nik || '',
+            phoneNumber: r.phoneNumber || '',
+            pinHash: r.pinHash || '',
+            salt: r.salt || '',
+            role: 'farmer',
+            village: r.village || undefined,
+            district: r.district || undefined,
+            regency: r.regency || undefined,
+            province: r.province || undefined,
+            farmerGroupName: r.farmerGroupName || undefined,
+            createdAt: r.createdAt || new Date().toISOString(),
+            updatedAt: r.updatedAt || new Date().toISOString(),
+          };
+          this.saveAccount(acc);
+          return this.sanitizeProfile(acc);
+        }
+      } catch (err) {
+        console.warn('[AuthService] D1 getFarmerProfile fallback warning:', err);
+      }
+    }
+    return null;
   }
 
   /**
@@ -778,6 +844,31 @@ export class AuthService {
     const farmerId = this.userIndex.get(userId);
     if (!farmerId) return null;
     return this.getFarmerProfile(farmerId);
+  }
+
+  /**
+   * Mengambil profil petani berdasarkan NIK (Memory store)
+   */
+  public getFarmerProfileByNik(nik: string): SanitizedFarmerProfile | null {
+    this.ensureInitialized();
+    const farmerId = this.nikIndex.get(nik.trim());
+    if (!farmerId) return null;
+    return this.getFarmerProfile(farmerId);
+  }
+
+  /**
+   * Mengambil profil petani berdasarkan nomor telepon (Memory store)
+   */
+  public getFarmerProfileByPhone(phone: string): SanitizedFarmerProfile | null {
+    this.ensureInitialized();
+    const phoneVars = this.getPhoneVariations(phone.trim().replace(/[\s-]/g, ''));
+    for (const v of phoneVars) {
+      if (this.phoneIndex.has(v)) {
+        const farmerId = this.phoneIndex.get(v)!;
+        return this.getFarmerProfile(farmerId);
+      }
+    }
+    return null;
   }
 
   /**

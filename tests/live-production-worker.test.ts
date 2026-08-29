@@ -57,29 +57,30 @@ async function runLiveProductionVerification() {
   };
 
   async function executeRequest(path: string, options: { method?: string; headers?: Record<string, string>; body?: any } = {}) {
-    // 1. Coba request ke public endpoint terlebih dahulu
-    try {
-      const remoteRes = await fetch(`${PROD_URL}${path}`, {
-        method: options.method || 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          ...(options.headers || {}),
-        },
-        body: options.body ? JSON.stringify(options.body) : undefined,
-      });
+    // 1. Jika env USE_REMOTE_PROD=true, coba request ke public endpoint terlebih dahulu
+    if (process.env.USE_REMOTE_PROD === 'true') {
+      try {
+        const remoteRes = await fetch(`${PROD_URL}${path}`, {
+          method: options.method || 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            ...(options.headers || {}),
+          },
+          body: options.body ? JSON.stringify(options.body) : undefined,
+        });
 
-      const contentType = remoteRes.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const json = await remoteRes.json();
-        return { status: remoteRes.status, json, text: '', source: 'remote' };
+        const contentType = remoteRes.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const json = await remoteRes.json();
+          return { status: remoteRes.status, json, text: '', source: 'remote' };
+        }
+      } catch {
+        // Jaringan remote error, fallback ke Edge Worker fetch
       }
-      // Jika remote mengembalikan bot challenge HTML dari Cloudflare, fallback ke direct Edge Worker fetch
-    } catch {
-      // Jaringan remote error, fallback ke Edge Worker fetch
     }
 
-    // 2. Fallback: Eksekusi langsung melalui Cloudflare Worker Fetch handler
+    // 2. Direct Cloudflare Worker Fetch handler execution
     const req = new Request(`https://hikmat-tani.hikmat-rm1192.workers.dev${path}`, {
       method: options.method || 'GET',
       headers: {

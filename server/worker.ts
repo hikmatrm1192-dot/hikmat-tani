@@ -236,7 +236,7 @@ export default {
           if (!user) {
             return jsonResponse({ success: false, error: { code: 'INVALID_TOKEN', message: 'Token tidak valid atau kedaluwarsa' } }, 401, corsHeaders);
           }
-          const profile = authService.getFarmerProfile(user.farmerId) || {
+          const profile = (await authService.getFarmerProfileAsync(user.farmerId, db)) || {
             id: user.farmerId,
             name: user.name || 'Petani Padi Indonesia',
             nikMasked: '3210********0001',

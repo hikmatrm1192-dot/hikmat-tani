@@ -103,6 +103,18 @@ class InMemoryD1PreparedStatement {
 
   public async raw(): Promise<any[][]> {
     const results = await this.execute();
+    const selectMatch = this.query.trim().match(/^SELECT\s+([\s\S]+?)\s+FROM/i);
+    if (selectMatch && selectMatch[1] && selectMatch[1].trim() !== '*') {
+      const selectCols = selectMatch[1]
+        .split(',')
+        .map((c) => {
+          const parts = c.trim().split(/\s+as\s+/i);
+          const colWithTable = parts[0].trim().replace(/[`"]/g, '');
+          const dotIdx = colWithTable.lastIndexOf('.');
+          return dotIdx >= 0 ? colWithTable.slice(dotIdx + 1) : colWithTable;
+        });
+      return results.map((row) => selectCols.map((col) => (row[col] !== undefined ? row[col] : null)));
+    }
     return results.map((row) => Object.values(row));
   }
 
@@ -120,11 +132,21 @@ class InMemoryD1PreparedStatement {
       if (match) {
         const tableName = match[1];
         const columns = match[2].split(',').map((c) => c.trim().replace(/[`"]/g, ''));
+        const valTokens = match[3].split(',').map((v) => v.trim());
         const tableMap = this.db.getTableMap(tableName);
 
         const row: Record<string, any> = {};
+        let paramIdx = 0;
         for (let i = 0; i < columns.length; i++) {
-          row[columns[i]] = this.params[i] !== undefined ? this.params[i] : null;
+          const colName = columns[i];
+          const token = valTokens[i] ? valTokens[i].toLowerCase() : '?';
+          if (token === '?') {
+            row[colName] = this.params[paramIdx++] !== undefined ? this.params[paramIdx - 1] : null;
+          } else if (token === 'null' || token === 'default') {
+            row[colName] = null;
+          } else {
+            row[colName] = valTokens[i].replace(/^['"`]|['"`]$/g, '');
+          }
         }
 
         // Determine primary key
@@ -203,8 +225,8 @@ class InMemoryD1PreparedStatement {
         } else {
           let paramIdx = 0;
 
-          // Specific filter for id = ?
-          if (/WHERE\s+[`"]?id[`"]?\s*=\s*\?/i.test(sql)) {
+          // Specific filter for id = ? (supporting optional table prefix like "auth_users"."id" = ?, without matching _id columns)
+          if (/(?:^|\s|\.)[`"]?id[`"]?\s*=\s*\?/i.test(sql) && !/(?:farmer_id|auth_user_id|operation_id|entity_id|anonymous_id)\s*=/i.test(sql)) {
             const targetId = this.params[paramIdx++];
             rows = rows.filter((r) => String(r.id) === String(targetId));
           }
