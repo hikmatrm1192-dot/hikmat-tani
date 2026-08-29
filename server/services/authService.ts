@@ -489,7 +489,9 @@ export class AuthService {
     // 8. Persist ke Database D1 jika tersedia
     if (d1Db) {
       let authUserInserted = false;
+      let targetTable = 'auth_users';
       try {
+        targetTable = 'auth_users';
         // Insert auth_users (Hanya kolom yang ada di D1 production: id, role, is_active, last_seen_at, created_at, updated_at)
         await d1Db.insert(d1Schema.authUsers).values({
           id: authUserId,
@@ -501,6 +503,7 @@ export class AuthService {
         });
         authUserInserted = true;
 
+        targetTable = 'farmers';
         // Insert farmers (Hanya kolom yang ada di D1 production)
         await d1Db.insert(d1Schema.farmers).values({
           id: farmerId,
@@ -519,15 +522,24 @@ export class AuthService {
           updatedAt: now,
         });
       } catch (err: any) {
-        const errorDetail = err?.cause?.message || err?.message || 'Database write error';
-        console.error('[AuthService] Gagal persist pendaftaran ke basis data D1:', errorDetail);
+        const sqliteErrorCode = err?.code || err?.cause?.code || err?.sqliteCode || (err?.message?.includes('SQLITE') ? 'SQLITE_ERROR' : undefined) || 'D1_ERROR';
+        const sqliteMessage = err?.cause?.message || err?.message || 'Database write error';
+        const errorDetail = `[TargetTable: ${targetTable}] [Code: ${sqliteErrorCode}] ${sqliteMessage}`;
+
+        console.error(`[AuthService] Gagal persist pendaftaran ke basis data D1 pada tabel '${targetTable}':`, {
+          targetTable,
+          sqliteErrorCode,
+          message: err?.message,
+          cause: err?.cause?.message || err?.cause,
+          stack: err?.stack,
+        });
 
         // Rollback / kompensasi: hapus auth_users jika sudah terlanjur di-insert
         if (authUserInserted) {
           try {
             await d1Db.delete(d1Schema.authUsers).where(eq(d1Schema.authUsers.id, authUserId));
-          } catch (cleanupErr) {
-            console.error('[AuthService] Rollback auth_users gagal:', cleanupErr);
+          } catch (cleanupErr: any) {
+            console.error('[AuthService] Rollback auth_users gagal:', cleanupErr?.message || cleanupErr);
           }
         }
 

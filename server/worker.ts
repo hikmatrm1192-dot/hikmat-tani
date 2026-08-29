@@ -214,7 +214,22 @@ export default {
             );
             return jsonResponse({ success: true, message: 'Pendaftaran identitas petani berhasil', data: result }, 201, corsHeaders);
           } catch (err: any) {
-            return jsonResponse({ success: false, error: { code: err.code || 'REGISTRATION_ERROR', message: err.message || 'Terjadi kesalahan saat pendaftaran' } }, err.statusCode || 400, corsHeaders);
+            console.error('[Worker POST /api/v1/auth/register Error]', {
+              statusCode: err?.statusCode || 400,
+              code: err?.code || 'REGISTRATION_ERROR',
+              message: err?.message || 'Terjadi kesalahan saat pendaftaran',
+              detail: err?.detail,
+              cause: err?.cause,
+              stack: err?.stack,
+            });
+            return jsonResponse({
+              success: false,
+              error: {
+                code: err.code || 'REGISTRATION_ERROR',
+                message: err.message || 'Terjadi kesalahan saat pendaftaran',
+                ...(err.detail ? { detail: err.detail } : {}),
+              },
+            }, err.statusCode || 400, corsHeaders);
           }
         }
 

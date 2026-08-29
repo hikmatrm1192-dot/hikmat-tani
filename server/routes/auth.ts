@@ -40,12 +40,21 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
       data: result,
     });
   } catch (err: any) {
+    console.error('[POST /api/v1/auth/register] Registration failed:', {
+      statusCode: err.statusCode || 500,
+      code: err.code || 'REGISTRATION_ERROR',
+      message: err.message,
+      detail: err.detail,
+      cause: err.cause,
+      stack: err.stack,
+    });
     if (err.statusCode) {
       return res.status(err.statusCode).json({
         success: false,
         error: {
           code: err.code || 'REGISTRATION_ERROR',
           message: err.message,
+          ...(err.detail ? { detail: err.detail } : {}),
         },
       });
     }
