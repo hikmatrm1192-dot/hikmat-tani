@@ -20,6 +20,7 @@
  */
 
 import worker from '../server/worker.ts';
+import { InMemoryD1Database } from '../server/db/d1/testD1.ts';
 
 const PROD_URL = 'https://hikmat-tani.hikmat-rm1192.workers.dev';
 const D1_DATABASE_ID = 'dea96ce1-84ab-49a5-9ea9-92d4fa45d55b';
@@ -46,21 +47,11 @@ async function runLiveProductionVerification() {
     }
   }
 
-  // Helper untuk memanggil Edge Worker fetch handler
-  const mockD1Store = new Map<string, any[]>();
+  // Helper untuk memanggil Edge Worker fetch handler dengan in-memory D1 database yang kompatibel
+  const d1MockInstance = new InMemoryD1Database();
   const mockEnv: any = {
-    DB: {
-      database_id: D1_DATABASE_ID,
-      database_name: 'hikmat-tani-db',
-      prepare: (query: string) => ({
-        bind: (...params: any[]) => ({
-          all: async () => ({ results: [] }),
-          first: async () => null,
-          run: async () => ({ success: true, meta: { changes: 1 } }),
-        }),
-      }),
-    },
-    DATABASE_PROVIDER: 'postgres',
+    DB: d1MockInstance,
+    DATABASE_PROVIDER: 'd1',
     API_VERSION: 'v1',
     NODE_ENV: 'production',
   };

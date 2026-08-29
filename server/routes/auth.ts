@@ -22,7 +22,7 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
       farmerGroupName,
     } = req.body;
 
-    const result = authService.registerFarmer({
+    const result = await authService.registerFarmerAsync({
       name,
       nik,
       phoneNumber,
@@ -62,7 +62,7 @@ router.post('/login', async (req: Request, res: Response, next: NextFunction) =>
     const { identifier, nik, phoneNumber, pin } = req.body;
     const cleanIdentifier = identifier || nik || phoneNumber;
 
-    const result = authService.loginFarmer({
+    const result = await authService.loginFarmerAsync({
       identifier: cleanIdentifier,
       pin,
     });

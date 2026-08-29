@@ -194,37 +194,51 @@ class InMemoryD1PreparedStatement {
 
       // Check WHERE conditions
       if (/WHERE/i.test(sql)) {
-        let paramIdx = 0;
+        // Cek apakah query melibatkan tabel farmers dengan pencarian NIK atau Nomor HP (termasuk klausa OR)
+        if (tableName === 'farmers' && (/nik/i.test(sql) || /phone_number/i.test(sql))) {
+          const matchParams = this.params.map(String);
+          rows = rows.filter((r) => {
+            return matchParams.includes(String(r.nik)) || matchParams.includes(String(r.phone_number));
+          });
+        } else {
+          let paramIdx = 0;
 
-        // Specific filter for id = ?
-        if (/WHERE\s+[`"]?id[`"]?\s*=\s*\?/i.test(sql)) {
-          const targetId = this.params[paramIdx++];
-          rows = rows.filter((r) => String(r.id) === String(targetId));
-        }
+          // Specific filter for id = ?
+          if (/WHERE\s+[`"]?id[`"]?\s*=\s*\?/i.test(sql)) {
+            const targetId = this.params[paramIdx++];
+            rows = rows.filter((r) => String(r.id) === String(targetId));
+          }
 
-        // Specific filter for operation_id
-        if (/operation_id["`]?\s*=\s*\?/i.test(sql)) {
-          const targetOpId = this.params[paramIdx++];
-          rows = rows.filter((r) => r.operation_id === targetOpId);
-        }
+          // Specific filter for auth_user_id = ?
+          if (/auth_user_id["`]?\s*=\s*\?/i.test(sql)) {
+            const targetAuthId = this.params[paramIdx++];
+            rows = rows.filter((r) => r.auth_user_id === targetAuthId);
+          }
 
-        // Specific filter for entity_type and entity_id
-        if (/entity_type["`]?\s*=\s*\?/i.test(sql) && /entity_id["`]?\s*=\s*\?/i.test(sql)) {
-          const targetType = this.params[paramIdx++];
-          const targetId = this.params[paramIdx++];
-          rows = rows.filter((r) => r.entity_type === targetType && r.entity_id === targetId);
-        }
+          // Specific filter for operation_id
+          if (/operation_id["`]?\s*=\s*\?/i.test(sql)) {
+            const targetOpId = this.params[paramIdx++];
+            rows = rows.filter((r) => r.operation_id === targetOpId);
+          }
 
-        // Specific filter for farmer_id
-        if (/farmer_id["`]?\s*=\s*\?/i.test(sql)) {
-          const targetFarmer = this.params[paramIdx++];
-          rows = rows.filter((r) => r.farmer_id === targetFarmer);
-        }
+          // Specific filter for entity_type and entity_id
+          if (/entity_type["`]?\s*=\s*\?/i.test(sql) && /entity_id["`]?\s*=\s*\?/i.test(sql)) {
+            const targetType = this.params[paramIdx++];
+            const targetId = this.params[paramIdx++];
+            rows = rows.filter((r) => r.entity_type === targetType && r.entity_id === targetId);
+          }
 
-        // Specific filter for server_timestamp > ?
-        if (/server_timestamp["`]?\s*>\s*\?/i.test(sql)) {
-          const sinceVal = this.params[paramIdx++];
-          rows = rows.filter((r) => String(r.server_timestamp) > String(sinceVal));
+          // Specific filter for farmer_id
+          if (/farmer_id["`]?\s*=\s*\?/i.test(sql)) {
+            const targetFarmer = this.params[paramIdx++];
+            rows = rows.filter((r) => r.farmer_id === targetFarmer);
+          }
+
+          // Specific filter for server_timestamp > ?
+          if (/server_timestamp["`]?\s*>\s*\?/i.test(sql)) {
+            const sinceVal = this.params[paramIdx++];
+            rows = rows.filter((r) => String(r.server_timestamp) > String(sinceVal));
+          }
         }
       }
 

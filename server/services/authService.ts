@@ -12,6 +12,8 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { config } from '../config.ts';
+import * as d1Schema from '../db/d1/schema.ts';
+import { eq, or, sql } from 'drizzle-orm';
 
 export interface AuthSessionPayload {
   userId: string;
@@ -160,6 +162,32 @@ export class AuthService {
   }
 
   /**
+   * Helper untuk mendapatkan variasi representasi nomor HP (08..., 628..., +628...)
+   */
+  public getPhoneVariations(phone: string): string[] {
+    const clean = phone.trim().replace(/[\s-]/g, '');
+    const set = new Set<string>();
+    set.add(clean);
+
+    let digits = clean;
+    if (digits.startsWith('+62')) {
+      digits = digits.slice(3);
+    } else if (digits.startsWith('62')) {
+      digits = digits.slice(2);
+    } else if (digits.startsWith('0')) {
+      digits = digits.slice(1);
+    }
+
+    if (digits.length >= 8) {
+      set.add(`0${digits}`);
+      set.add(`62${digits}`);
+      set.add(`+62${digits}`);
+    }
+
+    return Array.from(set);
+  }
+
+  /**
    * Validasi Format PIN (6 digit angka)
    */
   public validatePin(pin: string): { isValid: boolean; message?: string } {
@@ -209,11 +237,20 @@ export class AuthService {
     this.saveAccount(farmerA);
   }
 
-  private saveAccount(account: StoredFarmerAccount): void {
+  public saveAccount(account: StoredFarmerAccount): void {
     this.farmersStore.set(account.id, account);
-    this.nikIndex.set(account.nik, account.id);
-    this.phoneIndex.set(account.phoneNumber.replace(/[\s-]/g, ''), account.id);
-    this.userIndex.set(account.authUserId, account.id);
+    if (account.nik) {
+      this.nikIndex.set(account.nik, account.id);
+    }
+    if (account.phoneNumber) {
+      const variations = this.getPhoneVariations(account.phoneNumber);
+      for (const v of variations) {
+        this.phoneIndex.set(v, account.id);
+      }
+    }
+    if (account.authUserId) {
+      this.userIndex.set(account.authUserId, account.id);
+    }
   }
 
   /**
@@ -229,7 +266,7 @@ export class AuthService {
   }
 
   /**
-   * Registrasi Identitas Petani Baru
+   * Registrasi Identitas Petani Baru (Sinkron - Memory)
    */
   public registerFarmer(params: RegisterFarmerParams): {
     success: boolean;
@@ -272,12 +309,15 @@ export class AuthService {
         message: 'NIK KTP ini sudah terdaftar. Silakan gunakan menu Masuk / Login.',
       };
     }
-    if (this.phoneIndex.has(cleanPhone)) {
-      throw {
-        statusCode: 409,
-        code: 'DUPLICATE_PHONE',
-        message: 'Nomor HP ini sudah terdaftar. Silakan gunakan menu Masuk / Login.',
-      };
+    const phoneVariations = this.getPhoneVariations(cleanPhone);
+    for (const v of phoneVariations) {
+      if (this.phoneIndex.has(v)) {
+        throw {
+          statusCode: 409,
+          code: 'DUPLICATE_PHONE',
+          message: 'Nomor HP ini sudah terdaftar. Silakan gunakan menu Masuk / Login.',
+        };
+      }
     }
 
     // 6. Generate Internal Identity & Password Hashing
@@ -330,7 +370,184 @@ export class AuthService {
   }
 
   /**
-   * Login Petani dengan NIK atau Nomor HP + PIN
+   * Registrasi Identitas Petani Baru dengan Persistensi Database (D1 / SQL)
+   */
+  public async registerFarmerAsync(
+    params: RegisterFarmerParams,
+    d1Db?: any
+  ): Promise<{
+    success: boolean;
+    token: string;
+    user: { id: string; role: string; isAnonymous: boolean };
+    farmer: SanitizedFarmerProfile;
+  }> {
+    this.ensureInitialized();
+
+    // 1. Validasi Nama
+    if (!params.name || params.name.trim().length < 2) {
+      throw { statusCode: 400, code: 'INVALID_NAME', message: 'Nama lengkap minimal 2 karakter' };
+    }
+
+    // 2. Validasi NIK
+    const nikCheck = this.validateNik(params.nik);
+    if (!nikCheck.isValid) {
+      throw { statusCode: 400, code: 'INVALID_NIK', message: nikCheck.message };
+    }
+    const cleanNik = params.nik.trim();
+
+    // 3. Validasi Nomor HP
+    const phoneCheck = this.validatePhone(params.phoneNumber);
+    if (!phoneCheck.isValid || !phoneCheck.normalized) {
+      throw { statusCode: 400, code: 'INVALID_PHONE', message: phoneCheck.message };
+    }
+    const cleanPhone = phoneCheck.normalized;
+
+    // 4. Validasi PIN
+    const pinCheck = this.validatePin(params.pin);
+    if (!pinCheck.isValid) {
+      throw { statusCode: 400, code: 'INVALID_PIN', message: pinCheck.message };
+    }
+
+    // 5. Cek Duplikasi di Memory Store terlebih dahulu
+    if (this.nikIndex.has(cleanNik)) {
+      throw {
+        statusCode: 409,
+        code: 'DUPLICATE_NIK',
+        message: 'NIK KTP ini sudah terdaftar. Silakan gunakan menu Masuk / Login.',
+      };
+    }
+    const phoneVariations = this.getPhoneVariations(cleanPhone);
+    for (const v of phoneVariations) {
+      if (this.phoneIndex.has(v)) {
+        throw {
+          statusCode: 409,
+          code: 'DUPLICATE_PHONE',
+          message: 'Nomor HP ini sudah terdaftar. Silakan gunakan menu Masuk / Login.',
+        };
+      }
+    }
+
+    // 6. Cek Duplikasi di Database D1 jika tersedia
+    if (d1Db) {
+      try {
+        const existingFarmers = await d1Db
+          .select()
+          .from(d1Schema.farmers)
+          .where(
+            or(
+              eq(d1Schema.farmers.nik, cleanNik),
+              eq(d1Schema.farmers.phoneNumber, cleanPhone)
+            )
+          );
+
+        if (existingFarmers && existingFarmers.length > 0) {
+          const match = existingFarmers[0];
+          if (match.nik === cleanNik) {
+            throw {
+              statusCode: 409,
+              code: 'DUPLICATE_NIK',
+              message: 'NIK KTP ini sudah terdaftar. Silakan gunakan menu Masuk / Login.',
+            };
+          }
+          throw {
+            statusCode: 409,
+            code: 'DUPLICATE_PHONE',
+            message: 'Nomor HP ini sudah terdaftar. Silakan gunakan menu Masuk / Login.',
+          };
+        }
+      } catch (err: any) {
+        if (err.statusCode === 409) throw err;
+        console.warn('[AuthService] D1 duplicate check fallback warning:', err);
+      }
+    }
+
+    // 7. Generate Internal Identity & Password Hashing
+    const now = new Date().toISOString();
+    const authUserId = `usr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const farmerId = `farmer_${authUserId}`;
+    const salt = this.generateSalt();
+    const pinHash = this.hashPin(params.pin.trim(), salt);
+
+    const newAccount: StoredFarmerAccount = {
+      id: farmerId,
+      authUserId,
+      name: params.name.trim(),
+      nik: cleanNik,
+      phoneNumber: cleanPhone,
+      pinHash,
+      salt,
+      role: 'farmer',
+      village: params.village?.trim() || 'Sukamaju',
+      district: params.district?.trim() || 'Kasokandel',
+      regency: params.regency?.trim() || 'Majalengka',
+      province: params.province?.trim() || 'Jawa Barat',
+      farmerGroupName: params.farmerGroupName?.trim() || 'Kelompok Tani Mandiri',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // 8. Persist ke Database D1 jika tersedia
+    if (d1Db) {
+      try {
+        // Insert auth_users
+        await d1Db.insert(d1Schema.authUsers).values({
+          id: authUserId,
+          role: 'farmer',
+          isActive: true,
+          lastSeenAt: now,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        // Insert farmers
+        await d1Db.insert(d1Schema.farmers).values({
+          id: farmerId,
+          name: newAccount.name,
+          phoneNumber: cleanPhone,
+          nik: cleanNik,
+          pinHash,
+          salt,
+          village: newAccount.village,
+          district: newAccount.district,
+          regency: newAccount.regency,
+          province: newAccount.province,
+          farmerGroupName: newAccount.farmerGroupName,
+          authUserId,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } catch (err: any) {
+        console.error('[AuthService] Gagal persist ke D1:', err);
+      }
+    }
+
+    // Simpan ke in-memory cache
+    this.saveAccount(newAccount);
+
+    // 9. Buat JWT Session Token
+    const sessionRes = this.generateSessionToken({
+      userId: authUserId,
+      role: 'farmer',
+      isAnonymous: false,
+      farmerId,
+      name: newAccount.name,
+      phoneNumber: cleanPhone,
+    });
+
+    return {
+      success: true,
+      token: sessionRes.token,
+      user: {
+        id: authUserId,
+        role: 'farmer',
+        isAnonymous: false,
+      },
+      farmer: this.sanitizeProfile(newAccount),
+    };
+  }
+
+  /**
+   * Login Petani dengan NIK atau Nomor HP + PIN (Sinkron - Memory)
    */
   public loginFarmer(params: LoginFarmerParams): {
     success: boolean;
@@ -349,7 +566,17 @@ export class AuthService {
     }
 
     const cleanIdentifier = params.identifier.trim().replace(/[\s-]/g, '');
-    let farmerId = this.nikIndex.get(cleanIdentifier) || this.phoneIndex.get(cleanIdentifier);
+    let farmerId = this.nikIndex.get(cleanIdentifier);
+
+    if (!farmerId) {
+      const phoneVars = this.getPhoneVariations(cleanIdentifier);
+      for (const v of phoneVars) {
+        if (this.phoneIndex.has(v)) {
+          farmerId = this.phoneIndex.get(v);
+          break;
+        }
+      }
+    }
 
     if (!farmerId) {
       throw {
@@ -397,6 +624,139 @@ export class AuthService {
         isAnonymous: false,
       },
       farmer: this.sanitizeProfile(account),
+    };
+  }
+
+  /**
+   * Login Petani dengan Persistensi Database (D1 / SQL)
+   */
+  public async loginFarmerAsync(
+    params: LoginFarmerParams,
+    d1Db?: any
+  ): Promise<{
+    success: boolean;
+    token: string;
+    user: { id: string; role: string; isAnonymous: boolean };
+    farmer: SanitizedFarmerProfile;
+  }> {
+    this.ensureInitialized();
+
+    if (!params.identifier || !params.pin) {
+      throw {
+        statusCode: 400,
+        code: 'MISSING_CREDENTIALS',
+        message: 'NIK/Nomor HP dan PIN wajib diisi',
+      };
+    }
+
+    const cleanIdentifier = params.identifier.trim().replace(/[\s-]/g, '');
+    let matchedAccount: StoredFarmerAccount | null = null;
+
+    // 1. Cari di Database D1 jika client database tersedia
+    if (d1Db) {
+      try {
+        const phoneVars = this.getPhoneVariations(cleanIdentifier);
+        const conditions = [
+          eq(d1Schema.farmers.nik, cleanIdentifier),
+          ...phoneVars.map((pv) => eq(d1Schema.farmers.phoneNumber, pv)),
+        ];
+
+        const dbFarmers = await d1Db
+          .select()
+          .from(d1Schema.farmers)
+          .where(or(...conditions));
+
+        if (dbFarmers && dbFarmers.length > 0) {
+          const dbRow = dbFarmers[0];
+          matchedAccount = {
+            id: dbRow.id,
+            authUserId: dbRow.authUserId || `usr_${dbRow.id}`,
+            name: dbRow.name,
+            nik: dbRow.nik || cleanIdentifier,
+            phoneNumber: dbRow.phoneNumber || cleanIdentifier,
+            pinHash: dbRow.pinHash || '',
+            salt: dbRow.salt || '',
+            role: 'farmer',
+            village: dbRow.village || undefined,
+            district: dbRow.district || undefined,
+            regency: dbRow.regency || undefined,
+            province: dbRow.province || undefined,
+            farmerGroupName: dbRow.farmerGroupName || undefined,
+            createdAt: dbRow.createdAt || new Date().toISOString(),
+            updatedAt: dbRow.updatedAt || new Date().toISOString(),
+          };
+
+          // Cache di in-memory store
+          this.saveAccount(matchedAccount);
+        }
+      } catch (err) {
+        console.warn('[AuthService] D1 login query fallback to memory:', err);
+      }
+    }
+
+    // 2. Fallback pencarian di Memory Store jika belum ditemukan di D1
+    if (!matchedAccount) {
+      let farmerId = this.nikIndex.get(cleanIdentifier);
+      if (!farmerId) {
+        const phoneVars = this.getPhoneVariations(cleanIdentifier);
+        for (const v of phoneVars) {
+          if (this.phoneIndex.has(v)) {
+            farmerId = this.phoneIndex.get(v);
+            break;
+          }
+        }
+      }
+
+      if (farmerId) {
+        matchedAccount = this.farmersStore.get(farmerId) || null;
+      }
+    }
+
+    if (!matchedAccount) {
+      throw {
+        statusCode: 401,
+        code: 'INVALID_CREDENTIALS',
+        message: 'NIK/Nomor HP atau PIN tidak cocok. Pastikan Anda telah terdaftar.',
+      };
+    }
+
+    // 3. Verifikasi PIN dengan PBKDF2 hash
+    if (!matchedAccount.salt || !matchedAccount.pinHash) {
+      throw {
+        statusCode: 401,
+        code: 'INVALID_CREDENTIALS',
+        message: 'Kredensial keamanan akun belum dikonfigurasi.',
+      };
+    }
+
+    const expectedHash = this.hashPin(params.pin.trim(), matchedAccount.salt);
+    if (expectedHash !== matchedAccount.pinHash) {
+      throw {
+        statusCode: 401,
+        code: 'INVALID_CREDENTIALS',
+        message: 'NIK/Nomor HP atau PIN tidak cocok. Silakan coba kembali.',
+      };
+    }
+
+    // 4. Buat JWT Session Token
+    const sessionRes = this.generateSessionToken({
+      userId: matchedAccount.authUserId,
+      role: matchedAccount.role || 'farmer',
+      isAnonymous: false,
+      farmerId: matchedAccount.id,
+      name: matchedAccount.name,
+      phoneNumber: matchedAccount.phoneNumber,
+    });
+
+    return {
+      success: true,
+      token: sessionRes.token,
+      user: {
+        id: matchedAccount.authUserId,
+        role: matchedAccount.role || 'farmer',
+        isAnonymous: false,
+      },
+      farmer: this.sanitizeProfile(matchedAccount),
     };
   }
 
@@ -531,3 +891,4 @@ export class AuthService {
 }
 
 export const authService = AuthService.getInstance();
+

@@ -198,17 +198,20 @@ export default {
         if (url.pathname === '/api/v1/auth/register' && request.method === 'POST') {
           try {
             const body = (await request.json().catch(() => ({}))) as any;
-            const result = authService.registerFarmer({
-              name: body.name,
-              nik: body.nik,
-              phoneNumber: body.phoneNumber,
-              pin: body.pin,
-              village: body.village,
-              district: body.district,
-              regency: body.regency,
-              province: body.province,
-              farmerGroupName: body.farmerGroupName,
-            });
+            const result = await authService.registerFarmerAsync(
+              {
+                name: body.name,
+                nik: body.nik,
+                phoneNumber: body.phoneNumber,
+                pin: body.pin,
+                village: body.village,
+                district: body.district,
+                regency: body.regency,
+                province: body.province,
+                farmerGroupName: body.farmerGroupName,
+              },
+              db
+            );
             return jsonResponse({ success: true, message: 'Pendaftaran identitas petani berhasil', data: result }, 201, corsHeaders);
           } catch (err: any) {
             return jsonResponse({ success: false, error: { code: err.code || 'REGISTRATION_ERROR', message: err.message || 'Terjadi kesalahan saat pendaftaran' } }, err.statusCode || 400, corsHeaders);
@@ -218,7 +221,10 @@ export default {
         if (url.pathname === '/api/v1/auth/login' && request.method === 'POST') {
           try {
             const body = (await request.json().catch(() => ({}))) as any;
-            const result = authService.loginFarmer({ identifier: body.identifier || body.nik || body.phoneNumber, pin: body.pin });
+            const result = await authService.loginFarmerAsync(
+              { identifier: body.identifier || body.nik || body.phoneNumber, pin: body.pin },
+              db
+            );
             return jsonResponse({ success: true, message: 'Login berhasil', data: result }, 200, corsHeaders);
           } catch (err: any) {
             return jsonResponse({ success: false, error: { code: err.code || 'AUTH_ERROR', message: err.message || 'Login gagal' } }, err.statusCode || 400, corsHeaders);
