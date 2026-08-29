@@ -89,9 +89,9 @@ describe('HIKMAT TANI — D1 Authentication Persistence & Register Safety Test S
       .from(d1Schema.authUsers)
       .where(eq(d1Schema.authUsers.id, regResult.user.id));
     assert.strictEqual(authUserRows.length, 1, 'Data auth_user harus ada 1 di tabel auth_users');
+    assert.strictEqual(authUserRows[0].id, regResult.user.id);
     assert.strictEqual(authUserRows[0].role, 'farmer');
-    assert.strictEqual(authUserRows[0].farmerId, regResult.farmer.id);
-    assert.strictEqual(authUserRows[0].phoneNumber, '081234567802');
+    assert.strictEqual(authUserRows[0].isActive, true);
   });
 
   // TEST C: Register gagal ketika database write gagal

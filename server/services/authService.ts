@@ -490,11 +490,9 @@ export class AuthService {
     if (d1Db) {
       let authUserInserted = false;
       try {
-        // Insert auth_users
+        // Insert auth_users (Hanya kolom yang ada di D1 production: id, role, is_active, last_seen_at, created_at, updated_at)
         await d1Db.insert(d1Schema.authUsers).values({
           id: authUserId,
-          farmerId: farmerId,
-          phoneNumber: cleanPhone,
           role: 'farmer',
           isActive: true,
           lastSeenAt: now,
@@ -503,16 +501,14 @@ export class AuthService {
         });
         authUserInserted = true;
 
-        // Insert farmers
+        // Insert farmers (Hanya kolom yang ada di D1 production)
         await d1Db.insert(d1Schema.farmers).values({
           id: farmerId,
           name: newAccount.name,
-          phone: cleanPhone,
           phoneNumber: cleanPhone,
           nik: cleanNik,
           pinHash,
           salt,
-          address: `${newAccount.village || ''}, ${newAccount.district || ''}`.trim(),
           village: newAccount.village,
           district: newAccount.district,
           regency: newAccount.regency,
@@ -681,7 +677,6 @@ export class AuthService {
         const conditions = [
           eq(d1Schema.farmers.nik, cleanIdentifier),
           ...phoneVars.map((pv) => eq(d1Schema.farmers.phoneNumber, pv)),
-          ...phoneVars.map((pv) => eq(d1Schema.farmers.phone, pv)),
         ];
 
         const dbFarmers = await d1Db
@@ -696,7 +691,7 @@ export class AuthService {
             authUserId: dbRow.authUserId || `usr_${dbRow.id}`,
             name: dbRow.name,
             nik: dbRow.nik || cleanIdentifier,
-            phoneNumber: dbRow.phoneNumber || dbRow.phone || cleanIdentifier,
+            phoneNumber: dbRow.phoneNumber || cleanIdentifier,
             pinHash: dbRow.pinHash || '',
             salt: dbRow.salt || '',
             role: 'farmer',

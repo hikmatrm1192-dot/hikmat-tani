@@ -36,12 +36,10 @@ import { sql } from 'drizzle-orm';
 export const farmers = sqliteTable('farmers', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
-  phone: text('phone'),
   phoneNumber: text('phone_number'),
   nik: text('nik'),
   pinHash: text('pin_hash'),
   salt: text('salt'),
-  address: text('address'),
   village: text('village'),
   district: text('district'),
   regency: text('regency'),
@@ -54,10 +52,6 @@ export const farmers = sqliteTable('farmers', {
 
 export const authUsers = sqliteTable('auth_users', {
   id: text('id').primaryKey(),
-  farmerId: text('farmer_id'),
-  phoneNumber: text('phone_number'),
-  email: text('email'),
-  passwordHash: text('password_hash'),
   anonymousId: text('anonymous_id').unique(),
   role: text('role').default('farmer').notNull(),
   isActive: integer('is_active', { mode: 'boolean' }).default(true).notNull(),
