@@ -203,6 +203,23 @@ export async function ensureD1CanonicalSchema(d1BindingOrDb: any): Promise<boole
       }
     }
 
+    // 4. Perbaikan schema admin_users lama.
+    // CREATE TABLE IF NOT EXISTS tidak menambahkan kolom ke tabel yang sudah ada.
+    // Production D1 terbukti memiliki admin_users tanpa kolom `salt`, sehingga
+    // query login gagal sebelum proses verifikasi password dijalankan.
+    try {
+      const adminColumnsResult = await d1.prepare('PRAGMA table_info(admin_users)').all();
+      const adminColumns = adminColumnsResult.results || adminColumnsResult || [];
+      const hasSalt = adminColumns.some((col: any) => col.name === 'salt');
+
+      if (!hasSalt) {
+        await d1.prepare('ALTER TABLE admin_users ADD COLUMN salt TEXT').run();
+        console.log('[D1 Self-Healing] ✓ Kolom admin_users.salt berhasil ditambahkan.');
+      }
+    } catch (schemaErr: any) {
+      console.error('[D1 Self-Healing] Gagal memperbaiki admin_users.salt:', schemaErr?.message || schemaErr);
+    }
+
     isSchemaEnsured = true;
     return true;
   } catch (err: any) {
