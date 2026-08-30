@@ -8,6 +8,8 @@ import { createD1Client, d1Schema, ensureD1CanonicalSchema } from './db/d1/index
 import { durableOutboxConsumer } from './services/outboxConsumer.ts';
 import { authService } from './services/authService.ts';
 import { adminService } from './services/adminService.ts';
+import { authenticateAdminOnWorker } from './services/workerAdminAuth.ts';
+import { config } from './config.ts';
 
 export interface Env {
   DB: any;
@@ -36,6 +38,13 @@ function getBearerSession(request: Request) {
 export default {
   async fetch(request: Request, env: Env, _ctx: any): Promise<Response> {
     const url = new URL(request.url);
+
+    // Cloudflare Workers do not populate Node's process.env from Worker
+    // secrets. Keep the JWT service aligned with the current Worker binding
+    // for both token creation and verification, without exposing the secret.
+    if (env.JWT_SECRET) {
+      config.jwtSecret = env.JWT_SECRET;
+    }
 
     const corsHeaders: Record<string, string> = {
       'Access-Control-Allow-Origin': env.CORS_ORIGIN || '*',
@@ -87,19 +96,48 @@ export default {
             }, 400, corsHeaders);
           }
 
-          // Keep the admin service as the single source of truth with D1 persistence.
-          const result = await adminService.authenticateAdminAsync(body.username, body.password, ipAddress, db || undefined);
-          if (!result.success) {
+          if (!env.DB) {
+            return jsonResponse({
+              success: false,
+              error: { code: 'DATABASE_UNAVAILABLE', message: 'Database pengelola tidak tersedia.' },
+            }, 503, corsHeaders);
+          }
+
+          if (!env.JWT_SECRET) {
+            return jsonResponse({
+              success: false,
+              error: { code: 'JWT_SECRET_NOT_CONFIGURED', message: 'Konfigurasi keamanan sesi pengelola belum tersedia di Worker.' },
+            }, 503, corsHeaders);
+          }
+
+          // Production Cloudflare path: read SUPER_ADMIN_PASSWORD directly
+          // from Worker env, verify against the existing canonical D1 account,
+          // and repair only that account's stale password hash when necessary.
+          const result = await authenticateAdminOnWorker(
+            env.DB,
+            env,
+            body.username,
+            body.password,
+            ipAddress,
+          );
+
+          if (!result.success || !result.admin) {
             return jsonResponse({
               success: false,
               error: { code: 'INVALID_CREDENTIALS', message: result.error || 'Autentikasi pengelola gagal.' },
             }, 401, corsHeaders);
           }
 
+          const tokenResult = authService.generateSessionToken({
+            userId: result.admin.id,
+            role: result.admin.role,
+            isAnonymous: false,
+          });
+
           return jsonResponse({
             success: true,
             message: 'Login pengelola berhasil.',
-            data: { token: result.token, admin: result.admin },
+            data: { token: tokenResult.token, admin: result.admin },
           }, 200, corsHeaders);
         }
 
