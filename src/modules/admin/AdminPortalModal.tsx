@@ -55,6 +55,7 @@ import {
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal.tsx';
 import { BrandLogo } from '../../components/common/BrandLogo.tsx';
+import { resizeImageFileToBase64 } from '../../utils/imageResize.ts';
 import {
   publicConfigService,
   DEFAULT_OFFICIAL_CONFIG,
@@ -251,8 +252,8 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
     setActiveTab('identitas');
   };
 
-  // Handler: Upload Berkas Logo (Validasi format PNG, JPG/JPEG, WebP & ukuran maks 3MB)
-  const handleLogoUpload = (
+  // Handler: Upload Berkas Logo (Resize & kompresi canvas otomatis agar aman untuk D1)
+  const handleLogoUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     type: 'primary' | 'horizontal' | 'appIcon'
   ) => {
@@ -269,33 +270,51 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
       return;
     }
 
-    const maxSize = 3 * 1024 * 1024; // 3 MB
+    const maxSize = 5 * 1024 * 1024; // Maks 5 MB file mentah
     if (file.size > maxSize) {
-      setBrandUploadError(`Ukuran file (${(file.size / (1024 * 1024)).toFixed(1)} MB) terlalu besar. Maksimal 3.0 MB.`);
+      setBrandUploadError(`Ukuran file (${(file.size / (1024 * 1024)).toFixed(1)} MB) terlalu besar. Maksimal 5.0 MB.`);
       e.target.value = '';
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      if (type === 'primary') {
-        setLogoPrimary(base64);
-        setBrandSuccessMsg('Logo Utama berhasil diunggah dan siap disimpan.');
-      } else if (type === 'horizontal') {
-        setLogoHorizontal(base64);
-        setBrandSuccessMsg('Logo Horizontal berhasil diunggah dan siap disimpan.');
+    try {
+      let maxWidth = 256;
+      let maxHeight = 256;
+      let label = 'Logo Utama';
+
+      if (type === 'horizontal') {
+        maxWidth = 600;
+        maxHeight = 160;
+        label = 'Logo Horizontal';
       } else if (type === 'appIcon') {
-        setAppIcon(base64);
-        setBrandSuccessMsg('Ikon Aplikasi berhasil diunggah dan siap disimpan.');
+        maxWidth = 256;
+        maxHeight = 256;
+        label = 'Ikon Aplikasi';
+      }
+
+      const compressedBase64 = await resizeImageFileToBase64(file, {
+        maxWidth,
+        maxHeight,
+        maxBase64Length: 120_000, // ~90KB batas aman parameter D1
+        preserveTransparency: true,
+      });
+
+      if (type === 'primary') {
+        setLogoPrimary(compressedBase64);
+        setBrandSuccessMsg(`${label} berhasil dioptimasi (${Math.round(compressedBase64.length / 1024)} KB) dan siap disimpan.`);
+      } else if (type === 'horizontal') {
+        setLogoHorizontal(compressedBase64);
+        setBrandSuccessMsg(`${label} berhasil dioptimasi (${Math.round(compressedBase64.length / 1024)} KB) dan siap disimpan.`);
+      } else if (type === 'appIcon') {
+        setAppIcon(compressedBase64);
+        setBrandSuccessMsg(`${label} berhasil dioptimasi (${Math.round(compressedBase64.length / 1024)} KB) dan siap disimpan.`);
       }
       setTimeout(() => setBrandSuccessMsg(null), 4000);
-    };
-    reader.onerror = () => {
-      setBrandUploadError('Gagal membaca berkas gambar. Silakan coba lagi.');
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
+    } catch (err: any) {
+      setBrandUploadError(err?.message || 'Gagal mengompresi gambar. Silakan coba gambar lain.');
+    } finally {
+      e.target.value = '';
+    }
   };
 
   // Handler: Kembalikan Logo Tertentu ke Default
@@ -407,6 +426,27 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
     setBrandUploadError(null);
     setBrandSuccessMsg(null);
 
+    // Validasi ketat ukuran Base64 sebelum dikirim ke API/D1
+    const MAX_DATA_LEN = 150_000;
+    if (logoPrimary && logoPrimary.startsWith('data:') && logoPrimary.length > MAX_DATA_LEN) {
+      setConfigErrorMsg('Ukuran data Logo Utama terlalu besar (> 100 KB). Harap unggah ulang gambar.');
+      setBrandUploadError('Ukuran data Logo Utama terlalu besar.');
+      setIsSavingConfig(false);
+      return;
+    }
+    if (logoHorizontal && logoHorizontal.startsWith('data:') && logoHorizontal.length > MAX_DATA_LEN) {
+      setConfigErrorMsg('Ukuran data Logo Horizontal terlalu besar (> 100 KB). Harap unggah ulang gambar.');
+      setBrandUploadError('Ukuran data Logo Horizontal terlalu besar.');
+      setIsSavingConfig(false);
+      return;
+    }
+    if (appIcon && appIcon.startsWith('data:') && appIcon.length > MAX_DATA_LEN) {
+      setConfigErrorMsg('Ukuran data Ikon Aplikasi terlalu besar (> 100 KB). Harap unggah ulang gambar.');
+      setBrandUploadError('Ukuran data Ikon Aplikasi terlalu besar.');
+      setIsSavingConfig(false);
+      return;
+    }
+
     try {
       const payload: Partial<AdminAppConfig> = {
         appName,
@@ -441,6 +481,8 @@ export function AdminPortalModal({ isOpen, onClose, onConfigUpdated }: AdminPort
           appIcon,
           logoUrl: logoPrimary,
         });
+        // Re-fetch public config agar seluruh subscriber UI & DOM terupdate
+        await publicConfigService.getPublicConfig().catch(() => {});
         setConfigSuccessMsg('Identitas & Konfigurasi HIKMAT TANI berhasil disimpan.');
         setBrandSuccessMsg('Identitas visual aplikasi berhasil diperbarui secara menyeluruh.');
         onConfigUpdated?.();

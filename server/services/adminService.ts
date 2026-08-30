@@ -1129,8 +1129,10 @@ export class AdminService {
             updatedAt: now,
           })
           .where(eq(appConfigs.id, 'official_config'));
-      } catch (err) {
-        console.warn('[AdminService] D1 app_configs update error:', err);
+      } catch (err: any) {
+        console.error('[AdminService] D1 app_configs update error:', err);
+        this.officialConfig = oldConfig;
+        throw new Error(`Gagal menyimpan konfigurasi ke database D1: ${err?.message || 'Database error'}`);
       }
     }
 
@@ -1255,6 +1257,7 @@ export class AdminService {
       }
     }
 
+    const oldImage = this.officialConfig.donationQrisImage;
     const now = new Date().toISOString();
     this.officialConfig.donationQrisImage = trimmed;
     this.officialConfig.updatedBy = actor.userId;
@@ -1270,8 +1273,10 @@ export class AdminService {
             updatedAt: now,
           })
           .where(eq(appConfigs.id, 'official_config'));
-      } catch (err) {
-        console.warn('[AdminService] Update QRIS D1 error:', err);
+      } catch (err: any) {
+        console.error('[AdminService] Update QRIS D1 error:', err);
+        this.officialConfig.donationQrisImage = oldImage;
+        throw new Error(`Gagal menyimpan QRIS ke database D1: ${err?.message || 'Database error'}`);
       }
     }
 
@@ -1569,6 +1574,15 @@ export class AdminService {
       throw new Error('Akun pengelola tidak ditemukan.');
     }
 
+    if (managerId === 'admin_super_pappizee' || user.id === 'admin_super_pappizee') {
+      if (payload.isActive === false) {
+        throw new Error('Akun Super Admin Kanonikal Utama tidak dapat dinonaktifkan.');
+      }
+      if (payload.role && payload.role !== 'SUPER_ADMIN') {
+        throw new Error('Akun Super Admin Kanonikal Utama tidak dapat diturunkan dari SUPER_ADMIN.');
+      }
+    }
+
     if (actor.userId === managerId && payload.isActive === false) {
       throw new Error('Anda tidak dapat menonaktifkan akun Anda sendiri.');
     }
@@ -1667,6 +1681,15 @@ export class AdminService {
       throw new Error('Akun pengelola tidak ditemukan.');
     }
 
+    if (managerId === 'admin_super_pappizee' || user.id === 'admin_super_pappizee') {
+      if (payload.isActive === false) {
+        throw new Error('Akun Super Admin Kanonikal Utama tidak dapat dinonaktifkan.');
+      }
+      if (payload.role && payload.role !== 'SUPER_ADMIN') {
+        throw new Error('Akun Super Admin Kanonikal Utama tidak dapat diturunkan dari SUPER_ADMIN.');
+      }
+    }
+
     if (actor.userId === managerId && payload.isActive === false) {
       throw new Error('Anda tidak dapat menonaktifkan akun Anda sendiri.');
     }
@@ -1751,6 +1774,10 @@ export class AdminService {
     this.ensureInitialized();
     this.assertIsSuperAdmin(actor);
 
+    if (managerId === 'admin_super_pappizee') {
+      throw new Error('Akun Super Admin Kanonikal Utama bersifat permanen dan tidak dapat dihapus.');
+    }
+
     if (actor.userId === managerId) {
       throw new Error('Anda tidak dapat menghapus akun Anda sendiri.');
     }
@@ -1795,6 +1822,10 @@ export class AdminService {
     const db = this.getActiveDb(d1Db);
     await this.ensureInitializedAsync(db || undefined);
     this.assertIsSuperAdmin(actor);
+
+    if (managerId === 'admin_super_pappizee') {
+      throw new Error('Akun Super Admin Kanonikal Utama bersifat permanen dan tidak dapat dihapus.');
+    }
 
     if (actor.userId === managerId) {
       throw new Error('Anda tidak dapat menghapus akun Anda sendiri.');
