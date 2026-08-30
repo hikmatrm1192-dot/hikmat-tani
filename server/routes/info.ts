@@ -50,6 +50,16 @@ router.get('/weather', async (req: Request, res: Response) => {
       });
     }
 
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_COORDINATES',
+          message: 'Rentang koordinat tidak valid (Lat: -90 s.d 90, Lon: -180 s.d 180).',
+        },
+      });
+    }
+
     const weatherData = await weatherService.getWeather(lat, lon);
 
     return res.json({

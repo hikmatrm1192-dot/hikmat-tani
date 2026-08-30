@@ -9,6 +9,8 @@ import { durableOutboxConsumer } from './services/outboxConsumer.ts';
 import { authService } from './services/authService.ts';
 import { adminService } from './services/adminService.ts';
 import { authenticateAdminOnWorker } from './services/workerAdminAuth.ts';
+import { weatherService } from './services/weatherService.ts';
+import { regionalAlertService } from './services/regionalAlertService.ts';
 import { config } from './config.ts';
 
 export interface Env {
@@ -75,6 +77,103 @@ export default {
           database: d1Status,
           timestamp: new Date().toISOString(),
         }, 200, corsHeaders);
+      }
+
+      // External info & weather proxy routes (Stateless Edge Proxy)
+      if (url.pathname === '/api/v1/info/weather') {
+        if (request.method !== 'GET') {
+          return jsonResponse({
+            success: false,
+            error: { code: 'METHOD_NOT_ALLOWED', message: 'Hanya metode GET yang didukung.' },
+          }, 405, corsHeaders);
+        }
+
+        const latStr = url.searchParams.get('lat');
+        const lonStr = url.searchParams.get('lon');
+
+        if (!latStr || !lonStr) {
+          return jsonResponse({
+            success: false,
+            error: {
+              code: 'MISSING_COORDINATES',
+              message: 'Parameter lat (latitude) dan lon (longitude) diperlukan.',
+            },
+          }, 400, corsHeaders);
+        }
+
+        const lat = parseFloat(latStr);
+        const lon = parseFloat(lonStr);
+
+        if (isNaN(lat) || isNaN(lon)) {
+          return jsonResponse({
+            success: false,
+            error: {
+              code: 'INVALID_COORDINATES',
+              message: 'Koordinat lat dan lon harus berupa angka yang valid.',
+            },
+          }, 400, corsHeaders);
+        }
+
+        if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+          return jsonResponse({
+            success: false,
+            error: {
+              code: 'INVALID_COORDINATES',
+              message: 'Rentang koordinat tidak valid (Lat: -90 s.d 90, Lon: -180 s.d 180).',
+            },
+          }, 400, corsHeaders);
+        }
+
+        try {
+          const weatherData = await weatherService.getWeather(lat, lon);
+          return jsonResponse({
+            success: true,
+            data: weatherData,
+          }, 200, corsHeaders);
+        } catch (err: any) {
+          return jsonResponse({
+            success: false,
+            error: {
+              code: 'WEATHER_SERVICE_ERROR',
+              message: err?.message || 'Gagal memuat perkiraan cuaca.',
+            },
+          }, 500, corsHeaders);
+        }
+      }
+
+      if (url.pathname === '/api/v1/info/regional-alerts') {
+        if (request.method !== 'GET') {
+          return jsonResponse({
+            success: false,
+            error: { code: 'METHOD_NOT_ALLOWED', message: 'Hanya metode GET yang didukung.' },
+          }, 405, corsHeaders);
+        }
+
+        const districtId = url.searchParams.get('district_id') || undefined;
+        const latStr = url.searchParams.get('lat');
+        const lonStr = url.searchParams.get('lon');
+        const lat = latStr ? parseFloat(latStr) : undefined;
+        const lon = lonStr ? parseFloat(lonStr) : undefined;
+
+        try {
+          const alertsData = await regionalAlertService.getAlerts({
+            districtId,
+            lat,
+            lon,
+          });
+          return jsonResponse({
+            success: true,
+            data: alertsData,
+          }, 200, corsHeaders);
+        } catch (err: any) {
+          return jsonResponse({
+            success: false,
+            error: {
+              code: 'REGIONAL_ALERTS_ERROR',
+              message: err?.message || 'Gagal memeriksa peringatan regional.',
+            },
+          }, 500, corsHeaders);
+        }
       }
 
       // Admin portal must be handled directly by the Worker.
