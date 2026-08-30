@@ -117,21 +117,29 @@ function sanitizeAdmin(row: WorkerAdminRecord): Omit<WorkerAdminRecord, 'passwor
   };
 }
 
-/** Ensure legacy production D1 has the salt column before authentication. */
-async function ensureAdminSaltColumn(db: D1Like): Promise<void> {
-  try {
-    await db.prepare('SELECT salt FROM admin_users LIMIT 1').first();
-    return;
-  } catch (err: any) {
-    const message = String(err?.message || err || '').toLowerCase();
-    if (!message.includes('no such column') || !message.includes('salt')) throw err;
-  }
+/** Ensure legacy production D1 has every admin column required by Worker auth. */
+async function ensureAdminSchemaColumns(db: D1Like): Promise<void> {
+  const requiredColumns = [
+    { name: 'salt', type: 'TEXT' },
+    { name: 'last_login_at', type: 'TEXT' },
+  ];
 
-  try {
-    await db.prepare('ALTER TABLE admin_users ADD COLUMN salt TEXT').run();
-  } catch (err: any) {
-    const message = String(err?.message || err || '').toLowerCase();
-    if (!message.includes('duplicate column') && !message.includes('already exists')) throw err;
+  for (const column of requiredColumns) {
+    try {
+      await db.prepare(`SELECT ${column.name} FROM admin_users LIMIT 1`).first();
+    } catch (err: any) {
+      const message = String(err?.message || err || '').toLowerCase();
+      if (!message.includes('no such column') || !message.includes(column.name)) throw err;
+
+      try {
+        await db.prepare(`ALTER TABLE admin_users ADD COLUMN ${column.name} ${column.type}`).run();
+      } catch (alterErr: any) {
+        const alterMessage = String(alterErr?.message || alterErr || '').toLowerCase();
+        if (!alterMessage.includes('duplicate column') && !alterMessage.includes('already exists')) {
+          throw alterErr;
+        }
+      }
+    }
   }
 }
 
@@ -195,7 +203,7 @@ export async function authenticateAdminOnWorker(
   }
 
   try {
-    await ensureAdminSaltColumn(db);
+    await ensureAdminSchemaColumns(db);
     await ensureCanonicalSuperAdminAccount(db, env.SUPER_ADMIN_PASSWORD);
   } catch (schemaErr: any) {
     console.error('[Worker Admin Auth] admin_users schema/bootstrap failed:', schemaErr?.message || schemaErr);
