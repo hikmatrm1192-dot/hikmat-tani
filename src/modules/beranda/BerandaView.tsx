@@ -28,7 +28,9 @@ import {
   Land,
   Opt,
   RiceVariety,
+  WeatherData,
 } from '../../types/index.ts';
+import { clientWeatherService } from '../../services/weatherService.ts';
 import { ActivityFormModal } from '../kegiatan/ActivityFormModal.tsx';
 import { SeasonDetailModal } from '../lahan/SeasonDetailModal.tsx';
 import { ActiveLandCard } from './ActiveLandCard.tsx';
@@ -78,6 +80,7 @@ export function BerandaView({
   // Decision Modal state (Tiga Jalur Keputusan)
   const [selectedRecommendation, setSelectedRecommendation] = useState<EvaluatedRecommendation | null>(null);
   const [farmerDecisions, setFarmerDecisions] = useState<FarmerDecision[]>([]);
+  const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
 
   // Tentukan Lahan Terpilih & Musim Tanam Aktif
   const activeLand =
@@ -89,6 +92,19 @@ export function BerandaView({
   const activeSeason = activeLand
     ? activeSeasons.find((s) => s.landId === activeLand.id && s.status === 'ACTIVE') || null
     : null;
+
+  // Muat cache cuaca lokal segera saat activeLand berubah untuk instant offline-first context
+  useEffect(() => {
+    if (activeLand) {
+      const lat = typeof activeLand.latitude === 'number' ? activeLand.latitude : -6.57;
+      const lon = typeof activeLand.longitude === 'number' ? activeLand.longitude : 107.75;
+      const cacheKey = `hikmat_tani_weather_${lat.toFixed(2)}_${lon.toFixed(2)}`;
+      const cached = clientWeatherService.getLocalCache(cacheKey);
+      if (cached) {
+        setWeatherData(cached);
+      }
+    }
+  }, [activeLand?.id, activeLand?.latitude, activeLand?.longitude]);
 
   // Muat riwayat keputusan petani pada musim tanam aktif (selalu dipanggil secara konsisten di top level)
   useEffect(() => {
@@ -161,6 +177,7 @@ export function BerandaView({
         activities: seasonActivities,
         targetDate: new Date(),
         varietyDurationDays,
+        weatherData,
       })
     : null;
 
@@ -242,6 +259,7 @@ export function BerandaView({
       <WeatherCard
         land={activeLand}
         onUpdateLandLocation={handleUpdateLandLocation}
+        onWeatherLoaded={setWeatherData}
       />
 
       {/* 4. Kegiatan Terakhir */}

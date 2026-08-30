@@ -22,7 +22,7 @@ import { regionalAlertService } from '../server/services/regionalAlertService.ts
 import { ClientWeatherService } from '../src/services/weatherService.ts';
 import { buildFieldContext } from '../src/engine/contextEngine.ts';
 import { evaluateRecommendations } from '../src/engine/recommendation/evaluator.ts';
-import { CropSeason, Land } from '../src/types/index.ts';
+import { CropSeason, FieldWeatherContext, Land, WeatherData } from '../src/types/index.ts';
 
 export interface TestResult {
   name: string;
@@ -348,6 +348,163 @@ export async function runWeatherTests(): Promise<{
     }
     if (thunderstorm.condition !== 'Hujan Disertai Petir' || thunderstorm.conditionType !== 'THUNDERSTORM') {
       throw new Error('WMO 95 harus Hujan Disertai Petir');
+    }
+  });
+
+  // ==========================================
+  // 13. Weather Context Contract Verification
+  // ==========================================
+  await runTest('13. Weather Context Contract: FieldWeatherContext mendukung LIVE, CACHE, FALLBACK, null, dan undefined', async () => {
+    const dummySeason: CropSeason = {
+      id: 'season-weather-contract',
+      landId: 'land-test',
+      commodity: 'PADI',
+      varietyName: 'Inpari 32',
+      plantedAreaHa: 1.0,
+      plantingDate: '2026-08-01',
+      status: 'ACTIVE',
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    };
+
+    // 1. LIVE
+    const live: FieldWeatherContext = {
+      isAvailable: true,
+      source: 'LIVE',
+      conditionType: 'CLEAR',
+      rainProbability: 5,
+      humidity: 65,
+      windSpeed: 6,
+      rainMm: 0,
+      hasHeavyRainForecast: false,
+      forecastSummary: 'Cerah Berawan',
+    };
+    const ctxLive = buildFieldContext({ cropSeason: dummySeason, weatherContext: live });
+    if (!ctxLive.weatherContext || ctxLive.weatherContext.source !== 'LIVE' || !ctxLive.weatherContext.isAvailable) {
+      throw new Error('Weather context LIVE gagal dipasang');
+    }
+
+    // 2. CACHE
+    const cache: FieldWeatherContext = {
+      isAvailable: true,
+      source: 'CACHE',
+      conditionType: 'CLOUDY',
+      rainProbability: 50,
+      humidity: 82,
+      windSpeed: 12,
+      rainMm: 3,
+      hasHeavyRainForecast: false,
+    };
+    const ctxCache = buildFieldContext({ cropSeason: dummySeason, weatherContext: cache });
+    if (!ctxCache.weatherContext || ctxCache.weatherContext.source !== 'CACHE') {
+      throw new Error('Weather context CACHE gagal dipasang');
+    }
+
+    // 3. FALLBACK
+    const fallback: FieldWeatherContext = {
+      isAvailable: true,
+      source: 'FALLBACK',
+      conditionType: 'HEAVY_RAIN',
+      rainProbability: 85,
+      humidity: 90,
+      windSpeed: 18,
+      rainMm: 25,
+      hasHeavyRainForecast: true,
+      forecastSummary: 'Peluang hujan lebat tinggi',
+    };
+    const ctxFallback = buildFieldContext({ cropSeason: dummySeason, weatherContext: fallback });
+    if (!ctxFallback.weatherContext || ctxFallback.weatherContext.source !== 'FALLBACK' || !ctxFallback.weatherContext.hasHeavyRainForecast) {
+      throw new Error('Weather context FALLBACK gagal dipasang');
+    }
+
+    // 4. null
+    const ctxNull = buildFieldContext({ cropSeason: dummySeason, weatherContext: null });
+    if (ctxNull.weatherContext !== null) {
+      throw new Error('Weather context null gagal diverifikasi');
+    }
+
+    // 5. undefined (default argument)
+    const ctxUndef = buildFieldContext({ cropSeason: dummySeason });
+    if (ctxUndef.weatherContext !== null && ctxUndef.weatherContext !== undefined) {
+      throw new Error('Weather context undefined gagal diverifikasi');
+    }
+  });
+
+  // ==========================================
+  // 14. WeatherData Conversion to FieldWeatherContext
+  // ==========================================
+  await runTest('14. WeatherData Ingestion: buildFieldContext mengekstrak WeatherData secara deterministik & murni', async () => {
+    const dummySeason: CropSeason = {
+      id: 'season-weather-ingest',
+      landId: 'land-test',
+      commodity: 'PADI',
+      varietyName: 'Ciherang',
+      plantedAreaHa: 0.5,
+      plantingDate: '2026-08-10',
+      status: 'ACTIVE',
+      createdAt: '2026-08-10T00:00:00.000Z',
+      updatedAt: '2026-08-10T00:00:00.000Z',
+    };
+
+    const weatherData: WeatherData = {
+      latitude: -6.57,
+      longitude: 107.75,
+      locationName: 'Kasokandel',
+      timezone: 'Asia/Jakarta',
+      cachedAt: '2026-08-30T12:00:00.000Z',
+      current: {
+        temperature: 29,
+        condition: 'Hujan Sedang',
+        conditionType: 'MODERATE_RAIN',
+        conditionCode: 63,
+        humidity: 84,
+        windSpeed: 14,
+        rainProbability: 75,
+        rainMm: 12,
+        updatedAt: '2026-08-30T12:00:00.000Z',
+        source: 'LIVE',
+      },
+      daily: [
+        {
+          date: '2026-08-30',
+          dayLabel: 'Hari Ini',
+          condition: 'Hujan Sedang',
+          conditionType: 'MODERATE_RAIN',
+          conditionCode: 63,
+          tempMax: 30,
+          tempMin: 23,
+          rainProbability: 75,
+          rainMm: 12,
+        },
+      ],
+    };
+
+    // Panggil buildFieldContext dengan WeatherData
+    const ctx = buildFieldContext({
+      cropSeason: dummySeason,
+      weatherData,
+    });
+
+    if (!ctx.weatherContext) {
+      throw new Error('weatherContext harus terdefinisi');
+    }
+    if (ctx.weatherContext.source !== 'LIVE') {
+      throw new Error('source harus LIVE');
+    }
+    if (ctx.weatherContext.conditionType !== 'MODERATE_RAIN') {
+      throw new Error('conditionType harus MODERATE_RAIN');
+    }
+    if (ctx.weatherContext.rainProbability !== 75) {
+      throw new Error('rainProbability harus 75');
+    }
+    if (ctx.weatherContext.humidity !== 84) {
+      throw new Error('humidity harus 84');
+    }
+
+    // Evaluator menghasilkan rekomendasi yang konsisten dan murni
+    const recs = evaluateRecommendations(ctx);
+    if (!Array.isArray(recs)) {
+      throw new Error('evaluateRecommendations harus menghasilkan array');
     }
   });
 

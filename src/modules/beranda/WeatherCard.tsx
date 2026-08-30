@@ -36,9 +36,10 @@ import {
 interface WeatherCardProps {
   land?: Land | null;
   onUpdateLandLocation?: (lat: number, lon: number) => void;
+  onWeatherLoaded?: (data: WeatherData | null) => void;
 }
 
-export function WeatherCard({ land, onUpdateLandLocation }: WeatherCardProps) {
+export function WeatherCard({ land, onUpdateLandLocation, onWeatherLoaded }: WeatherCardProps) {
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
@@ -81,8 +82,10 @@ export function WeatherCard({ land, onUpdateLandLocation }: WeatherCardProps) {
         if (result.data) {
           setWeatherData(result.data);
           setStatusMessage(result.message);
+          onWeatherLoaded?.(result.data);
         } else {
           setStatusMessage(result.message || 'Informasi cuaca belum tersedia.');
+          onWeatherLoaded?.(null);
         }
       } catch (err: any) {
         console.warn('Gagal memuat cuaca:', err?.message);
@@ -91,7 +94,7 @@ export function WeatherCard({ land, onUpdateLandLocation }: WeatherCardProps) {
         setIsLoading(false);
       }
     },
-    [effectiveLat, effectiveLon]
+    [effectiveLat, effectiveLon, onWeatherLoaded]
   );
 
   useEffect(() => {
@@ -127,6 +130,9 @@ export function WeatherCard({ land, onUpdateLandLocation }: WeatherCardProps) {
           if (result.data) {
             setWeatherData(result.data);
             setStatusMessage(result.message);
+            onWeatherLoaded?.(result.data);
+          } else {
+            onWeatherLoaded?.(null);
           }
         } finally {
           setIsLoading(false);

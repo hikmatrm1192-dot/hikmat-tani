@@ -22,7 +22,15 @@ import {
   kgToGrams,
   squareMetersToHectares,
 } from '../src/engine/index.ts';
-import { Activity, CropSeason, FertilizerApplication, Land, OptObservation } from '../src/types/index.ts';
+import {
+  Activity,
+  CropSeason,
+  FertilizerApplication,
+  FieldWeatherContext,
+  Land,
+  OptObservation,
+  WeatherData,
+} from '../src/types/index.ts';
 
 export interface EngineTestResult {
   suite: string;
@@ -365,6 +373,198 @@ export async function runEngineTests(): Promise<{
     }
   });
 
+  test('Context Engine', 'E3. Weather Context Contract: Mendukung LIVE, CACHE, FALLBACK, null, dan undefined', () => {
+    // 1. Validasi source LIVE
+    const liveWeather: FieldWeatherContext = {
+      isAvailable: true,
+      source: 'LIVE',
+      conditionType: 'CLEAR',
+      rainProbability: 10,
+      humidity: 70,
+      windSpeed: 5,
+      rainMm: 0,
+      hasHeavyRainForecast: false,
+      forecastSummary: 'Cerah sepanjang hari',
+    };
+    const ctxLive = buildFieldContext({
+      cropSeason: dummySeason,
+      weatherContext: liveWeather,
+    });
+    if (!ctxLive.weatherContext || ctxLive.weatherContext.source !== 'LIVE' || !ctxLive.weatherContext.isAvailable) {
+      throw new Error('Weather context LIVE gagal dipasang pada FieldContext');
+    }
+
+    // 2. Validasi source CACHE
+    const cacheWeather: FieldWeatherContext = {
+      isAvailable: true,
+      source: 'CACHE',
+      conditionType: 'CLOUDY',
+      rainProbability: 45,
+      humidity: 80,
+      windSpeed: 8,
+      rainMm: 2,
+      hasHeavyRainForecast: false,
+    };
+    const ctxCache = buildFieldContext({
+      cropSeason: dummySeason,
+      weatherContext: cacheWeather,
+    });
+    if (!ctxCache.weatherContext || ctxCache.weatherContext.source !== 'CACHE') {
+      throw new Error('Weather context CACHE gagal dipasang pada FieldContext');
+    }
+
+    // 3. Validasi source FALLBACK
+    const fallbackWeather: FieldWeatherContext = {
+      isAvailable: true,
+      source: 'FALLBACK',
+      conditionType: 'LIGHT_RAIN',
+      rainProbability: 60,
+      humidity: 85,
+      windSpeed: 10,
+      rainMm: 5,
+      hasHeavyRainForecast: false,
+    };
+    const ctxFallback = buildFieldContext({
+      cropSeason: dummySeason,
+      weatherContext: fallbackWeather,
+    });
+    if (!ctxFallback.weatherContext || ctxFallback.weatherContext.source !== 'FALLBACK') {
+      throw new Error('Weather context FALLBACK gagal dipasang pada FieldContext');
+    }
+
+    // 4. Validasi null
+    const ctxNull = buildFieldContext({
+      cropSeason: dummySeason,
+      weatherContext: null,
+    });
+    if (ctxNull.weatherContext !== null) {
+      throw new Error('Weather context bernilai null harus dipertahankan sebagai null');
+    }
+
+    // 5. Validasi undefined (default argument)
+    const ctxUndefined = buildFieldContext({
+      cropSeason: dummySeason,
+    });
+    if (ctxUndefined.weatherContext !== null && ctxUndefined.weatherContext !== undefined) {
+      throw new Error('Weather context undefined harus valid dan bernilai null/undefined');
+    }
+  });
+
+  test('Context Engine', 'E4. WeatherData Conversion: Konversi deterministik WeatherData ke FieldWeatherContext', () => {
+    // 1. WeatherData LIVE dengan prakiraan hujan lebat di daily
+    const mockWeatherDataLive: WeatherData = {
+      latitude: -6.57,
+      longitude: 107.75,
+      locationName: 'Subang',
+      timezone: 'Asia/Jakarta',
+      cachedAt: '2026-08-30T10:00:00.000Z',
+      current: {
+        temperature: 28,
+        condition: 'Cerah Berawan',
+        conditionType: 'PARTLY_CLOUDY',
+        conditionCode: 2,
+        humidity: 75,
+        windSpeed: 12,
+        rainProbability: 25,
+        rainMm: 0,
+        updatedAt: '2026-08-30T10:00:00.000Z',
+        source: 'LIVE',
+      },
+      daily: [
+        {
+          date: '2026-08-30',
+          dayLabel: 'Hari Ini',
+          condition: 'Cerah Berawan',
+          conditionType: 'PARTLY_CLOUDY',
+          conditionCode: 2,
+          tempMax: 32,
+          tempMin: 23,
+          rainProbability: 25,
+          rainMm: 0,
+        },
+        {
+          date: '2026-08-31',
+          dayLabel: 'Besok',
+          condition: 'Hujan Lebat',
+          conditionType: 'HEAVY_RAIN',
+          conditionCode: 65,
+          tempMax: 29,
+          tempMin: 22,
+          rainProbability: 90,
+          rainMm: 35,
+        },
+      ],
+    };
+
+    const ctxLive = buildFieldContext({
+      cropSeason: dummySeason,
+      weatherData: mockWeatherDataLive,
+    });
+
+    if (!ctxLive.weatherContext) {
+      throw new Error('FieldWeatherContext gagal diekstrak dari WeatherData');
+    }
+    if (ctxLive.weatherContext.source !== 'LIVE') {
+      throw new Error('Source cuaca harus LIVE');
+    }
+    if (ctxLive.weatherContext.conditionType !== 'PARTLY_CLOUDY') {
+      throw new Error('Condition type tidak sesuai');
+    }
+    if (!ctxLive.weatherContext.hasHeavyRainForecast) {
+      throw new Error('hasHeavyRainForecast harus bernilai true karena ada HEAVY_RAIN di daily');
+    }
+    if (ctxLive.weatherContext.forecastSummary !== 'Cerah Berawan') {
+      throw new Error('forecastSummary harus sesuai kondisi cuaca');
+    }
+
+    // 2. WeatherData dengan isOfflineFallback: true
+    const mockWeatherDataFallback: WeatherData = {
+      latitude: -6.57,
+      longitude: 107.75,
+      timezone: 'Asia/Jakarta',
+      cachedAt: '2026-08-30T00:00:00.000Z',
+      isOfflineFallback: true,
+      current: {
+        temperature: 27,
+        condition: 'Berawan',
+        conditionType: 'CLOUDY',
+        conditionCode: 3,
+        humidity: 80,
+        windSpeed: 10,
+        rainProbability: 40,
+        updatedAt: '2026-08-30T00:00:00.000Z',
+        source: 'FALLBACK',
+      },
+      daily: [],
+    };
+
+    const ctxFallback = buildFieldContext({
+      cropSeason: dummySeason,
+      weatherData: mockWeatherDataFallback,
+    });
+
+    if (!ctxFallback.weatherContext || ctxFallback.weatherContext.source !== 'FALLBACK') {
+      throw new Error('Weather context harus mendeteksi fallback source');
+    }
+
+    // 3. WeatherData null & undefined
+    const ctxNull = buildFieldContext({
+      cropSeason: dummySeason,
+      weatherData: null,
+    });
+    if (ctxNull.weatherContext !== null) {
+      throw new Error('WeatherData null harus menghasilkan weatherContext null');
+    }
+
+    const ctxUndef = buildFieldContext({
+      cropSeason: dummySeason,
+      weatherData: undefined,
+    });
+    if (ctxUndef.weatherContext !== null && ctxUndef.weatherContext !== undefined) {
+      throw new Error('WeatherData undefined harus menghasilkan weatherContext null/undefined');
+    }
+  });
+
   // ==========================================
   // SUITE F: Recommendation Engine & Architecture
   // ==========================================
@@ -422,6 +622,301 @@ export async function runEngineTests(): Promise<{
       if ('decision' in r || 'actualActionId' in r) {
         throw new Error('Recommendation tidak boleh mencampuradukkan status keputusan petani');
       }
+    }
+  });
+
+  test('Recommendation Engine', 'F4. Invariance Rekomendasi: Struktur dasar rekomendasi tetap utuh dan cuaca hanya menambahkan pertimbangan', () => {
+    const baseCtx = buildFieldContext({
+      cropSeason: dummySeason,
+      targetDate: '2026-08-15',
+      varietyDurationDays: 120,
+    });
+
+    const mockWeatherData: WeatherData = {
+      latitude: -6.57,
+      longitude: 107.75,
+      timezone: 'Asia/Jakarta',
+      cachedAt: '2026-08-30T10:00:00.000Z',
+      current: {
+        temperature: 30,
+        condition: 'Hujan Ringan',
+        conditionType: 'LIGHT_RAIN',
+        conditionCode: 61,
+        humidity: 85,
+        windSpeed: 10,
+        rainProbability: 70,
+        rainMm: 5,
+        updatedAt: '2026-08-30T10:00:00.000Z',
+        source: 'LIVE',
+      },
+      daily: [],
+    };
+
+    const weatherCtx = buildFieldContext({
+      cropSeason: dummySeason,
+      targetDate: '2026-08-15',
+      varietyDurationDays: 120,
+      weatherData: mockWeatherData,
+    });
+
+    const recsBase = evaluateRecommendations(baseCtx);
+    const recsWeather = evaluateRecommendations(weatherCtx);
+
+    if (recsBase.length !== recsWeather.length) {
+      throw new Error('Jumlah rekomendasi harus sama persis antara dengan atau tanpa weatherData');
+    }
+
+    for (let i = 0; i < recsBase.length; i++) {
+      if (recsBase[i].id !== recsWeather[i].id) {
+        throw new Error(`ID rekomendasi ke-${i} tidak cocok`);
+      }
+      if (recsBase[i].priority !== recsWeather[i].priority) {
+        throw new Error(`Prioritas rekomendasi ${recsBase[i].id} tidak boleh diubah oleh cuaca`);
+      }
+      if (recsBase[i].confidence !== recsWeather[i].confidence) {
+        throw new Error(`Confidence rekomendasi ${recsBase[i].id} tidak boleh diubah oleh cuaca`);
+      }
+      // Pesan dasar tetap terkandung di dalam pesan yang diperkaya
+      if (!recsWeather[i].message.startsWith(recsBase[i].message)) {
+        throw new Error(`Pesan dasar rekomendasi ${recsBase[i].id} harus tetap dipertahankan`);
+      }
+    }
+  });
+
+  test('Recommendation Engine', 'F5. Fertilizer + Rain: Pertimbangan cuaca disematkan secara santun tanpa membatalkan pemupukan', () => {
+    const fertActivity: Activity = {
+      id: 'act-fert-1',
+      cropSeasonId: dummySeason.id,
+      category: 'FERTILIZER',
+      activityDate: '2026-08-14',
+      hst: 20,
+      notes: 'Pemupukan awal',
+      createdAt: '2026-08-14T00:00:00.000Z',
+      updatedAt: '2026-08-14T00:00:00.000Z',
+    };
+
+    const fertApp: FertilizerApplication = {
+      id: 'fa-1',
+      activityId: fertActivity.id,
+      fertilizerId: 'urea-1',
+      fertilizerName: 'Urea',
+      amountKg: 50,
+      applicationMethod: 'BROADCAST',
+      calculatedNutrients: { N_kg: 23 },
+      createdAt: '2026-08-14T00:00:00.000Z',
+      updatedAt: '2026-08-14T00:00:00.000Z',
+    };
+
+    const rainWeather: WeatherData = {
+      latitude: -6.57,
+      longitude: 107.75,
+      timezone: 'Asia/Jakarta',
+      cachedAt: '2026-08-30T10:00:00.000Z',
+      current: {
+        temperature: 28,
+        condition: 'Hujan Sedang',
+        conditionType: 'MODERATE_RAIN',
+        conditionCode: 63,
+        humidity: 88,
+        windSpeed: 10,
+        rainProbability: 80,
+        rainMm: 15,
+        updatedAt: '2026-08-30T10:00:00.000Z',
+        source: 'LIVE',
+      },
+      daily: [],
+    };
+
+    const ctx = buildFieldContext({
+      cropSeason: dummySeason,
+      activities: [fertActivity],
+      fertilizerApplications: [fertApp],
+      weatherData: rainWeather,
+    });
+
+    const recs = evaluateRecommendations(ctx);
+    const fertRec = recs.find((r) => r.contextType === 'FERTILIZER');
+
+    if (!fertRec) throw new Error('Rekomendasi pemupukan harus tetap dihasilkan');
+    if (!fertRec.message.includes('Pertimbangan cuaca')) {
+      throw new Error('Pertimbangan cuaca harus disematkan pada rekomendasi pemupukan');
+    }
+    if (!fertRec.message.includes('limpasan air')) {
+      throw new Error('Pertimbangan limpasan air harus disampaikan sebagai saran timing');
+    }
+    if (fertRec.message.includes('Batalkan') || fertRec.message.includes('Dilarang')) {
+      throw new Error('Tidak boleh menggunakan kata imperatif membatalkan');
+    }
+  });
+
+  test('Recommendation Engine', 'F6. OPT + High Humidity: Menyarankan peningkatan monitoring PHT bukan perintah semprot kimiawi', () => {
+    const optActivity: Activity = {
+      id: 'act-opt-1',
+      cropSeasonId: dummySeason.id,
+      category: 'OPT',
+      activityDate: '2026-08-14',
+      hst: 20,
+      notes: 'Pengamatan rutin',
+      createdAt: '2026-08-14T00:00:00.000Z',
+      updatedAt: '2026-08-14T00:00:00.000Z',
+    };
+
+    const optObs: OptObservation = {
+      id: 'opt-obs-1',
+      activityId: optActivity.id,
+      optId: 'opt-blas',
+      isUnknown: false,
+      attackSeverity: 'LIGHT',
+      attackLocation: ['LEAF'],
+      observedSymptoms: 'Bercak belah ketupat di beberapa helai daun',
+      createdAt: '2026-08-14T00:00:00.000Z',
+      updatedAt: '2026-08-14T00:00:00.000Z',
+    };
+
+    const humidWeather: WeatherData = {
+      latitude: -6.57,
+      longitude: 107.75,
+      timezone: 'Asia/Jakarta',
+      cachedAt: '2026-08-30T10:00:00.000Z',
+      current: {
+        temperature: 26,
+        condition: 'Berawan Lembap',
+        conditionType: 'CLOUDY',
+        conditionCode: 3,
+        humidity: 92,
+        windSpeed: 8,
+        rainProbability: 30,
+        rainMm: 0,
+        updatedAt: '2026-08-30T10:00:00.000Z',
+        source: 'LIVE',
+      },
+      daily: [],
+    };
+
+    const ctx = buildFieldContext({
+      cropSeason: dummySeason,
+      activities: [optActivity],
+      optObservations: [optObs],
+      weatherData: humidWeather,
+    });
+
+    const recs = evaluateRecommendations(ctx);
+    const optRec = recs.find((r) => r.contextType === 'OPT_CONTROL');
+
+    if (!optRec) throw new Error('Rekomendasi OPT harus tetap dihasilkan');
+    if (!optRec.message.includes('Kelembapan udara cukup tinggi')) {
+      throw new Error('Harus memuat informasi kelembapan tinggi');
+    }
+    if (!optRec.message.includes('prinsip PHT') && !optRec.message.includes('pengamatan')) {
+      throw new Error('Harus menekankan pengamatan dan prinsip PHT');
+    }
+    if (optRec.message.includes('Segera semprot') || optRec.message.includes('Wajib pestisida')) {
+      throw new Error('Tidak boleh memerintahkan semprot kimia secara otomatis');
+    }
+  });
+
+  test('Recommendation Engine', 'F7. Ripening / Harvest Stage + Weather Context', () => {
+    // Tanaman pada umur siap panen (misal 115 HST dari 120 hari)
+    const lateSeason: CropSeason = {
+      ...dummySeason,
+      plantingDate: '2026-04-25',
+    };
+
+    const clearWeather: WeatherData = {
+      latitude: -6.57,
+      longitude: 107.75,
+      timezone: 'Asia/Jakarta',
+      cachedAt: '2026-08-30T10:00:00.000Z',
+      current: {
+        temperature: 31,
+        condition: 'Cerah',
+        conditionType: 'CLEAR',
+        conditionCode: 0,
+        humidity: 60,
+        windSpeed: 8,
+        rainProbability: 10,
+        rainMm: 0,
+        updatedAt: '2026-08-30T10:00:00.000Z',
+        source: 'LIVE',
+      },
+      daily: [],
+    };
+
+    const ctx = buildFieldContext({
+      cropSeason: lateSeason,
+      targetDate: '2026-08-20', // ~117 HST
+      varietyDurationDays: 120,
+      weatherData: clearWeather,
+    });
+
+    const recs = evaluateRecommendations(ctx);
+    const phaseRec = recs.find((r) => r.contextType === 'GROWTH_STAGE');
+
+    if (!phaseRec) throw new Error('Rekomendasi fase panen harus terbentuk');
+    if (!phaseRec.message.includes('cerah berawan') && !phaseRec.message.includes('mendukung')) {
+      throw new Error('Pertimbangan cuaca cerah harus memperkaya rekomendasi pasca-panen/pematangan');
+    }
+  });
+
+  test('Recommendation Engine', 'F8. Fallback Weather Safety: Sumber FALLBACK hanya memberikan catatan umum wilayah', () => {
+    const fertActivity: Activity = {
+      id: 'act-fert-2',
+      cropSeasonId: dummySeason.id,
+      category: 'FERTILIZER',
+      activityDate: '2026-08-14',
+      hst: 20,
+      notes: 'Pemupukan susulan',
+      createdAt: '2026-08-14T00:00:00.000Z',
+      updatedAt: '2026-08-14T00:00:00.000Z',
+    };
+    const fertApp: FertilizerApplication = {
+      id: 'fa-2',
+      activityId: fertActivity.id,
+      fertilizerId: 'urea-1',
+      fertilizerName: 'Urea',
+      amountKg: 25,
+      applicationMethod: 'BROADCAST',
+      calculatedNutrients: { N_kg: 11.5 },
+      createdAt: '2026-08-14T00:00:00.000Z',
+      updatedAt: '2026-08-14T00:00:00.000Z',
+    };
+
+    const fallbackWeather: WeatherData = {
+      latitude: -6.57,
+      longitude: 107.75,
+      timezone: 'Asia/Jakarta',
+      cachedAt: '2026-08-30T00:00:00.000Z',
+      isOfflineFallback: true,
+      current: {
+        temperature: 27,
+        condition: 'Berawan',
+        conditionType: 'CLOUDY',
+        conditionCode: 3,
+        humidity: 80,
+        windSpeed: 10,
+        rainProbability: 40,
+        updatedAt: '2026-08-30T00:00:00.000Z',
+        source: 'FALLBACK',
+      },
+      daily: [],
+    };
+
+    const ctx = buildFieldContext({
+      cropSeason: dummySeason,
+      activities: [fertActivity],
+      fertilizerApplications: [fertApp],
+      weatherData: fallbackWeather,
+    });
+
+    const recs = evaluateRecommendations(ctx);
+    const fertRec = recs.find((r) => r.contextType === 'FERTILIZER');
+
+    if (!fertRec) throw new Error('Rekomendasi pemupukan harus tetap dihasilkan');
+    if (!fertRec.message.includes('perkiraan wilayah')) {
+      throw new Error('Sumber FALLBACK harus menggunakan frase perkiraan wilayah');
+    }
+    if (fertRec.priority === 'CRITICAL') {
+      throw new Error('Sumber FALLBACK dilarang menghasilkan prioritas CRITICAL');
     }
   });
 

@@ -68,3 +68,20 @@ export interface RegionalAlert {
   expiresAt: ISODateString;
   affectedRegions: string[];
 }
+
+/**
+ * FieldWeatherContext — Kontrak data konteks cuaca lapang untuk Recommendation Engine.
+ * Cuaca bersifat sebagai data referensi/informasi tambahan (modifier kontekstual),
+ * BUKAN decision maker mutlak.
+ */
+export interface FieldWeatherContext {
+  isAvailable: boolean;
+  source: 'LIVE' | 'CACHE' | 'FALLBACK';
+  conditionType: WeatherConditionType;
+  rainProbability: number;
+  humidity: number;
+  windSpeed: number;
+  rainMm: number;
+  hasHeavyRainForecast: boolean;
+  forecastSummary?: string;
+}

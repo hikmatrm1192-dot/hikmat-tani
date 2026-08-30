@@ -21,8 +21,10 @@ import {
   Activity,
   CropSeason,
   FertilizerApplication,
+  FieldWeatherContext,
   Land,
   OptObservation,
+  WeatherData,
 } from '../types/index.ts';
 import { determineGrowthPhase, GrowthPhaseInfo } from './growthPhase.ts';
 import { calculateHST } from './hstCalculator.ts';
@@ -72,6 +74,9 @@ export interface FieldContext {
 
   // Kualitas Kelengkapan Data
   dataQuality: FieldContextDataQuality;
+
+  // Konteks Cuaca Tambahan (Opsional — Modifier Kontekstual, bukan Decision Maker)
+  weatherContext?: FieldWeatherContext | null;
 }
 
 export interface BuildFieldContextParams {
@@ -82,6 +87,54 @@ export interface BuildFieldContextParams {
   optObservations?: OptObservation[];
   targetDate?: string | Date;
   varietyDurationDays?: number | null;
+  weatherData?: WeatherData | null;
+  weatherContext?: FieldWeatherContext | null;
+}
+
+/**
+ * Ekstraksi deterministik WeatherData menjadi FieldWeatherContext murni.
+ * Tanpa side-effect I/O (network/storage), murni transformasi data.
+ */
+export function extractFieldWeatherContext(
+  weatherData?: WeatherData | null
+): FieldWeatherContext | null {
+  if (!weatherData || !weatherData.current) {
+    return null;
+  }
+
+  const current = weatherData.current;
+  const daily = Array.isArray(weatherData.daily) ? weatherData.daily : [];
+
+  const hasHeavyRainDaily = daily.some(
+    (d) =>
+      d.conditionType === 'HEAVY_RAIN' ||
+      d.conditionType === 'THUNDERSTORM' ||
+      (typeof d.rainMm === 'number' && d.rainMm >= 20)
+  );
+
+  const hasHeavyRainCurrent =
+    current.conditionType === 'HEAVY_RAIN' ||
+    current.conditionType === 'THUNDERSTORM' ||
+    (typeof current.rainMm === 'number' && current.rainMm >= 20);
+
+  const hasHeavyRainForecast = hasHeavyRainCurrent || hasHeavyRainDaily;
+
+  let source: 'LIVE' | 'CACHE' | 'FALLBACK' = current.source || 'FALLBACK';
+  if (weatherData.isOfflineFallback && source === 'LIVE') {
+    source = 'FALLBACK';
+  }
+
+  return {
+    isAvailable: true,
+    source,
+    conditionType: current.conditionType || 'UNKNOWN',
+    rainProbability: typeof current.rainProbability === 'number' ? current.rainProbability : 0,
+    humidity: typeof current.humidity === 'number' ? current.humidity : 0,
+    windSpeed: typeof current.windSpeed === 'number' ? current.windSpeed : 0,
+    rainMm: typeof current.rainMm === 'number' ? current.rainMm : 0,
+    hasHeavyRainForecast,
+    forecastSummary: current.condition || undefined,
+  };
 }
 
 /**
@@ -95,6 +148,8 @@ export function buildFieldContext({
   optObservations = [],
   targetDate = new Date(),
   varietyDurationDays,
+  weatherData = null,
+  weatherContext = null,
 }: BuildFieldContextParams): FieldContext {
   const targetDateStr =
     typeof targetDate === 'string'
@@ -180,6 +235,12 @@ export function buildFieldContext({
   const waterActivities = sortedActivities.filter((a) => a.category === 'IRRIGATION');
   const recentWaterActivity = waterActivities.length > 0 ? waterActivities[0] : null;
 
+  // 8. Penentuan Weather Context (Prioritas: weatherContext eksplisit -> ekstraksi weatherData -> null)
+  const resolvedWeatherContext =
+    weatherContext !== null && weatherContext !== undefined
+      ? weatherContext
+      : extractFieldWeatherContext(weatherData);
+
   return {
     cropSeasonId: cropSeason.id,
     landId: cropSeason.landId,
@@ -219,5 +280,7 @@ export function buildFieldContext({
       isComplete: missingDataNotes.length === 0,
       missingDataNotes,
     },
+
+    weatherContext: resolvedWeatherContext ?? null,
   };
 }

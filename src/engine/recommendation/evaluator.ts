@@ -14,14 +14,21 @@
 import { FieldContext } from '../contextEngine.ts';
 import { INITIAL_AGRONOMY_RULES } from './rules.ts';
 import { AgronomyRule, EvaluatedRecommendation } from './types.ts';
+import { enhanceRecommendationsWithWeather } from './weatherModifier.ts';
 
 export interface EvaluationOptions {
   rules?: AgronomyRule[];
   filterContextType?: string;
+  skipWeatherModifier?: boolean;
 }
 
 /**
  * Mengevaluasi FieldContext dan menghasilkan daftar saran rekomendasi.
+ * 
+ * Prinsip:
+ * - Agronomy Rules adalah penentu dasar rekomendasi (fase, hara, OPT, dsb).
+ * - Cuaca murni sebagai modifier kontekstual (timing, referensi situasi lapang).
+ * - Jika data cuaca tidak tersedia, evaluasi menghasilkan rekomendasi dasar tanpa kendala.
  */
 export function evaluateRecommendations(
   context: FieldContext,
@@ -57,9 +64,16 @@ export function evaluateRecommendations(
     INFO: 1,
   };
 
-  return recommendations.sort((a, b) => {
+  const sorted = recommendations.sort((a, b) => {
     const weightA = priorityWeight[a.priority] || 0;
     const weightB = priorityWeight[b.priority] || 0;
     return weightB - weightA;
   });
+
+  // Terapkan pertimbangan cuaca (Weather Context Modifier) jika tersedia & tidak diskip
+  if (options?.skipWeatherModifier) {
+    return sorted;
+  }
+
+  return enhanceRecommendationsWithWeather(sorted, context.weatherContext, context);
 }
