@@ -117,37 +117,69 @@ function sanitizeAdmin(row: WorkerAdminRecord): Omit<WorkerAdminRecord, 'passwor
   };
 }
 
-/**
- * Production D1 may contain a legacy admin_users table created before `salt`
- * was introduced. CREATE TABLE IF NOT EXISTS cannot alter such a table.
- * Ensure the column exists immediately before authentication as a second,
- * independent safety net. This keeps login self-healing even when the normal
- * application schema bootstrap was skipped or cached in an older isolate.
- */
+/** Ensure legacy production D1 has the salt column before authentication. */
 async function ensureAdminSaltColumn(db: D1Like): Promise<void> {
-  const info = await db.prepare('PRAGMA table_info(admin_users)').first();
-  // D1 PRAGMA table_info returns rows, so `.first()` is not sufficient for
-  // detecting the complete schema. Use a harmless SELECT against the column
-  // as the authoritative compatibility check.
   try {
     await db.prepare('SELECT salt FROM admin_users LIMIT 1').first();
     return;
   } catch (err: any) {
     const message = String(err?.message || err || '').toLowerCase();
-    if (!message.includes('no such column') || !message.includes('salt')) {
-      throw err;
-    }
+    if (!message.includes('no such column') || !message.includes('salt')) throw err;
   }
 
   try {
     await db.prepare('ALTER TABLE admin_users ADD COLUMN salt TEXT').run();
   } catch (err: any) {
-    // Another request may have added it between the SELECT and ALTER.
     const message = String(err?.message || err || '').toLowerCase();
-    if (!message.includes('duplicate column') && !message.includes('already exists')) {
-      throw err;
-    }
+    if (!message.includes('duplicate column') && !message.includes('already exists')) throw err;
   }
+}
+
+/**
+ * The Worker admin route does not execute the Node AdminService bootstrap.
+ * Provision the single canonical SUPER_ADMIN if the D1 row is missing.
+ * This touches only admin_users and does not create audit/activity entries.
+ */
+async function ensureCanonicalSuperAdminAccount(
+  db: D1Like,
+  workerSecret: string | undefined,
+): Promise<void> {
+  if (!workerSecret) return;
+
+  const existing = await db.prepare(`
+    SELECT id FROM admin_users
+    WHERE id = ? OR lower(username) = ? OR lower(email) = ?
+    LIMIT 1
+  `).bind(
+    CANONICAL_SUPER_ADMIN_ID,
+    CANONICAL_SUPER_ADMIN_USERNAME,
+    CANONICAL_SUPER_ADMIN_EMAIL,
+  ).first<{ id: string }>();
+
+  if (existing) return;
+
+  const saltBytes = new Uint8Array(16);
+  crypto.getRandomValues(saltBytes);
+  const salt = bytesToHex(saltBytes);
+  const passwordHash = await hashPasswordForWorker(workerSecret, salt);
+  const now = new Date().toISOString();
+
+  await db.prepare(`
+    INSERT INTO admin_users
+      (id, username, email, full_name, password_hash, salt, role, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    CANONICAL_SUPER_ADMIN_ID,
+    CANONICAL_SUPER_ADMIN_USERNAME,
+    CANONICAL_SUPER_ADMIN_EMAIL,
+    'Pappizee',
+    passwordHash,
+    salt,
+    'SUPER_ADMIN',
+    1,
+    now,
+    now,
+  ).run();
 }
 
 export async function authenticateAdminOnWorker(
@@ -164,8 +196,9 @@ export async function authenticateAdminOnWorker(
 
   try {
     await ensureAdminSaltColumn(db);
+    await ensureCanonicalSuperAdminAccount(db, env.SUPER_ADMIN_PASSWORD);
   } catch (schemaErr: any) {
-    console.error('[Worker Admin Auth] admin_users schema repair failed:', schemaErr?.message || schemaErr);
+    console.error('[Worker Admin Auth] admin_users schema/bootstrap failed:', schemaErr?.message || schemaErr);
     return { success: false, error: 'Database pengelola belum tersinkron dengan versi Worker terbaru.' };
   }
 
@@ -202,9 +235,7 @@ export async function authenticateAdminOnWorker(
 
   let valid = await verifyPasswordForWorker(passwordPlain, admin.passwordHash, admin.salt);
 
-  // The environment secret is an initial/bootstrap secret. If the existing
-  // canonical Super Admin hash was created before the Worker secret was set,
-  // a successful secret match repairs that single canonical record in-place.
+  // Worker secret is a bootstrap/recovery secret for the canonical account.
   if (!valid && isCanonicalSuperAdminSecretMatch(admin.id, passwordPlain, env.SUPER_ADMIN_PASSWORD)) {
     const saltBytes = new Uint8Array(16);
     crypto.getRandomValues(saltBytes);
