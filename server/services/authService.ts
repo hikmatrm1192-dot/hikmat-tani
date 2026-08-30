@@ -86,6 +86,8 @@ export class AuthService {
   private userIndex = new Map<string, string>(); // authUserId -> farmerId
   private isInitialized = false;
 
+  private configuredJwtSecret?: string;
+
   private constructor() {
     // Operasi inisialisasi default ditunda ke ensureInitialized() (lazy runtime)
     // demi kompatibilitas penuh dengan Cloudflare Workers edge runtime (mencegah error 10021).
@@ -96,6 +98,28 @@ export class AuthService {
       AuthService.instance = new AuthService();
     }
     return AuthService.instance;
+  }
+
+  /**
+   * Set atau update JWT Secret secara dinamis (misal dari Cloudflare Worker env.JWT_SECRET)
+   */
+  public setJwtSecret(secret?: string): void {
+    if (secret && typeof secret === 'string' && secret.trim().length > 0) {
+      this.configuredJwtSecret = secret.trim();
+    }
+  }
+
+  /**
+   * Mengambil JWT Secret aktif (Worker env override -> configured -> config fallback)
+   */
+  public getJwtSecret(overrideSecret?: string): string {
+    if (overrideSecret && typeof overrideSecret === 'string' && overrideSecret.trim().length > 0) {
+      return overrideSecret.trim();
+    }
+    if (this.configuredJwtSecret && this.configuredJwtSecret.length > 0) {
+      return this.configuredJwtSecret;
+    }
+    return config.jwtSecret;
   }
 
   /**
@@ -919,14 +943,17 @@ export class AuthService {
   /**
    * Menghasilkan token sesi aman
    */
-  public generateSessionToken(payload: {
-    userId: string;
-    role?: string;
-    isAnonymous?: boolean;
-    farmerId?: string;
-    name?: string;
-    phoneNumber?: string;
-  }): { token: string; expiresIn: string; session: AuthSessionPayload } {
+  public generateSessionToken(
+    payload: {
+      userId: string;
+      role?: string;
+      isAnonymous?: boolean;
+      farmerId?: string;
+      name?: string;
+      phoneNumber?: string;
+    },
+    jwtSecretOverride?: string
+  ): { token: string; expiresIn: string; session: AuthSessionPayload } {
     const session: AuthSessionPayload = {
       userId: payload.userId,
       role: payload.role || 'farmer',
@@ -937,7 +964,9 @@ export class AuthService {
       issuedAt: Date.now(),
     };
 
-    const token = jwt.sign(session, config.jwtSecret, {
+    const secret = this.getJwtSecret(jwtSecretOverride);
+
+    const token = jwt.sign(session, secret, {
       expiresIn: '30d',
       algorithm: 'HS256',
     });
@@ -952,13 +981,25 @@ export class AuthService {
   /**
    * Memverifikasi token JWT
    */
-  public verifyToken(token: string): AuthSessionPayload | null {
+  public verifyToken(token: string, jwtSecretOverride?: string): AuthSessionPayload | null {
+    const primarySecret = this.getJwtSecret(jwtSecretOverride);
     try {
-      const decoded = jwt.verify(token, config.jwtSecret, {
+      const decoded = jwt.verify(token, primarySecret, {
         algorithms: ['HS256'],
       }) as AuthSessionPayload;
       return decoded;
     } catch {
+      // Fallback: Jika verifikasi dengan primarySecret gagal, coba dengan config.jwtSecret bawaan
+      if (primarySecret !== config.jwtSecret) {
+        try {
+          const fallbackDecoded = jwt.verify(token, config.jwtSecret, {
+            algorithms: ['HS256'],
+          }) as AuthSessionPayload;
+          return fallbackDecoded;
+        } catch {
+          return null;
+        }
+      }
       return null;
     }
   }

@@ -19,6 +19,7 @@ import { eq, or, desc } from 'drizzle-orm';
 import { DrizzleD1Database } from 'drizzle-orm/d1';
 import { authService, AuthSessionPayload } from './authService.ts';
 import { d1DbService, d1Schema } from '../db/d1/index.ts';
+import { ensureD1CanonicalSchema } from '../db/d1/ensureCanonical.ts';
 import { adminUsers, appConfigs, adminAuditLogs } from '../db/d1/schema.ts';
 
 export type UserRole = 'FARMER' | 'MANAGER' | 'SUPER_ADMIN';
@@ -73,9 +74,12 @@ export interface AdminAuditLog {
 
 /**
  * Membaca password awal Super Admin dari environment variable resmi
- * Satu sumber konfigurasi: ADMIN_INITIAL_PASSWORD atau SUPER_ADMIN_PASSWORD
+ * Satu sumber konfigurasi: ADMIN_INITIAL_PASSWORD atau SUPER_ADMIN_PASSWORD atau Worker env
  */
-export function getSuperAdminInitialPasswordFromEnv(): string {
+export function getSuperAdminInitialPasswordFromEnv(overrideSecret?: string): string {
+  if (overrideSecret && typeof overrideSecret === 'string' && overrideSecret.trim().length > 0) {
+    return overrideSecret.trim();
+  }
   const envPassword = process.env.ADMIN_INITIAL_PASSWORD || process.env.SUPER_ADMIN_PASSWORD;
   if (typeof envPassword === 'string' && envPassword.trim().length > 0) {
     return envPassword.trim();
@@ -92,6 +96,10 @@ export class AdminService {
   private auditLogs: AdminAuditLog[] = [];
   private officialConfig: OfficialAppConfig;
   private isInitialized = false;
+
+  // Environment secrets dari runtime Worker / Server
+  private configuredSuperAdminPassword?: string;
+  private configuredManagerPassword?: string;
 
   public constructor(db?: DrizzleD1Database<typeof d1Schema>) {
     if (db) {
@@ -138,6 +146,43 @@ export class AdminService {
     this.db = db;
   }
 
+  /**
+   * Konfigurasi Environment Secrets dari Worker / Runtime
+   */
+  public setEnvSecrets(secrets: {
+    superAdminPassword?: string;
+    adminInitialPassword?: string;
+    managerInitialPassword?: string;
+    jwtSecret?: string;
+  }): void {
+    const superSecret = secrets.superAdminPassword || secrets.adminInitialPassword;
+    if (superSecret && typeof superSecret === 'string' && superSecret.trim().length > 0) {
+      this.configuredSuperAdminPassword = superSecret.trim();
+    }
+    if (secrets.managerInitialPassword && typeof secrets.managerInitialPassword === 'string' && secrets.managerInitialPassword.trim().length > 0) {
+      this.configuredManagerPassword = secrets.managerInitialPassword.trim();
+    }
+    if (secrets.jwtSecret && typeof secrets.jwtSecret === 'string' && secrets.jwtSecret.trim().length > 0) {
+      authService.setJwtSecret(secrets.jwtSecret.trim());
+    }
+    if (this.configuredSuperAdminPassword) {
+      this.reprovisionSuperAdminPassword(this.configuredSuperAdminPassword);
+    }
+  }
+
+  /**
+   * Mengambil password awal Super Admin yang aktif (Worker override -> configured -> env -> empty)
+   */
+  public getSuperAdminInitialPassword(overrideSecret?: string): string {
+    if (overrideSecret && typeof overrideSecret === 'string' && overrideSecret.trim().length > 0) {
+      return overrideSecret.trim();
+    }
+    if (this.configuredSuperAdminPassword && this.configuredSuperAdminPassword.length > 0) {
+      return this.configuredSuperAdminPassword;
+    }
+    return getSuperAdminInitialPasswordFromEnv();
+  }
+
   private getActiveDb(optionalDb?: DrizzleD1Database<typeof d1Schema>): DrizzleD1Database<typeof d1Schema> | null {
     if (optionalDb) return optionalDb;
     if (this.db) return this.db;
@@ -147,24 +192,31 @@ export class AdminService {
   /**
    * Memastikan akun admin default telah diinisialisasi pada runtime request (Sync Fallback).
    */
-  public ensureInitialized(): void {
-    if (this.isInitialized) return;
+  public ensureInitialized(superAdminSecret?: string): void {
+    if (this.isInitialized) {
+      if (superAdminSecret || this.configuredSuperAdminPassword) {
+        this.reprovisionSuperAdminPassword(superAdminSecret);
+      }
+      return;
+    }
     this.isInitialized = true;
-    this.seedDefaultAdmin();
+    this.seedDefaultAdmin(superAdminSecret);
   }
 
   /**
    * Inisialisasi Asinkron & Idempoten dengan D1 Persistence
    */
-  public async ensureInitializedAsync(d1Db?: DrizzleD1Database<typeof d1Schema>): Promise<void> {
+  public async ensureInitializedAsync(d1Db?: DrizzleD1Database<typeof d1Schema>, superAdminSecret?: string): Promise<void> {
     const db = this.getActiveDb(d1Db);
-    this.ensureInitialized();
+    this.ensureInitialized(superAdminSecret);
 
     if (!db) {
       return;
     }
 
     try {
+      await ensureD1CanonicalSchema(db);
+
       // 1. Verifikasi / Inisialisasi Super Admin di D1
       const superAdminRows = await db
         .select()
@@ -172,12 +224,13 @@ export class AdminService {
         .where(eq(adminUsers.id, 'admin_super_pappizee'))
         .limit(1);
 
+      const effectivePassword = this.getSuperAdminInitialPassword(superAdminSecret);
+
       if (superAdminRows.length === 0) {
-        const envPassword = getSuperAdminInitialPasswordFromEnv();
         const salt = this.generateSalt();
         const defaultSecret = 'HikmatTaniSuperAdmin2026Secret!';
-        const hash = envPassword
-          ? this.hashPassword(envPassword, salt).hash
+        const hash = effectivePassword
+          ? this.hashPassword(effectivePassword, salt).hash
           : this.hashPassword(defaultSecret, salt).hash;
 
         const now = new Date().toISOString();
@@ -371,8 +424,8 @@ export class AdminService {
    * - Menghash password dari environment dengan PBKDF2 (SHA-512)
    * - Hanya menyimpan hash + salt (tidak ada plaintext)
    */
-  public reprovisionSuperAdminPassword(): void {
-    const envPassword = getSuperAdminInitialPasswordFromEnv();
+  public reprovisionSuperAdminPassword(superAdminSecret?: string): void {
+    const envPassword = this.getSuperAdminInitialPassword(superAdminSecret);
     const existing = this.adminUsers.get('admin_super_pappizee');
 
     if (existing) {
@@ -417,13 +470,13 @@ export class AdminService {
    * Seed Super Admin & Manager awal secara aman (idempotent)
    * Akun Utama: pappizee (hikmat.rm1192@gmail.com) sebagai SUPER_ADMIN
    */
-  public seedDefaultAdmin() {
-    this.reprovisionSuperAdminPassword();
+  public seedDefaultAdmin(superAdminSecret?: string) {
+    this.reprovisionSuperAdminPassword(superAdminSecret);
 
     if (!this.adminUsers.has('admin_mgr_01')) {
       // Akun Pengelola / Manager Staf Lapangan (Role MANAGER, bukan SUPER_ADMIN)
       const managerSalt = 'hikmat_tani_manager_salt_2026';
-      const managerEnvPassword = process.env.MANAGER_INITIAL_PASSWORD || 'ManagerTani2026!';
+      const managerEnvPassword = this.configuredManagerPassword || process.env.MANAGER_INITIAL_PASSWORD || 'ManagerTani2026!';
       const managerHash = this.hashPassword(managerEnvPassword, managerSalt).hash;
 
       const manager: AdminUser = {
@@ -449,14 +502,15 @@ export class AdminService {
   public authenticateAdmin(
     usernameOrEmail: string,
     passwordPlain: string,
-    ipAddress?: string
+    ipAddress?: string,
+    superAdminSecret?: string
   ): {
     success: boolean;
     token?: string;
     admin?: { id: string; username: string; email?: string; fullName: string; role: 'MANAGER' | 'SUPER_ADMIN' };
     error?: string;
   } {
-    this.ensureInitialized();
+    this.ensureInitialized(superAdminSecret);
 
     if (!usernameOrEmail || !passwordPlain) {
       return { success: false, error: 'Nama pengguna/email atau kata sandi pengelola salah.' };
@@ -478,7 +532,7 @@ export class AdminService {
 
     // Mekanisme reset/re-provision aman jika hash di memori belum sinkron dengan password environment
     if (!isMatch && user.role === 'SUPER_ADMIN') {
-      const envPassword = getSuperAdminInitialPasswordFromEnv() || 'HikmatTaniSuperAdmin2026Secret!';
+      const envPassword = this.getSuperAdminInitialPassword(superAdminSecret) || 'HikmatTaniSuperAdmin2026Secret!';
       if (envPassword && passwordPlain === envPassword) {
         const { hash, salt } = this.hashPassword(passwordPlain);
         user.passwordHash = hash;
@@ -532,7 +586,8 @@ export class AdminService {
     usernameOrEmail: string,
     passwordPlain: string,
     ipAddress?: string,
-    d1Db?: DrizzleD1Database<typeof d1Schema>
+    d1Db?: DrizzleD1Database<typeof d1Schema>,
+    superAdminSecret?: string
   ): Promise<{
     success: boolean;
     token?: string;
@@ -540,7 +595,7 @@ export class AdminService {
     error?: string;
   }> {
     const db = this.getActiveDb(d1Db);
-    await this.ensureInitializedAsync(db || undefined);
+    await this.ensureInitializedAsync(db || undefined, superAdminSecret);
 
     if (!usernameOrEmail || !passwordPlain) {
       return { success: false, error: 'Nama pengguna/email atau kata sandi pengelola salah.' };
@@ -601,7 +656,7 @@ export class AdminService {
 
     // Mekanisme sinkronisasi aman jika password environment diperbarui
     if (!isMatch && user.role === 'SUPER_ADMIN') {
-      const envPassword = getSuperAdminInitialPasswordFromEnv() || 'HikmatTaniSuperAdmin2026Secret!';
+      const envPassword = this.getSuperAdminInitialPassword(superAdminSecret) || 'HikmatTaniSuperAdmin2026Secret!';
       if (envPassword && passwordPlain === envPassword) {
         const { hash, salt } = this.hashPassword(passwordPlain);
         user.passwordHash = hash;

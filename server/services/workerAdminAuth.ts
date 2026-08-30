@@ -6,6 +6,8 @@
  * secrets.
  */
 
+import { ensureD1CanonicalSchema } from '../db/d1/ensureCanonical.ts';
+
 export const CANONICAL_SUPER_ADMIN_ID = 'admin_super_pappizee';
 export const CANONICAL_SUPER_ADMIN_USERNAME = 'pappizee';
 export const CANONICAL_SUPER_ADMIN_EMAIL = 'hikmat.rm1192@gmail.com';
@@ -197,6 +199,8 @@ export async function authenticateAdminOnWorker(
   passwordPlain: string,
   ipAddress: string,
 ): Promise<WorkerAdminLoginResult> {
+  await ensureD1CanonicalSchema(db);
+
   const identifier = usernameOrEmail.trim().toLowerCase();
   if (!identifier || !passwordPlain) {
     return { success: false, error: 'Nama pengguna/email atau kata sandi pengelola salah.' };

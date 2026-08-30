@@ -8,6 +8,7 @@ import { D1Database } from './index.ts';
  */
 export class InMemoryD1Database implements D1Database {
   private tables: Map<string, Map<string, any>> = new Map();
+  private tableColumns: Map<string, Array<{ cid: number; name: string; type: string; notnull: number; dflt_value: any; pk: number }>> = new Map();
 
   constructor() {
     this.reset();
@@ -15,27 +16,34 @@ export class InMemoryD1Database implements D1Database {
 
   public reset(): void {
     this.tables.clear();
-    this.tables.set('processed_operations', new Map());
-    this.tables.set('sync_journal', new Map());
-    this.tables.set('lands', new Map());
-    this.tables.set('farmers', new Map());
-    this.tables.set('crop_seasons', new Map());
-    this.tables.set('activities', new Map());
-    this.tables.set('activity_fertilizers', new Map());
-    this.tables.set('activity_opt_observations', new Map());
-    this.tables.set('recommendations', new Map());
-    this.tables.set('farmer_decisions', new Map());
-    this.tables.set('actual_actions', new Map());
-    this.tables.set('app_configs', new Map());
-    this.tables.set('admin_users', new Map());
-    this.tables.set('admin_audit_logs', new Map());
-    this.tables.set('fertilizers', new Map());
-    this.tables.set('varieties', new Map());
-    this.tables.set('opts', new Map());
-    this.tables.set('natural_enemies', new Map());
-    this.tables.set('references', new Map());
-    this.tables.set('knowledge_articles', new Map());
-    this.tables.set('auth_users', new Map());
+    this.tableColumns.clear();
+    const defaultTables = [
+      'processed_operations',
+      'sync_journal',
+      'lands',
+      'farmers',
+      'crop_seasons',
+      'activities',
+      'activity_fertilizers',
+      'activity_opt_observations',
+      'recommendations',
+      'farmer_decisions',
+      'actual_actions',
+      'app_configs',
+      'admin_users',
+      'admin_audit_logs',
+      'fertilizers',
+      'varieties',
+      'opts',
+      'natural_enemies',
+      'references',
+      'knowledge_articles',
+      'auth_users',
+      'replication_outbox',
+    ];
+    for (const tbl of defaultTables) {
+      this.tables.set(tbl, new Map());
+    }
   }
 
   public prepare(query: string): any {
@@ -64,6 +72,87 @@ export class InMemoryD1Database implements D1Database {
       this.tables.set(normalized, new Map());
     }
     return this.tables.get(normalized)!;
+  }
+
+  public getTableInfo(tableName: string): Array<{ cid: number; name: string; type: string; notnull: number; dflt_value: any; pk: number }> {
+    const normalized = tableName.replace(/["`]/g, '').toLowerCase();
+    if (this.tableColumns.has(normalized)) {
+      return this.tableColumns.get(normalized)!;
+    }
+    // Return default schema columns if table exists
+    const defaultCols: Record<string, string[]> = {
+      admin_audit_logs: ['id', 'actor_id', 'actor_name', 'actor_role', 'action', 'details', 'ip_address', 'created_at'],
+      admin_users: ['id', 'username', 'email', 'full_name', 'password_hash', 'salt', 'role', 'is_active', 'last_login_at', 'created_at', 'updated_at'],
+      app_configs: ['id', 'app_name', 'slogan', 'logo_url', 'logo_primary', 'logo_horizontal', 'app_icon', 'description', 'contact_phone', 'contact_email', 'support_title', 'support_description', 'donation_active', 'donation_recipient_name', 'donation_bank_name', 'donation_account_number', 'donation_ewallet_number', 'donation_qris_image', 'donation_url', 'updated_by', 'updated_at'],
+      auth_users: ['id', 'anonymous_id', 'role', 'is_active', 'last_seen_at', 'created_at', 'updated_at'],
+      farmers: ['id', 'name', 'phone_number', 'nik', 'pin_hash', 'salt', 'village', 'district', 'regency', 'province', 'farmer_group_name', 'auth_user_id', 'created_at', 'updated_at'],
+    };
+
+    if (defaultCols[normalized]) {
+      const cols = defaultCols[normalized].map((name, idx) => ({
+        cid: idx,
+        name,
+        type: 'TEXT',
+        notnull: name === 'id' ? 1 : 0,
+        dflt_value: null,
+        pk: name === 'id' ? 1 : 0,
+      }));
+      this.tableColumns.set(normalized, cols);
+      return cols;
+    }
+
+    return [];
+  }
+
+  public setTableInfo(tableName: string, cols: Array<{ cid: number; name: string; type: string; notnull: number; dflt_value: any; pk: number }>): void {
+    const normalized = tableName.replace(/["`]/g, '').toLowerCase();
+    this.tableColumns.set(normalized, cols);
+  }
+
+  public addColumn(tableName: string, colName: string, colType: string = 'TEXT', defaultValue: any = null): void {
+    const normalized = tableName.replace(/["`]/g, '').toLowerCase();
+    const cols = this.getTableInfo(normalized);
+    if (!cols.some((c) => c.name.toLowerCase() === colName.toLowerCase())) {
+      cols.push({
+        cid: cols.length,
+        name: colName,
+        type: colType,
+        notnull: 0,
+        dflt_value: defaultValue,
+        pk: 0,
+      });
+      this.tableColumns.set(normalized, cols);
+
+      // Backfill existing rows if default value provided
+      const tableMap = this.getTableMap(normalized);
+      for (const [k, row] of tableMap.entries()) {
+        if (row[colName] === undefined) {
+          row[colName] = defaultValue;
+          tableMap.set(k, row);
+        }
+      }
+    }
+  }
+
+  public renameTable(oldName: string, newName: string): void {
+    const oldNorm = oldName.replace(/["`]/g, '').toLowerCase();
+    const newNorm = newName.replace(/["`]/g, '').toLowerCase();
+    if (this.tables.has(oldNorm)) {
+      const data = this.tables.get(oldNorm)!;
+      this.tables.delete(oldNorm);
+      this.tables.set(newNorm, data);
+    }
+    if (this.tableColumns.has(oldNorm)) {
+      const cols = this.tableColumns.get(oldNorm)!;
+      this.tableColumns.delete(oldNorm);
+      this.tableColumns.set(newNorm, cols);
+    }
+  }
+
+  public dropTable(tableName: string): void {
+    const normalized = tableName.replace(/["`]/g, '').toLowerCase();
+    this.tables.delete(normalized);
+    this.tableColumns.delete(normalized);
   }
 }
 
@@ -121,7 +210,69 @@ class InMemoryD1PreparedStatement {
   private async execute(): Promise<any[]> {
     const sql = this.query.trim();
 
-    // 1. SELECT 1 health check
+    // 1. PRAGMA queries
+    if (/^PRAGMA\s+table_info\(([^)]+)\)/i.test(sql)) {
+      const match = sql.match(/^PRAGMA\s+table_info\(([^)]+)\)/i);
+      const tableName = match ? match[1].replace(/[`"]/g, '').trim() : '';
+      return this.db.getTableInfo(tableName);
+    }
+    if (/^PRAGMA/i.test(sql)) {
+      return [];
+    }
+
+    // 2. CREATE TABLE / INDEX
+    if (/^CREATE\s+INDEX/i.test(sql)) {
+      return [];
+    }
+    if (/^CREATE\s+TABLE/i.test(sql)) {
+      const match = sql.match(/CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+[`"]?([a-zA-Z0-9_]+)[`"]?\s*\(([\s\S]+)\)/i);
+      if (match) {
+        const tableName = match[1];
+        this.db.getTableMap(tableName); // ensure table map exists
+      }
+      return [];
+    }
+
+    // 3. ALTER TABLE statement
+    if (/^ALTER\s+TABLE/i.test(sql)) {
+      const addColMatch = sql.match(/ALTER\s+TABLE\s+[`"]?([a-zA-Z0-9_]+)[`"]?\s+ADD(?:\s+COLUMN)?\s+[`"]?([a-zA-Z0-9_]+)[`"]?(?:\s+([a-zA-Z0-9_]+))?(?:.*DEFAULT\s+([^;]+))?/i);
+      if (addColMatch) {
+        const tableName = addColMatch[1];
+        const colName = addColMatch[2];
+        const colType = addColMatch[3] || 'TEXT';
+        let defaultVal: any = null;
+        if (addColMatch[4]) {
+          const rawDef = addColMatch[4].trim().replace(/^\(|\)$/g, '');
+          if (/^CURRENT_TIMESTAMP/i.test(rawDef)) {
+            defaultVal = new Date().toISOString();
+          } else if (/^\d+$/.test(rawDef)) {
+            defaultVal = Number(rawDef);
+          } else {
+            defaultVal = rawDef.replace(/^['"`]|['"`]$/g, '');
+          }
+        }
+        this.db.addColumn(tableName, colName, colType, defaultVal);
+        return [];
+      }
+
+      const renameMatch = sql.match(/ALTER\s+TABLE\s+[`"]?([a-zA-Z0-9_]+)[`"]?\s+RENAME\s+TO\s+[`"]?([a-zA-Z0-9_]+)[`"]?/i);
+      if (renameMatch) {
+        this.db.renameTable(renameMatch[1], renameMatch[2]);
+        return [];
+      }
+      return [];
+    }
+
+    // 4. DROP TABLE statement
+    if (/^DROP\s+TABLE/i.test(sql)) {
+      const dropMatch = sql.match(/DROP\s+TABLE(?:\s+IF\s+EXISTS)?\s+[`"]?([a-zA-Z0-9_]+)[`"]?/i);
+      if (dropMatch) {
+        this.db.dropTable(dropMatch[1]);
+      }
+      return [];
+    }
+
+    // 5. SELECT 1 health check
     if (/^SELECT\s+1/i.test(sql)) {
       return [{ 1: 1 }];
     }
@@ -180,11 +331,22 @@ class InMemoryD1PreparedStatement {
         const whereClause = updateMatch[3] || '';
         const tableMap = this.db.getTableMap(tableName);
 
-        const setCols = setClause.split(',').map((s) => s.split('=')[0].trim().replace(/[`"]/g, ''));
+        const setAssignments = setClause.split(',').map((s) => s.trim());
         let paramIdx = 0;
         const updates: Record<string, any> = {};
-        for (const col of setCols) {
-          updates[col] = this.params[paramIdx++];
+        for (const assign of setAssignments) {
+          const eqIdx = assign.indexOf('=');
+          if (eqIdx > 0) {
+            const col = assign.slice(0, eqIdx).trim().replace(/[`"]/g, '');
+            const rawVal = assign.slice(eqIdx + 1).trim();
+            if (rawVal === '?') {
+              updates[col] = this.params[paramIdx++];
+            } else if (rawVal.toLowerCase() === 'null') {
+              updates[col] = null;
+            } else {
+              updates[col] = rawVal.replace(/^['"`]|['"`]$/g, '');
+            }
+          }
         }
 
         let whereId: string | null = null;
@@ -200,6 +362,22 @@ class InMemoryD1PreparedStatement {
         } else if (!whereClause) {
           for (const [k, v] of tableMap.entries()) {
             tableMap.set(k, { ...v, ...updates });
+          }
+        } else {
+          // Conditional update matching whereClause
+          for (const [k, v] of tableMap.entries()) {
+            let matches = false;
+            if (/actor_name\s+IS\s+NULL\s+OR\s+actor_name\s*=\s*''/i.test(whereClause)) {
+              matches = !v.actor_name || v.actor_name === '';
+            } else if (/phone_number\s+IS\s+NULL\s+AND\s+phone\s+IS\s+NOT\s+NULL/i.test(whereClause)) {
+              matches = !v.phone_number && Boolean(v.phone);
+            } else if (/id\s*=\s*['"]?([^'"]+)['"]?/i.test(whereClause)) {
+              const idMatch = whereClause.match(/id\s*=\s*['"]?([^'"]+)['"]?/i);
+              matches = idMatch ? v.id === idMatch[1] : false;
+            }
+            if (matches) {
+              tableMap.set(k, { ...v, ...updates });
+            }
           }
         }
       }

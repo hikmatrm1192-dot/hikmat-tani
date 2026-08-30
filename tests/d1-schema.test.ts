@@ -216,6 +216,123 @@ export async function runD1SchemaTests(): Promise<{
     }
   });
 
+  // 8. Regression Test: Self-Healing admin_audit_logs yang kehilangan kolom actor_name
+  await test('8. Regression Test: Self-Healing admin_audit_logs yang kehilangan kolom actor_name (Zero Data Loss)', async () => {
+    const { createTestD1Database } = await import('../server/db/d1/testD1.ts');
+    const { ensureD1CanonicalSchema, resetSchemaEnsuredCache } = await import('../server/db/d1/ensureCanonical.ts');
+    
+    resetSchemaEnsuredCache();
+    const d1Mock = createTestD1Database();
+
+    // Simulasi database legacy di mana tabel admin_audit_logs dibuat tanpa kolom actor_name
+    d1Mock.setTableInfo('admin_audit_logs', [
+      { cid: 0, name: 'id', type: 'TEXT', notnull: 1, dflt_value: null, pk: 1 },
+      { cid: 1, name: 'actor_id', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
+      { cid: 2, name: 'actor_role', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
+      { cid: 3, name: 'action', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
+      { cid: 4, name: 'details', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
+      { cid: 5, name: 'ip_address', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
+      { cid: 6, name: 'created_at', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
+    ]);
+
+    // Masukkan data lama sebelum self-healing
+    const legacyMap = d1Mock.getTableMap('admin_audit_logs');
+    legacyMap.set('log_legacy_1', {
+      id: 'log_legacy_1',
+      actor_id: 'admin_super_pappizee',
+      actor_role: 'SUPER_ADMIN',
+      action: 'LOGIN',
+      details: '{"username":"pappizee"}',
+      ip_address: '127.0.0.1',
+      created_at: '2026-08-01T00:00:00.000Z',
+    });
+
+    // Jalankan ensureD1CanonicalSchema() dengan force=true
+    const healed = await ensureD1CanonicalSchema(d1Mock, true);
+    if (!healed) {
+      throw new Error('ensureD1CanonicalSchema mengembalikan false.');
+    }
+
+    // Verifikasi kolom actor_name sekarang tersedia pada tabel
+    const info = d1Mock.getTableInfo('admin_audit_logs');
+    const colNames = info.map((c) => c.name);
+    if (!colNames.includes('actor_name')) {
+      throw new Error(`Kolom actor_name tidak ditemukan setelah self-healing: ${colNames.join(', ')}`);
+    }
+
+    // Verifikasi data legacy tetap ada dan tidak terhapus (Zero Data Loss)
+    const existingRow = legacyMap.get('log_legacy_1');
+    if (!existingRow || existingRow.id !== 'log_legacy_1' || existingRow.actor_id !== 'admin_super_pappizee') {
+      throw new Error('Data legacy pada admin_audit_logs terhapus atau rusak!');
+    }
+
+    // Verifikasi nilai actor_name ter-backfill dengan aman
+    if (!existingRow.actor_name) {
+      throw new Error('Nilai fallback actor_name gagal dibackfill pada baris legacy.');
+    }
+  });
+
+  // 9. Regression Test: Self-Healing admin_users & app_configs
+  await test('9. Regression Test: Self-Healing admin_users & app_configs saat kolom tidak lengkap', async () => {
+    const { createTestD1Database } = await import('../server/db/d1/testD1.ts');
+    const { ensureD1CanonicalSchema, resetSchemaEnsuredCache } = await import('../server/db/d1/ensureCanonical.ts');
+
+    resetSchemaEnsuredCache();
+    const d1Mock = createTestD1Database();
+
+    // Simulasi tabel admin_users dengan kolom lama tanpa email & last_login_at
+    d1Mock.setTableInfo('admin_users', [
+      { cid: 0, name: 'id', type: 'TEXT', notnull: 1, dflt_value: null, pk: 1 },
+      { cid: 1, name: 'username', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
+      { cid: 2, name: 'full_name', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
+      { cid: 3, name: 'password_hash', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
+      { cid: 4, name: 'salt', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
+      { cid: 5, name: 'role', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
+    ]);
+
+    await ensureD1CanonicalSchema(d1Mock, true);
+
+    const userCols = d1Mock.getTableInfo('admin_users').map((c) => c.name);
+    for (const required of ['email', 'is_active', 'last_login_at', 'created_at', 'updated_at']) {
+      if (!userCols.includes(required)) {
+        throw new Error(`Kolom ${required} tidak ditemukan di admin_users setelah self-healing.`);
+      }
+    }
+  });
+
+  // 10. Verification: INSERT & SELECT pada admin_audit_logs setelah self-healing
+  await test('10. Verification: INSERT & SELECT pada admin_audit_logs setelah self-healing', async () => {
+    const { createTestD1Database, createTestD1Client } = await import('../server/db/d1/testD1.ts');
+    const { ensureD1CanonicalSchema, resetSchemaEnsuredCache } = await import('../server/db/d1/ensureCanonical.ts');
+    const { AdminService } = await import('../server/services/adminService.ts');
+    const { authService } = await import('../server/services/authService.ts');
+
+    resetSchemaEnsuredCache();
+    const d1Mock = createTestD1Database();
+    await ensureD1CanonicalSchema(d1Mock, true);
+    const d1Client = createTestD1Client(d1Mock);
+
+    const adminService = new AdminService(d1Client);
+    await adminService.ensureInitializedAsync();
+
+    const currentSecret = process.env.SUPER_ADMIN_PASSWORD || process.env.ADMIN_INITIAL_PASSWORD || 'HikmatTaniSuperAdmin2026Secret!';
+    const loginRes = await adminService.authenticateAdminAsync('pappizee', currentSecret);
+    if (!loginRes.success || !loginRes.token) {
+      throw new Error(`Login Super Admin gagal: ${loginRes.error}`);
+    }
+
+    const session = authService.verifyToken(loginRes.token)!;
+    const logs = await adminService.getAuditLogsAsync(session, 10);
+    if (!logs || logs.length === 0) {
+      throw new Error('Audit logs gagal diambil dari D1 setelah login');
+    }
+
+    const loginLog = logs.find((l) => l.action === 'LOGIN');
+    if (!loginLog || loginLog.actorName !== 'Pappizee') {
+      throw new Error(`Audit log login tidak valid: ${JSON.stringify(loginLog)}`);
+    }
+  });
+
   const total = results.length;
   const passed = results.filter((r) => r.passed).length;
   const failed = total - passed;
