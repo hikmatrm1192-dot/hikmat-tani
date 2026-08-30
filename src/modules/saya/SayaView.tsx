@@ -59,10 +59,11 @@ import {
 import { AuthSession } from '../../services/authClientService.ts';
 import { CultivationReportModal } from './CultivationReportModal.tsx';
 import { EditFarmerModal } from './EditFarmerModal.tsx';
+import { ProfilePhotoModal } from './ProfilePhotoModal.tsx';
 import { RestoreConfirmModal } from './RestoreConfirmModal.tsx';
 import { SupportModal } from './SupportModal.tsx';
 import { AdminPortalModal } from '../admin/AdminPortalModal.tsx';
-import { KeyRound, LogOut, Shield, UserCheck } from 'lucide-react';
+import { Camera, KeyRound, LogOut, Shield, UserCheck } from 'lucide-react';
 
 interface SayaViewProps {
   farmer: Farmer | null;
@@ -98,6 +99,7 @@ export function SayaView({
   isTestingRunning = false,
 }: SayaViewProps) {
   // Modal states
+  const [isProfilePhotoModalOpen, setIsProfilePhotoModalOpen] = useState<boolean>(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState<boolean>(false);
@@ -313,10 +315,39 @@ export function SayaView({
 
       {/* 1. Profil Petani Sederhana */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-[#0F5132] text-[#D4AF37] flex items-center justify-center font-black text-xl shadow-md shrink-0 border border-[#2E7D4F]/40">
-              {farmer?.name ? farmer.name.charAt(0).toUpperCase() : <User className="w-7 h-7" />}
+        <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
+            {/* Avatar Melingkar dengan Aksi Ubah Foto */}
+            <div className="relative group shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsProfilePhotoModalOpen(true)}
+                className="w-16 h-16 sm:w-18 sm:h-18 rounded-full overflow-hidden border-2 border-[#D4AF37] shadow-md bg-[#0F5132] flex items-center justify-center transition-transform group-hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#2E7D4F]"
+                title="Klik untuk ubah foto profil"
+              >
+                {farmer?.avatarUrl ? (
+                  <img
+                    src={farmer.avatarUrl}
+                    alt={farmer?.name || 'Foto Profil'}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-[#D4AF37] font-black text-2xl">
+                    {farmer?.name ? farmer.name.charAt(0).toUpperCase() : <User className="w-8 h-8 text-[#D4AF37]" />}
+                  </div>
+                )}
+              </button>
+
+              {/* Badge Ikon Kamera di Sudut Bawah Avatar */}
+              <button
+                type="button"
+                onClick={() => setIsProfilePhotoModalOpen(true)}
+                className="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full bg-[#0F5132] hover:bg-[#0B3D26] active:bg-black text-[#D4AF37] border-2 border-white flex items-center justify-center shadow-xs transition-transform group-hover:scale-110"
+                title="Ubah Foto Profil"
+                aria-label="Ubah Foto Profil"
+              >
+                <Camera className="w-3 h-3" />
+              </button>
             </div>
 
             <div className="min-w-0">
@@ -328,18 +359,27 @@ export function SayaView({
                 {farmer?.village ? `Desa ${farmer.village}` : 'Pedesaan Nusantara'}
                 {farmer?.regency ? `, ${farmer.regency}` : ''}
               </p>
+              <button
+                type="button"
+                onClick={() => setIsProfilePhotoModalOpen(true)}
+                className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 underline mt-0.5 inline-block text-left"
+              >
+                Ubah Foto Profil
+              </button>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setIsEditProfileOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs transition-colors shrink-0 min-h-[38px] border border-slate-200"
-          >
-            <Edit3 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Ubah Profil</span>
-            <span className="sm:hidden">Ubah</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setIsEditProfileOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs transition-colors shrink-0 min-h-[38px] border border-slate-200"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Ubah Profil</span>
+              <span className="sm:hidden">Ubah</span>
+            </button>
+          </div>
         </div>
 
         {/* Statistik Ringkas */}
@@ -753,6 +793,17 @@ export function SayaView({
         onClose={() => setIsPortalAdminOpen(false)}
         onConfigUpdated={() => {
           // Callback jika config berhasil diupdate
+        }}
+      />
+
+      {/* Modal Ubah Foto Profil */}
+      <ProfilePhotoModal
+        isOpen={isProfilePhotoModalOpen}
+        onClose={() => setIsProfilePhotoModalOpen(false)}
+        farmer={farmer}
+        onSavePhoto={async (avatarUrl) => {
+          await onUpdateFarmer({ avatarUrl });
+          await onRefreshData();
         }}
       />
 

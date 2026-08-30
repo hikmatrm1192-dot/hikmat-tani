@@ -21,6 +21,7 @@ export interface AuthSession {
   farmer: {
     id: string;
     name: string;
+    avatarUrl?: string;
     nikMasked: string;
     phoneNumber: string;
     village?: string;

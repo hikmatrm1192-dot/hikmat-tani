@@ -27,9 +27,13 @@ export function AppLayout({ activeTab, onSelectTab, children }: AppLayoutProps) 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 pb-24 md:pb-8">
         {/* Mobile Header (Hidden on Desktop) */}
-        <header className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 py-3 flex items-center justify-between shadow-xs">
-          <BrandLogo size="sm" showSlogan={false} />
-          <ConnectionStatus />
+        <header className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2 shadow-xs min-h-[58px]">
+          <div className="min-w-0 flex-1 mr-1">
+            <BrandLogo size="header" showSlogan={true} />
+          </div>
+          <div className="shrink-0">
+            <ConnectionStatus />
+          </div>
         </header>
 
         {/* Dynamic Page Container */}

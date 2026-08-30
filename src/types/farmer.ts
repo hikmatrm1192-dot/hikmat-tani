@@ -9,6 +9,7 @@ import { EntityId, ISODateString } from './common.ts';
 export interface Farmer {
   id: EntityId;
   name: string;
+  avatarUrl?: string;
   phoneNumber?: string;
   village?: string;
   district?: string;

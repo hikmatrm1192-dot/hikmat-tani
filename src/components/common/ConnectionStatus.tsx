@@ -27,10 +27,10 @@ export function ConnectionStatus() {
 
   return (
     <div
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
         isOnline
-          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-          : 'bg-amber-50 text-amber-900 border border-amber-300'
+          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs'
+          : 'bg-amber-50 text-amber-900 border border-amber-300 shadow-2xs'
       }`}
       role="status"
       aria-live="polite"
@@ -38,12 +38,14 @@ export function ConnectionStatus() {
       {isOnline ? (
         <>
           <Wifi className="w-3.5 h-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
-          <span>Tersimpan Lokal</span>
+          <span className="hidden xs:inline sm:inline">Tersimpan Lokal</span>
+          <span className="xs:hidden sm:hidden">Lokal</span>
         </>
       ) : (
         <>
           <WifiOff className="w-3.5 h-3.5 text-amber-700 shrink-0" aria-hidden="true" />
-          <span>Offline — data tersimpan di perangkat</span>
+          <span className="hidden sm:inline">Offline — lokal</span>
+          <span className="sm:hidden">Offline</span>
         </>
       )}
     </div>
