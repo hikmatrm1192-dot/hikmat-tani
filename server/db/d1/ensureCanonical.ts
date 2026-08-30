@@ -142,6 +142,67 @@ export async function ensureD1CanonicalSchema(d1BindingOrDb: any): Promise<boole
       }
     }
 
+    // 3. Pastikan tabel admin_users, app_configs, dan admin_audit_logs tersedia
+    const adminTablesStatements = [
+      `CREATE TABLE IF NOT EXISTS admin_users (
+        id TEXT PRIMARY KEY NOT NULL,
+        username TEXT UNIQUE NOT NULL,
+        email TEXT UNIQUE,
+        full_name TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        salt TEXT NOT NULL,
+        role TEXT NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        last_login_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+        updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_admin_users_username ON admin_users(username)`,
+      `CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users(email)`,
+      `CREATE TABLE IF NOT EXISTS app_configs (
+        id TEXT PRIMARY KEY NOT NULL,
+        app_name TEXT NOT NULL DEFAULT 'HIKMAT TANI',
+        slogan TEXT NOT NULL DEFAULT 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.',
+        logo_url TEXT NOT NULL DEFAULT '/icon-512.png',
+        logo_primary TEXT NOT NULL DEFAULT '/icon-512.png',
+        logo_horizontal TEXT NOT NULL DEFAULT '/logo-hikmat-tani-full.png',
+        app_icon TEXT NOT NULL DEFAULT '/icon-192.png',
+        description TEXT NOT NULL,
+        contact_phone TEXT,
+        contact_email TEXT,
+        support_title TEXT NOT NULL DEFAULT 'Dukung HIKMAT TANI',
+        support_description TEXT NOT NULL DEFAULT 'Inisiatif Mandiri Teknologi Pertanian Padi Nusantara',
+        donation_active INTEGER NOT NULL DEFAULT 1,
+        donation_recipient_name TEXT,
+        donation_bank_name TEXT,
+        donation_account_number TEXT,
+        donation_ewallet_number TEXT,
+        donation_qris_image TEXT,
+        donation_url TEXT,
+        updated_by TEXT,
+        updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+      )`,
+      `CREATE TABLE IF NOT EXISTS admin_audit_logs (
+        id TEXT PRIMARY KEY NOT NULL,
+        actor_id TEXT NOT NULL,
+        actor_name TEXT NOT NULL,
+        actor_role TEXT NOT NULL,
+        action TEXT NOT NULL,
+        details TEXT,
+        ip_address TEXT,
+        created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created_at ON admin_audit_logs(created_at)`,
+    ];
+
+    for (const stmt of adminTablesStatements) {
+      try {
+        await d1.prepare(stmt).run();
+      } catch (stmtErr: any) {
+        // Abaikan jika tabel atau indeks sudah ada
+      }
+    }
+
     isSchemaEnsured = true;
     return true;
   } catch (err: any) {

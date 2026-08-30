@@ -1,5 +1,5 @@
 /**
- * HIKMAT TANI - Role & Admin Management Tests (Langkah 15)
+ * HIKMAT TANI - Role & Admin Management Tests (Langkah 15 & D1 Persistence)
  * 
  * Pengujian Sistem Hak Akses & Konfigurasi Pengelola:
  * 1. Pengguna baru mendapat role FARMER.
@@ -14,10 +14,16 @@
  * 10. Konfigurasi publik tetap dapat dibaca oleh halaman Dukung HIKMAT TANI.
  * 11. Aplikasi petani tetap mandiri dan berjalan ketika backend offline.
  * 12. Tidak ada password atau secret pengelola yang bocor ke payload publik.
+ * 13. D1 Persistence: Inisialisasi Super Admin di D1 idempoten dengan ID kanonikal 'admin_super_pappizee'.
+ * 14. D1 Persistence: Simulasi Cold-Start Worker (instansiasi baru) mempertahankan data admin_users & app_configs.
+ * 15. D1 Persistence: Catatan audit log tersimpan persisten di tabel admin_audit_logs D1.
  */
 
-import { adminService, getSuperAdminInitialPasswordFromEnv } from '../server/services/adminService.ts';
+import { AdminService, adminService, getSuperAdminInitialPasswordFromEnv } from '../server/services/adminService.ts';
 import { authService } from '../server/services/authService.ts';
+import { createTestD1Database } from '../server/db/d1/testD1.ts';
+import { ensureD1CanonicalSchema } from '../server/db/d1/ensureCanonical.ts';
+import { createD1Client } from '../server/db/d1/index.ts';
 
 export interface TestResult {
   name: string;
@@ -373,6 +379,101 @@ export async function runAdminTests(): Promise<{
     }
   });
 
+  // 13. D1 Persistence: Inisialisasi Super Admin di D1 idempoten dengan ID kanonikal 'admin_super_pappizee'
+  await test('13. D1 Persistence: Inisialisasi Super Admin di D1 idempoten dengan ID kanonikal', async () => {
+    const d1Mock = createTestD1Database();
+    await ensureD1CanonicalSchema(d1Mock as any);
+    const d1Client = createD1Client(d1Mock as any);
+
+    const testAdminService = new AdminService(d1Client);
+    await testAdminService.ensureInitializedAsync();
+
+    // Verifikasi Super Admin tersimpan di D1
+    const loginRes = await testAdminService.authenticateAdminAsync('pappizee', currentSecret || 'HikmatTaniSuperAdmin2026Secret!');
+    if (!loginRes.success || loginRes.admin?.id !== 'admin_super_pappizee') {
+      throw new Error(`Inisialisasi Super Admin di D1 gagal: ${loginRes.error}`);
+    }
+
+    // Inisialisasi ulang (idempoten)
+    await testAdminService.ensureInitializedAsync();
+    const loginRes2 = await testAdminService.authenticateAdminAsync('hikmat.rm1192@gmail.com', currentSecret || 'HikmatTaniSuperAdmin2026Secret!');
+    if (!loginRes2.success) {
+      throw new Error('Inisialisasi ulang idempoten gagal.');
+    }
+  });
+
+  // 14. D1 Persistence: Simulasi Cold-Start Worker mempertahankan data admin_users & app_configs
+  await test('14. D1 Persistence: Simulasi Cold-Start Worker mempertahankan data manager & config', async () => {
+    const d1Mock = createTestD1Database();
+    await ensureD1CanonicalSchema(d1Mock as any);
+    const d1Client = createD1Client(d1Mock as any);
+
+    // Instansiasi 1: Worker sebelum cold start
+    const workerInstance1 = new AdminService(d1Client);
+    await workerInstance1.ensureInitializedAsync();
+
+    const superAdminLogin = await workerInstance1.authenticateAdminAsync('pappizee', currentSecret || 'HikmatTaniSuperAdmin2026Secret!');
+    if (!superAdminLogin.success || !superAdminLogin.token) throw new Error('Login Super Admin instansiasi 1 gagal');
+    const saSession = authService.verifyToken(superAdminLogin.token)!;
+
+    // Buat Manager baru di instansiasi 1
+    const createdMgr = await workerInstance1.createManagerAsync(saSession, {
+      username: 'manager_subang',
+      fullName: 'Pengelola Subang',
+      passwordPlain: 'SubangPadi2026!',
+      role: 'MANAGER',
+    });
+
+    // Update config di instansiasi 1
+    await workerInstance1.updateAdminConfigAsync(saSession, {
+      donationBankName: 'Bank Jabar BJB',
+      donationAccountNumber: '001122334455',
+    });
+
+    // Simulasi Cold-Start: Hancurkan memory instance 1, buat instance 2 dengan DB D1 yang sama
+    const workerInstance2 = new AdminService(d1Client);
+    await workerInstance2.ensureInitializedAsync();
+
+    // Verifikasi Manager yang dibuat di instance 1 tetap ada di instance 2 dan bisa login
+    const mgrLogin = await workerInstance2.authenticateAdminAsync('manager_subang', 'SubangPadi2026!');
+    if (!mgrLogin.success || mgrLogin.admin?.username !== 'manager_subang') {
+      throw new Error(`Manager yang dibuat sebelum cold-start gagal login di instance baru: ${mgrLogin.error}`);
+    }
+
+    // Verifikasi config yang diubah sebelum cold-start tetap persisten
+    const pubConfig = await workerInstance2.getPublicConfigAsync();
+    if (pubConfig.donationBankName !== 'Bank Jabar BJB' || pubConfig.donationAccountNumber !== '001122334455') {
+      throw new Error(`Config yang diubah sebelum cold-start gagal dipersistensi: ${pubConfig.donationBankName}`);
+    }
+  });
+
+  // 15. D1 Persistence: Catatan audit log tersimpan persisten di tabel admin_audit_logs D1
+  await test('15. D1 Persistence: Audit log tersimpan persisten di D1 saat Worker restart', async () => {
+    const d1Mock = createTestD1Database();
+    await ensureD1CanonicalSchema(d1Mock as any);
+    const d1Client = createD1Client(d1Mock as any);
+
+    const instance1 = new AdminService(d1Client);
+    await instance1.ensureInitializedAsync();
+
+    const saLogin = await instance1.authenticateAdminAsync('pappizee', currentSecret || 'HikmatTaniSuperAdmin2026Secret!');
+    const saSession = authService.verifyToken(saLogin.token!)!;
+
+    // Instansiasi 2 (Restart)
+    const instance2 = new AdminService(d1Client);
+    await instance2.ensureInitializedAsync();
+
+    const logs = await instance2.getAuditLogsAsync(saSession, 10);
+    if (!logs || logs.length === 0) {
+      throw new Error('Audit logs dari instance sebelumnya gagal dimuat dari D1.');
+    }
+
+    const hasLoginLog = logs.some((l) => l.action === 'LOGIN' && l.actorId === 'admin_super_pappizee');
+    if (!hasLoginLog) {
+      throw new Error('Audit log LOGIN Super Admin tidak ditemukan di D1.');
+    }
+  });
+
   const total = results.length;
   const passed = results.filter((r) => r.passed).length;
   const failed = total - passed;
@@ -383,7 +484,7 @@ export async function runAdminTests(): Promise<{
 // Eksekusi jika dijalankan secara langsung via tsx / node
 if (process.argv[1]?.includes('admin.test')) {
   runAdminTests().then((res) => {
-    console.log(`\n=== HASIL UJI ROLE & ADMIN MANAGEMENT HIKMAT TANI (LANGKAH 15) ===`);
+    console.log(`\n=== HASIL UJI ROLE & ADMIN MANAGEMENT HIKMAT TANI (LANGKAH 15 & D1 PERSISTENCE) ===`);
     res.results.forEach((r) => {
       console.log(`${r.passed ? '✓' : '✗'} ${r.name}`);
       if (r.error) console.error(`  Error: ${r.error}`);

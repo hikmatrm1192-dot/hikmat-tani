@@ -68,11 +68,15 @@ export default {
         }, 200, corsHeaders);
       }
 
-      // Admin portal must be handled directly by the Worker. Previously these
-      // requests fell through to the generic "API Ready" response, so the
-      // frontend never received token/admin data and SUPER_ADMIN login failed.
+      // Admin portal must be handled directly by the Worker.
       if (url.pathname.startsWith('/api/v1/admin/')) {
         const ipAddress = request.headers.get('CF-Connecting-IP') || '127.0.0.1';
+        let db: any = null;
+        if (env.DB) {
+          await ensureD1CanonicalSchema(env.DB);
+          db = createD1Client(env.DB);
+          adminService.setDb(db);
+        }
 
         if (url.pathname === '/api/v1/admin/auth/login' && request.method === 'POST') {
           const body = (await request.json().catch(() => ({}))) as any;
@@ -83,10 +87,8 @@ export default {
             }, 400, corsHeaders);
           }
 
-          // Keep the admin service as the single source of truth. The service
-          // already supports username/email, SUPER_ADMIN provisioning and
-          // password verification without exposing plaintext credentials.
-          const result = adminService.authenticateAdmin(body.username, body.password, ipAddress);
+          // Keep the admin service as the single source of truth with D1 persistence.
+          const result = await adminService.authenticateAdminAsync(body.username, body.password, ipAddress, db || undefined);
           if (!result.success) {
             return jsonResponse({
               success: false,
@@ -116,7 +118,7 @@ export default {
           }
           try {
             const body = (await request.json().catch(() => ({}))) as any;
-            const result = adminService.changePassword(session, body.currentPassword, body.newPassword, ipAddress);
+            const result = await adminService.changePasswordAsync(session, body.currentPassword, body.newPassword, ipAddress, db || undefined);
             return jsonResponse({ success: true, message: result.message }, 200, corsHeaders);
           } catch (err: any) {
             return jsonResponse({ success: false, error: { code: 'CHANGE_PASSWORD_ERROR', message: err?.message || 'Gagal mengubah kata sandi.' } }, 400, corsHeaders);
@@ -130,29 +132,34 @@ export default {
 
         try {
           if (url.pathname === '/api/v1/admin/config' && request.method === 'GET') {
-            return jsonResponse({ success: true, data: adminService.getAdminConfig(session) }, 200, corsHeaders);
+            const configData = await adminService.getAdminConfigAsync(session, db || undefined);
+            return jsonResponse({ success: true, data: configData }, 200, corsHeaders);
           }
 
           if (url.pathname === '/api/v1/admin/config' && request.method === 'PUT') {
             const body = (await request.json().catch(() => ({}))) as any;
-            return jsonResponse({ success: true, message: 'Konfigurasi resmi HIKMAT TANI berhasil diperbarui.', data: adminService.updateAdminConfig(session, body, ipAddress) }, 200, corsHeaders);
+            const updated = await adminService.updateAdminConfigAsync(session, body, ipAddress, db || undefined);
+            return jsonResponse({ success: true, message: 'Konfigurasi resmi HIKMAT TANI berhasil diperbarui.', data: updated }, 200, corsHeaders);
           }
 
           if (url.pathname === '/api/v1/admin/qris' && request.method === 'POST') {
             const body = (await request.json().catch(() => ({}))) as any;
-            return jsonResponse({ success: true, message: 'Gambar QRIS resmi berhasil diperbarui.', data: adminService.updateQrisImage(session, body.qrisImage, ipAddress) }, 200, corsHeaders);
+            const updated = await adminService.updateQrisImageAsync(session, body.qrisImage, ipAddress, db || undefined);
+            return jsonResponse({ success: true, message: 'Gambar QRIS resmi berhasil diperbarui.', data: updated }, 200, corsHeaders);
           }
 
           if (url.pathname === '/api/v1/admin/audit-logs' && request.method === 'GET') {
             const limit = Math.min(Number(url.searchParams.get('limit') || 50), 200);
-            return jsonResponse({ success: true, data: adminService.getAuditLogs(session, limit) }, 200, corsHeaders);
+            const logs = await adminService.getAuditLogsAsync(session, limit, db || undefined);
+            return jsonResponse({ success: true, data: logs }, 200, corsHeaders);
           }
 
           if (url.pathname === '/api/v1/admin/managers' && request.method === 'GET') {
             if (String(session.role).toUpperCase() !== 'SUPER_ADMIN') {
               return jsonResponse({ success: false, error: { code: 'FORBIDDEN', message: 'Hanya SUPER_ADMIN yang dapat mengelola akun pengelola.' } }, 403, corsHeaders);
             }
-            return jsonResponse({ success: true, data: adminService.listManagers(session) }, 200, corsHeaders);
+            const managers = await adminService.listManagersAsync(session, db || undefined);
+            return jsonResponse({ success: true, data: managers }, 200, corsHeaders);
           }
 
           if (url.pathname === '/api/v1/admin/managers' && request.method === 'POST') {
@@ -160,7 +167,8 @@ export default {
               return jsonResponse({ success: false, error: { code: 'FORBIDDEN', message: 'Hanya SUPER_ADMIN yang dapat mengelola akun pengelola.' } }, 403, corsHeaders);
             }
             const body = (await request.json().catch(() => ({}))) as any;
-            return jsonResponse({ success: true, message: 'Akun pengelola baru berhasil dibuat.', data: adminService.createManager(session, body, ipAddress) }, 201, corsHeaders);
+            const newManager = await adminService.createManagerAsync(session, body, ipAddress, db || undefined);
+            return jsonResponse({ success: true, message: 'Akun pengelola baru berhasil dibuat.', data: newManager }, 201, corsHeaders);
           }
 
           const managerMatch = url.pathname.match(/^\/api\/v1\/admin\/managers\/([^/]+)$/);
@@ -170,11 +178,12 @@ export default {
 
           if (managerMatch && request.method === 'PATCH') {
             const body = (await request.json().catch(() => ({}))) as any;
-            return jsonResponse({ success: true, message: 'Data pengelola berhasil diperbarui.', data: adminService.updateManager(session, managerMatch[1], body, ipAddress) }, 200, corsHeaders);
+            const updated = await adminService.updateManagerAsync(session, managerMatch[1], body, ipAddress, db || undefined);
+            return jsonResponse({ success: true, message: 'Data pengelola berhasil diperbarui.', data: updated }, 200, corsHeaders);
           }
 
           if (managerMatch && request.method === 'DELETE') {
-            adminService.deleteManager(session, managerMatch[1], ipAddress);
+            await adminService.deleteManagerAsync(session, managerMatch[1], ipAddress, db || undefined);
             return jsonResponse({ success: true, message: 'Akun pengelola berhasil dihapus.' }, 200, corsHeaders);
           }
 

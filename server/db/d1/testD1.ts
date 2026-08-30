@@ -173,7 +173,7 @@ class InMemoryD1PreparedStatement {
 
     // 3. UPDATE statement
     if (/^UPDATE/i.test(sql)) {
-      const updateMatch = sql.match(/UPDATE\s+[`"]?([a-zA-Z0-9_]+)[`"]?\s+SET\s+([^WHERE]+)(?:\s+WHERE\s+(.+))?/i);
+      const updateMatch = sql.match(/UPDATE\s+[`"]?([a-zA-Z0-9_]+)[`"]?\s+SET\s+([\s\S]+?)(?:\s+WHERE\s+([\s\S]+))?$/i);
       if (updateMatch) {
         const tableName = updateMatch[1];
         const setClause = updateMatch[2];
@@ -188,7 +188,7 @@ class InMemoryD1PreparedStatement {
         }
 
         let whereId: string | null = null;
-        if (/id["`]?\s*=\s*\?/i.test(whereClause)) {
+        if (whereClause && /(?:^|\s|\.)[`"]?id[`"]?\s*=\s*\?/i.test(whereClause)) {
           whereId = String(this.params[paramIdx++]);
         }
 
@@ -215,49 +215,57 @@ class InMemoryD1PreparedStatement {
       let rows = Array.from(tableMap.values());
 
       // Check WHERE conditions
-      if (/WHERE/i.test(sql)) {
+      const whereMatch = sql.match(/WHERE\s+([\s\S]+?)(?:\s+ORDER\s+BY|\s+LIMIT|$)/i);
+      if (whereMatch) {
+        const whereClause = whereMatch[1];
         // Cek apakah query melibatkan tabel farmers dengan pencarian NIK atau Nomor HP (termasuk klausa OR)
-        if (tableName === 'farmers' && (/nik/i.test(sql) || /phone_number/i.test(sql))) {
+        if (tableName === 'farmers' && (/nik/i.test(whereClause) || /phone_number/i.test(whereClause))) {
           const matchParams = this.params.map(String);
           rows = rows.filter((r) => {
             return matchParams.includes(String(r.nik)) || matchParams.includes(String(r.phone_number));
+          });
+        } else if (tableName === 'admin_users' && (/username/i.test(whereClause) || /email/i.test(whereClause))) {
+          const matchParams = this.params.map((p) => String(p).toLowerCase());
+          rows = rows.filter((r) => {
+            return matchParams.includes(String(r.username || '').toLowerCase()) ||
+                   matchParams.includes(String(r.email || '').toLowerCase());
           });
         } else {
           let paramIdx = 0;
 
           // Specific filter for id = ? (supporting optional table prefix like "auth_users"."id" = ?, without matching _id columns)
-          if (/(?:^|\s|\.)[`"]?id[`"]?\s*=\s*\?/i.test(sql) && !/(?:farmer_id|auth_user_id|operation_id|entity_id|anonymous_id)\s*=/i.test(sql)) {
+          if (/(?:^|\s|\.)[`"]?id[`"]?\s*=\s*\?/i.test(whereClause) && !/(?:farmer_id|auth_user_id|operation_id|entity_id|anonymous_id)\s*=/i.test(whereClause)) {
             const targetId = this.params[paramIdx++];
             rows = rows.filter((r) => String(r.id) === String(targetId));
           }
 
           // Specific filter for auth_user_id = ?
-          if (/auth_user_id["`]?\s*=\s*\?/i.test(sql)) {
+          if (/auth_user_id["`]?\s*=\s*\?/i.test(whereClause)) {
             const targetAuthId = this.params[paramIdx++];
             rows = rows.filter((r) => r.auth_user_id === targetAuthId);
           }
 
           // Specific filter for operation_id
-          if (/operation_id["`]?\s*=\s*\?/i.test(sql)) {
+          if (/operation_id["`]?\s*=\s*\?/i.test(whereClause)) {
             const targetOpId = this.params[paramIdx++];
             rows = rows.filter((r) => r.operation_id === targetOpId);
           }
 
           // Specific filter for entity_type and entity_id
-          if (/entity_type["`]?\s*=\s*\?/i.test(sql) && /entity_id["`]?\s*=\s*\?/i.test(sql)) {
+          if (/entity_type["`]?\s*=\s*\?/i.test(whereClause) && /entity_id["`]?\s*=\s*\?/i.test(whereClause)) {
             const targetType = this.params[paramIdx++];
             const targetId = this.params[paramIdx++];
             rows = rows.filter((r) => r.entity_type === targetType && r.entity_id === targetId);
           }
 
           // Specific filter for farmer_id
-          if (/farmer_id["`]?\s*=\s*\?/i.test(sql)) {
+          if (/farmer_id["`]?\s*=\s*\?/i.test(whereClause)) {
             const targetFarmer = this.params[paramIdx++];
             rows = rows.filter((r) => r.farmer_id === targetFarmer);
           }
 
           // Specific filter for server_timestamp > ?
-          if (/server_timestamp["`]?\s*>\s*\?/i.test(sql)) {
+          if (/server_timestamp["`]?\s*>\s*\?/i.test(whereClause)) {
             const sinceVal = this.params[paramIdx++];
             rows = rows.filter((r) => String(r.server_timestamp) > String(sinceVal));
           }
@@ -277,6 +285,13 @@ class InMemoryD1PreparedStatement {
           rows.sort((a, b) => {
             const timeA = String(a.server_timestamp || '');
             const timeB = String(b.server_timestamp || '');
+            if (timeA !== timeB) return timeB.localeCompare(timeA);
+            return String(b.id || '').localeCompare(String(a.id || ''));
+          });
+        } else if (/created_at["`]?\s+DESC/i.test(sql)) {
+          rows.sort((a, b) => {
+            const timeA = String(a.created_at || '');
+            const timeB = String(b.created_at || '');
             if (timeA !== timeB) return timeB.localeCompare(timeA);
             return String(b.id || '').localeCompare(String(a.id || ''));
           });
@@ -320,7 +335,11 @@ class InMemoryD1PreparedStatement {
   }
 }
 
-export function createTestD1Client(): DrizzleD1Database<typeof d1Schema> {
-  const inMemoryD1 = new InMemoryD1Database();
+export function createTestD1Database(): InMemoryD1Database {
+  return new InMemoryD1Database();
+}
+
+export function createTestD1Client(db?: InMemoryD1Database): DrizzleD1Database<typeof d1Schema> {
+  const inMemoryD1 = db || new InMemoryD1Database();
   return drizzle(inMemoryD1, { schema: d1Schema });
 }

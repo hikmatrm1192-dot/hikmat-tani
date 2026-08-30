@@ -1,5 +1,5 @@
 /**
- * HIKMAT TANI - Role & Admin Management Service (Langkah 15)
+ * HIKMAT TANI - Role & Admin Management Service (Langkah 15 & D1 Persistence)
  * 
  * Prinsip:
  * 1. Role terpisah: FARMER (default/petani), MANAGER (pengelola), SUPER_ADMIN (admin utama).
@@ -7,13 +7,19 @@
  * 3. Tidak menanam data sensitif/kredensial di bundle frontend.
  * 4. Konfigurasi resmi aplikasi (rekening, kontak, QRIS, status donasi) dapat dikelola secara dinamis.
  * 5. Setiap perubahan konfigurasi dan manajemen pengelola dicatat dalam audit log.
+ * 6. Persistensi D1: admin_users, app_configs, dan admin_audit_logs tersimpan persisten di Cloudflare D1.
+ * 7. Memory cache digunakan sebagai akselerator runtime tanpa menghilangkan D1 sebagai sumber kebenaran utama.
  */
 
 import dotenv from 'dotenv';
 dotenv.config();
 
 import crypto from 'crypto';
+import { eq, or, desc } from 'drizzle-orm';
+import { DrizzleD1Database } from 'drizzle-orm/d1';
 import { authService, AuthSessionPayload } from './authService.ts';
+import { d1DbService, d1Schema } from '../db/d1/index.ts';
+import { adminUsers, appConfigs, adminAuditLogs } from '../db/d1/schema.ts';
 
 export type UserRole = 'FARMER' | 'MANAGER' | 'SUPER_ADMIN';
 
@@ -79,14 +85,18 @@ export function getSuperAdminInitialPasswordFromEnv(): string {
 
 export class AdminService {
   private static instance: AdminService;
+  private db: DrizzleD1Database<typeof d1Schema> | null = null;
 
-  // In-memory store (memastikan ketersediaan instan & fallback aman)
+  // In-memory cache
   private adminUsers: Map<string, AdminUser> = new Map();
   private auditLogs: AdminAuditLog[] = [];
   private officialConfig: OfficialAppConfig;
   private isInitialized = false;
 
-  private constructor() {
+  public constructor(db?: DrizzleD1Database<typeof d1Schema>) {
+    if (db) {
+      this.db = db;
+    }
     // 1. Inisialisasi default official config
     this.officialConfig = {
       appName: 'HIKMAT TANI',
@@ -105,30 +115,214 @@ export class AdminService {
       donationBankName: 'Bank Mandiri',
       donationAccountNumber: '132-00-9876543-2',
       donationEwalletNumber: '0812-3456-7890 (GoPay/OVO/DANA)',
-      donationQrisImage: '', // Siap diisi via upload pengelola
+      donationQrisImage: '',
       donationUrl: '',
       updatedBy: 'system',
       updatedAt: '2026-08-01T00:00:00.000Z',
     };
-
-    // Note: seedDefaultAdmin() ditunda ke ensureInitialized() (lazy runtime)
-    // demi kompatibilitas mutlak dengan Cloudflare Workers edge runtime.
   }
 
-  public static getInstance(): AdminService {
+  public static getInstance(db?: DrizzleD1Database<typeof d1Schema>): AdminService {
     if (!AdminService.instance) {
-      AdminService.instance = new AdminService();
+      AdminService.instance = new AdminService(db);
+    } else if (db) {
+      AdminService.instance.setDb(db);
     }
     return AdminService.instance;
   }
 
   /**
-   * Memastikan akun admin default telah diinisialisasi pada runtime request.
+   * Set D1 Database Client secara eksplisit (misal dari Cloudflare Worker env.DB)
    */
-  private ensureInitialized(): void {
+  public setDb(db: DrizzleD1Database<typeof d1Schema>): void {
+    this.db = db;
+  }
+
+  private getActiveDb(optionalDb?: DrizzleD1Database<typeof d1Schema>): DrizzleD1Database<typeof d1Schema> | null {
+    if (optionalDb) return optionalDb;
+    if (this.db) return this.db;
+    return d1DbService.getClient();
+  }
+
+  /**
+   * Memastikan akun admin default telah diinisialisasi pada runtime request (Sync Fallback).
+   */
+  public ensureInitialized(): void {
     if (this.isInitialized) return;
     this.isInitialized = true;
     this.seedDefaultAdmin();
+  }
+
+  /**
+   * Inisialisasi Asinkron & Idempoten dengan D1 Persistence
+   */
+  public async ensureInitializedAsync(d1Db?: DrizzleD1Database<typeof d1Schema>): Promise<void> {
+    const db = this.getActiveDb(d1Db);
+    this.ensureInitialized();
+
+    if (!db) {
+      return;
+    }
+
+    try {
+      // 1. Verifikasi / Inisialisasi Super Admin di D1
+      const superAdminRows = await db
+        .select()
+        .from(adminUsers)
+        .where(eq(adminUsers.id, 'admin_super_pappizee'))
+        .limit(1);
+
+      if (superAdminRows.length === 0) {
+        const envPassword = getSuperAdminInitialPasswordFromEnv();
+        const salt = this.generateSalt();
+        const defaultSecret = 'HikmatTaniSuperAdmin2026Secret!';
+        const hash = envPassword
+          ? this.hashPassword(envPassword, salt).hash
+          : this.hashPassword(defaultSecret, salt).hash;
+
+        const now = new Date().toISOString();
+        const superAdminRecord: AdminUser = {
+          id: 'admin_super_pappizee',
+          username: 'pappizee',
+          email: 'hikmat.rm1192@gmail.com',
+          fullName: 'Pappizee',
+          passwordHash: hash,
+          salt: salt,
+          role: 'SUPER_ADMIN',
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        await db.insert(adminUsers).values({
+          id: superAdminRecord.id,
+          username: superAdminRecord.username,
+          email: superAdminRecord.email,
+          fullName: superAdminRecord.fullName,
+          passwordHash: superAdminRecord.passwordHash,
+          salt: superAdminRecord.salt,
+          role: superAdminRecord.role,
+          isActive: superAdminRecord.isActive,
+          createdAt: superAdminRecord.createdAt,
+          updatedAt: superAdminRecord.updatedAt,
+        });
+
+        this.adminUsers.set(superAdminRecord.id, superAdminRecord);
+      } else {
+        const row = superAdminRows[0];
+        const loadedAdmin: AdminUser = {
+          id: row.id,
+          username: row.username,
+          email: row.email || undefined,
+          fullName: row.fullName,
+          passwordHash: row.passwordHash,
+          salt: row.salt,
+          role: row.role as 'MANAGER' | 'SUPER_ADMIN',
+          isActive: Boolean(row.isActive),
+          lastLoginAt: row.lastLoginAt || undefined,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        };
+        this.adminUsers.set(loadedAdmin.id, loadedAdmin);
+      }
+
+      // 2. Load semua akun admin/pengelola lainnya dari D1
+      const allAdmins = await db.select().from(adminUsers);
+      for (const row of allAdmins) {
+        this.adminUsers.set(row.id, {
+          id: row.id,
+          username: row.username,
+          email: row.email || undefined,
+          fullName: row.fullName,
+          passwordHash: row.passwordHash,
+          salt: row.salt,
+          role: row.role as 'MANAGER' | 'SUPER_ADMIN',
+          isActive: Boolean(row.isActive),
+          lastLoginAt: row.lastLoginAt || undefined,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        });
+      }
+
+      // 3. Verifikasi / Inisialisasi app_configs di D1
+      const configRows = await db
+        .select()
+        .from(appConfigs)
+        .where(eq(appConfigs.id, 'official_config'))
+        .limit(1);
+
+      if (configRows.length === 0) {
+        await db.insert(appConfigs).values({
+          id: 'official_config',
+          appName: this.officialConfig.appName,
+          slogan: this.officialConfig.slogan,
+          logoUrl: this.officialConfig.logoUrl,
+          logoPrimary: this.officialConfig.logoPrimary,
+          logoHorizontal: this.officialConfig.logoHorizontal,
+          appIcon: this.officialConfig.appIcon,
+          description: this.officialConfig.description,
+          contactPhone: this.officialConfig.contactPhone,
+          contactEmail: this.officialConfig.contactEmail,
+          supportTitle: this.officialConfig.supportTitle,
+          supportDescription: this.officialConfig.supportDescription,
+          donationActive: this.officialConfig.donationActive,
+          donationRecipientName: this.officialConfig.donationRecipientName,
+          donationBankName: this.officialConfig.donationBankName,
+          donationAccountNumber: this.officialConfig.donationAccountNumber,
+          donationEwalletNumber: this.officialConfig.donationEwalletNumber,
+          donationQrisImage: this.officialConfig.donationQrisImage,
+          donationUrl: this.officialConfig.donationUrl,
+          updatedBy: this.officialConfig.updatedBy,
+          updatedAt: this.officialConfig.updatedAt,
+        });
+      } else {
+        const row = configRows[0];
+        this.officialConfig = {
+          appName: row.appName,
+          slogan: row.slogan,
+          logoUrl: row.logoUrl,
+          logoPrimary: row.logoPrimary,
+          logoHorizontal: row.logoHorizontal,
+          appIcon: row.appIcon,
+          description: row.description,
+          contactPhone: row.contactPhone || '',
+          contactEmail: row.contactEmail || '',
+          supportTitle: row.supportTitle,
+          supportDescription: row.supportDescription,
+          donationActive: Boolean(row.donationActive),
+          donationRecipientName: row.donationRecipientName || '',
+          donationBankName: row.donationBankName || '',
+          donationAccountNumber: row.donationAccountNumber || '',
+          donationEwalletNumber: row.donationEwalletNumber || '',
+          donationQrisImage: row.donationQrisImage || '',
+          donationUrl: row.donationUrl || '',
+          updatedBy: row.updatedBy || 'system',
+          updatedAt: row.updatedAt,
+        };
+      }
+
+      // 4. Load recent audit logs dari D1
+      const logRows = await db
+        .select()
+        .from(adminAuditLogs)
+        .orderBy(desc(adminAuditLogs.createdAt))
+        .limit(100);
+
+      if (logRows.length > 0) {
+        this.auditLogs = logRows.map((r) => ({
+          id: r.id,
+          actorId: r.actorId,
+          actorName: r.actorName,
+          actorRole: r.actorRole as 'MANAGER' | 'SUPER_ADMIN',
+          action: r.action,
+          details: (r.details as any) || undefined,
+          ipAddress: r.ipAddress || undefined,
+          createdAt: r.createdAt,
+        })).reverse();
+      }
+    } catch (err: any) {
+      console.warn('[AdminService] D1 initialization warning:', err?.message || err);
+    }
   }
 
   /**
@@ -250,7 +444,7 @@ export class AdminService {
   }
 
   /**
-   * Autentikasi Pengelola / Super Admin (Bisa menggunakan Username ATAU Email)
+   * Autentikasi Pengelola / Super Admin (Bisa menggunakan Username ATAU Email) - Sync Fallback
    */
   public authenticateAdmin(
     usernameOrEmail: string,
@@ -332,6 +526,152 @@ export class AdminService {
   }
 
   /**
+   * Autentikasi Pengelola / Super Admin dengan D1 Persistence
+   */
+  public async authenticateAdminAsync(
+    usernameOrEmail: string,
+    passwordPlain: string,
+    ipAddress?: string,
+    d1Db?: DrizzleD1Database<typeof d1Schema>
+  ): Promise<{
+    success: boolean;
+    token?: string;
+    admin?: { id: string; username: string; email?: string; fullName: string; role: 'MANAGER' | 'SUPER_ADMIN' };
+    error?: string;
+  }> {
+    const db = this.getActiveDb(d1Db);
+    await this.ensureInitializedAsync(db || undefined);
+
+    if (!usernameOrEmail || !passwordPlain) {
+      return { success: false, error: 'Nama pengguna/email atau kata sandi pengelola salah.' };
+    }
+
+    const trimmedInput = usernameOrEmail.trim().toLowerCase();
+
+    let user: AdminUser | null = null;
+
+    if (db) {
+      try {
+        const rows = await db
+          .select()
+          .from(adminUsers)
+          .where(
+            or(
+              eq(adminUsers.username, trimmedInput),
+              eq(adminUsers.email, trimmedInput)
+            )
+          )
+          .limit(1);
+
+        if (rows.length > 0 && rows[0].isActive) {
+          const row = rows[0];
+          user = {
+            id: row.id,
+            username: row.username,
+            email: row.email || undefined,
+            fullName: row.fullName,
+            passwordHash: row.passwordHash,
+            salt: row.salt,
+            role: row.role as 'MANAGER' | 'SUPER_ADMIN',
+            isActive: Boolean(row.isActive),
+            lastLoginAt: row.lastLoginAt || undefined,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+          };
+        }
+      } catch (err: any) {
+        console.warn('[AdminService] D1 admin lookup error:', err?.message || err);
+      }
+    }
+
+    if (!user) {
+      user = Array.from(this.adminUsers.values()).find(
+        (u) =>
+          u.isActive &&
+          (u.username.toLowerCase() === trimmedInput ||
+            (u.email && u.email.toLowerCase() === trimmedInput))
+      ) || null;
+    }
+
+    if (!user) {
+      return { success: false, error: 'Nama pengguna/email atau kata sandi pengelola salah.' };
+    }
+
+    let isMatch = this.verifyPassword(passwordPlain, user.passwordHash, user.salt);
+
+    // Mekanisme sinkronisasi aman jika password environment diperbarui
+    if (!isMatch && user.role === 'SUPER_ADMIN') {
+      const envPassword = getSuperAdminInitialPasswordFromEnv() || 'HikmatTaniSuperAdmin2026Secret!';
+      if (envPassword && passwordPlain === envPassword) {
+        const { hash, salt } = this.hashPassword(passwordPlain);
+        user.passwordHash = hash;
+        user.salt = salt;
+        user.updatedAt = new Date().toISOString();
+        isMatch = true;
+
+        if (db) {
+          try {
+            await db
+              .update(adminUsers)
+              .set({ passwordHash: hash, salt, updatedAt: user.updatedAt })
+              .where(eq(adminUsers.id, user.id));
+          } catch {}
+        }
+      }
+    }
+
+    if (!isMatch) {
+      return { success: false, error: 'Nama pengguna/email atau kata sandi pengelola salah.' };
+    }
+
+    const now = new Date().toISOString();
+    user.lastLoginAt = now;
+    user.updatedAt = now;
+    this.adminUsers.set(user.id, user);
+
+    if (db) {
+      try {
+        await db
+          .update(adminUsers)
+          .set({ lastLoginAt: now, updatedAt: now })
+          .where(eq(adminUsers.id, user.id));
+      } catch (err) {
+        console.warn('[AdminService] Update lastLoginAt D1 error:', err);
+      }
+    }
+
+    await this.recordAuditLogAsync(
+      {
+        actorId: user.id,
+        actorName: user.fullName,
+        actorRole: user.role,
+        action: 'LOGIN',
+        details: { username: user.username },
+        ipAddress,
+      },
+      db || undefined
+    );
+
+    const tokenResult = authService.generateSessionToken({
+      userId: user.id,
+      role: user.role,
+      isAnonymous: false,
+    });
+
+    return {
+      success: true,
+      token: tokenResult.token,
+      admin: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+      },
+    };
+  }
+
+  /**
    * Helper diagnostik verifikasi SUPER_ADMIN (tanpa mengekspos plaintext)
    */
   public verifySuperAdminStatus(): {
@@ -362,7 +702,7 @@ export class AdminService {
   }
 
   /**
-   * Ganti Kata Sandi Akun Sendiri (MANAGER / SUPER_ADMIN)
+   * Ganti Kata Sandi Akun Sendiri (MANAGER / SUPER_ADMIN) - Sync Fallback
    */
   public changePassword(
     actor: AuthSessionPayload,
@@ -400,6 +740,99 @@ export class AdminService {
       details: { username: user.username },
       ipAddress,
     });
+
+    return {
+      success: true,
+      message: 'Kata sandi berhasil diperbarui dengan aman.',
+    };
+  }
+
+  /**
+   * Ganti Kata Sandi Akun Sendiri dengan D1 Persistence
+   */
+  public async changePasswordAsync(
+    actor: AuthSessionPayload,
+    currentPasswordPlain: string,
+    newPasswordPlain: string,
+    ipAddress?: string,
+    d1Db?: DrizzleD1Database<typeof d1Schema>
+  ): Promise<{ success: boolean; message: string }> {
+    const db = this.getActiveDb(d1Db);
+    await this.ensureInitializedAsync(db || undefined);
+    this.assertIsAdmin(actor);
+
+    let user = this.adminUsers.get(actor.userId);
+
+    if (db) {
+      try {
+        const rows = await db
+          .select()
+          .from(adminUsers)
+          .where(eq(adminUsers.id, actor.userId))
+          .limit(1);
+        if (rows.length > 0) {
+          const row = rows[0];
+          user = {
+            id: row.id,
+            username: row.username,
+            email: row.email || undefined,
+            fullName: row.fullName,
+            passwordHash: row.passwordHash,
+            salt: row.salt,
+            role: row.role as 'MANAGER' | 'SUPER_ADMIN',
+            isActive: Boolean(row.isActive),
+            lastLoginAt: row.lastLoginAt || undefined,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+          };
+        }
+      } catch (err) {
+        console.warn('[AdminService] changePasswordAsync D1 fetch error:', err);
+      }
+    }
+
+    if (!user) {
+      throw new Error('Akun pengelola tidak ditemukan.');
+    }
+
+    const isMatch = this.verifyPassword(currentPasswordPlain, user.passwordHash, user.salt);
+    if (!isMatch) {
+      throw new Error('Kata sandi saat ini yang Anda masukkan salah.');
+    }
+
+    if (!newPasswordPlain || newPasswordPlain.length < 6) {
+      throw new Error('Kata sandi baru minimal harus 6 karakter.');
+    }
+
+    const { hash, salt } = this.hashPassword(newPasswordPlain);
+    const now = new Date().toISOString();
+    user.passwordHash = hash;
+    user.salt = salt;
+    user.updatedAt = now;
+    this.adminUsers.set(user.id, user);
+
+    if (db) {
+      await db
+        .update(adminUsers)
+        .set({
+          passwordHash: hash,
+          salt: salt,
+          updatedAt: now,
+        })
+        .where(eq(adminUsers.id, user.id));
+    }
+
+    await this.recordAuditLogAsync(
+      {
+        actorId: user.id,
+        actorName: user.fullName,
+        actorRole: user.role,
+        action: 'CHANGE_PASSWORD',
+        details: { username: user.username },
+        ipAddress,
+      },
+      db || undefined
+    );
 
     return {
       success: true,
@@ -455,6 +888,12 @@ export class AdminService {
     };
   }
 
+  public async getPublicConfigAsync(d1Db?: DrizzleD1Database<typeof d1Schema>) {
+    const db = this.getActiveDb(d1Db);
+    await this.ensureInitializedAsync(db || undefined);
+    return this.getPublicConfig();
+  }
+
   /**
    * Mengambil Konfigurasi Lengkap Pengelola (MANAGER / SUPER_ADMIN)
    */
@@ -464,8 +903,15 @@ export class AdminService {
     return { ...this.officialConfig };
   }
 
+  public async getAdminConfigAsync(actor: AuthSessionPayload, d1Db?: DrizzleD1Database<typeof d1Schema>): Promise<OfficialAppConfig> {
+    const db = this.getActiveDb(d1Db);
+    await this.ensureInitializedAsync(db || undefined);
+    this.assertIsAdmin(actor);
+    return { ...this.officialConfig };
+  }
+
   /**
-   * Memperbarui Konfigurasi Resmi HIKMAT TANI (MANAGER / SUPER_ADMIN)
+   * Memperbarui Konfigurasi Resmi HIKMAT TANI (Sync Fallback)
    */
   public updateAdminConfig(
     actor: AuthSessionPayload,
@@ -539,7 +985,118 @@ export class AdminService {
   }
 
   /**
-   * Upload / Update Gambar QRIS Donasi
+   * Memperbarui Konfigurasi Resmi HIKMAT TANI dengan D1 Persistence
+   */
+  public async updateAdminConfigAsync(
+    actor: AuthSessionPayload,
+    payload: Partial<OfficialAppConfig>,
+    ipAddress?: string,
+    d1Db?: DrizzleD1Database<typeof d1Schema>
+  ): Promise<OfficialAppConfig> {
+    const db = this.getActiveDb(d1Db);
+    await this.ensureInitializedAsync(db || undefined);
+    this.assertIsAdmin(actor);
+
+    const oldConfig = { ...this.officialConfig };
+
+    if (payload.appName) this.officialConfig.appName = payload.appName.trim();
+    if (payload.slogan) this.officialConfig.slogan = payload.slogan.trim();
+    if (payload.description) this.officialConfig.description = payload.description.trim();
+    if (payload.logoPrimary !== undefined) {
+      this.officialConfig.logoPrimary = payload.logoPrimary;
+      this.officialConfig.logoUrl = payload.logoPrimary;
+    }
+    if (payload.logoHorizontal !== undefined) {
+      this.officialConfig.logoHorizontal = payload.logoHorizontal;
+    }
+    if (payload.appIcon !== undefined) {
+      this.officialConfig.appIcon = payload.appIcon;
+    }
+    if (payload.logoUrl !== undefined && payload.logoPrimary === undefined) {
+      this.officialConfig.logoUrl = payload.logoUrl;
+      this.officialConfig.logoPrimary = payload.logoUrl;
+    }
+    if (payload.supportTitle) this.officialConfig.supportTitle = payload.supportTitle.trim();
+    if (payload.supportDescription) this.officialConfig.supportDescription = payload.supportDescription.trim();
+    if (payload.contactPhone !== undefined) this.officialConfig.contactPhone = payload.contactPhone.trim();
+    if (payload.contactEmail !== undefined) this.officialConfig.contactEmail = payload.contactEmail.trim();
+
+    if (payload.donationActive !== undefined) this.officialConfig.donationActive = Boolean(payload.donationActive);
+    if (payload.donationRecipientName !== undefined) this.officialConfig.donationRecipientName = payload.donationRecipientName.trim();
+    if (payload.donationBankName !== undefined) this.officialConfig.donationBankName = payload.donationBankName.trim();
+    if (payload.donationAccountNumber !== undefined) this.officialConfig.donationAccountNumber = payload.donationAccountNumber.trim();
+    if (payload.donationEwalletNumber !== undefined) this.officialConfig.donationEwalletNumber = payload.donationEwalletNumber.trim();
+    if (payload.donationQrisImage !== undefined) this.officialConfig.donationQrisImage = payload.donationQrisImage;
+    if (payload.donationUrl !== undefined) this.officialConfig.donationUrl = payload.donationUrl.trim();
+
+    const now = new Date().toISOString();
+    this.officialConfig.updatedBy = actor.userId;
+    this.officialConfig.updatedAt = now;
+
+    if (db) {
+      try {
+        await db
+          .update(appConfigs)
+          .set({
+            appName: this.officialConfig.appName,
+            slogan: this.officialConfig.slogan,
+            logoUrl: this.officialConfig.logoUrl,
+            logoPrimary: this.officialConfig.logoPrimary,
+            logoHorizontal: this.officialConfig.logoHorizontal,
+            appIcon: this.officialConfig.appIcon,
+            description: this.officialConfig.description,
+            contactPhone: this.officialConfig.contactPhone,
+            contactEmail: this.officialConfig.contactEmail,
+            supportTitle: this.officialConfig.supportTitle,
+            supportDescription: this.officialConfig.supportDescription,
+            donationActive: this.officialConfig.donationActive,
+            donationRecipientName: this.officialConfig.donationRecipientName,
+            donationBankName: this.officialConfig.donationBankName,
+            donationAccountNumber: this.officialConfig.donationAccountNumber,
+            donationEwalletNumber: this.officialConfig.donationEwalletNumber,
+            donationQrisImage: this.officialConfig.donationQrisImage,
+            donationUrl: this.officialConfig.donationUrl,
+            updatedBy: actor.userId,
+            updatedAt: now,
+          })
+          .where(eq(appConfigs.id, 'official_config'));
+      } catch (err) {
+        console.warn('[AdminService] D1 app_configs update error:', err);
+      }
+    }
+
+    const actorUser = this.adminUsers.get(actor.userId);
+    const actorName = actorUser ? actorUser.fullName : actor.userId;
+
+    await this.recordAuditLogAsync(
+      {
+        actorId: actor.userId,
+        actorName,
+        actorRole: actor.role as 'MANAGER' | 'SUPER_ADMIN',
+        action: 'UPDATE_CONFIG',
+        details: {
+          changedFields: Object.keys(payload),
+          before: {
+            donationBankName: oldConfig.donationBankName,
+            donationAccountNumber: oldConfig.donationAccountNumber,
+            donationActive: oldConfig.donationActive,
+          },
+          after: {
+            donationBankName: this.officialConfig.donationBankName,
+            donationAccountNumber: this.officialConfig.donationAccountNumber,
+            donationActive: this.officialConfig.donationActive,
+          },
+        },
+        ipAddress,
+      },
+      db || undefined
+    );
+
+    return { ...this.officialConfig };
+  }
+
+  /**
+   * Upload / Update Gambar QRIS Donasi (Sync Fallback)
    */
   public updateQrisImage(
     actor: AuthSessionPayload,
@@ -555,12 +1112,10 @@ export class AdminService {
 
     const trimmed = qrisImagePayload.trim();
 
-    // Validasi ukuran maksimum (2.5 MB base64 string ~ 3.5MB karakter)
     if (trimmed.length > 3_500_000) {
       throw new Error('Ukuran berkas gambar QRIS melebihi batas maksimum 2.5MB.');
     }
 
-    // Validasi format: boleh kosong (reset), data URI gambar raster aman (PNG, JPEG, WEBP), atau URL aman
     if (trimmed !== '') {
       const isDataUri = /^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/.test(trimmed);
       const isSafeUrl = /^(https:\/\/|\/)[a-zA-Z0-9_.\-/?#=&%]+$/.test(trimmed);
@@ -596,6 +1151,82 @@ export class AdminService {
   }
 
   /**
+   * Upload / Update Gambar QRIS Donasi dengan D1 Persistence
+   */
+  public async updateQrisImageAsync(
+    actor: AuthSessionPayload,
+    qrisImagePayload: string,
+    ipAddress?: string,
+    d1Db?: DrizzleD1Database<typeof d1Schema>
+  ): Promise<{ success: boolean; donationQrisImage: string }> {
+    const db = this.getActiveDb(d1Db);
+    await this.ensureInitializedAsync(db || undefined);
+    this.assertIsAdmin(actor);
+
+    if (typeof qrisImagePayload !== 'string') {
+      throw new Error('Payload gambar QRIS harus berupa string.');
+    }
+
+    const trimmed = qrisImagePayload.trim();
+
+    if (trimmed.length > 3_500_000) {
+      throw new Error('Ukuran berkas gambar QRIS melebihi batas maksimum 2.5MB.');
+    }
+
+    if (trimmed !== '') {
+      const isDataUri = /^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/.test(trimmed);
+      const isSafeUrl = /^(https:\/\/|\/)[a-zA-Z0-9_.\-/?#=&%]+$/.test(trimmed);
+
+      if (!isDataUri && !isSafeUrl) {
+        throw new Error('Format gambar QRIS tidak valid. Gunakan format gambar raster (PNG, JPEG, WEBP) atau URL yang aman.');
+      }
+    }
+
+    const now = new Date().toISOString();
+    this.officialConfig.donationQrisImage = trimmed;
+    this.officialConfig.updatedBy = actor.userId;
+    this.officialConfig.updatedAt = now;
+
+    if (db) {
+      try {
+        await db
+          .update(appConfigs)
+          .set({
+            donationQrisImage: trimmed,
+            updatedBy: actor.userId,
+            updatedAt: now,
+          })
+          .where(eq(appConfigs.id, 'official_config'));
+      } catch (err) {
+        console.warn('[AdminService] Update QRIS D1 error:', err);
+      }
+    }
+
+    const actorUser = this.adminUsers.get(actor.userId);
+    const actorName = actorUser ? actorUser.fullName : actor.userId;
+
+    await this.recordAuditLogAsync(
+      {
+        actorId: actor.userId,
+        actorName,
+        actorRole: actor.role as 'MANAGER' | 'SUPER_ADMIN',
+        action: 'UPDATE_QRIS',
+        details: {
+          hasQris: Boolean(trimmed),
+          length: trimmed.length,
+        },
+        ipAddress,
+      },
+      db || undefined
+    );
+
+    return {
+      success: true,
+      donationQrisImage: this.officialConfig.donationQrisImage,
+    };
+  }
+
+  /**
    * Manajemen Akun Pengelola: Daftar Akun (SUPER_ADMIN ONLY)
    */
   public listManagers(actor: AuthSessionPayload): Array<Omit<AdminUser, 'passwordHash' | 'salt'>> {
@@ -615,8 +1246,35 @@ export class AdminService {
     }));
   }
 
+  public async listManagersAsync(actor: AuthSessionPayload, d1Db?: DrizzleD1Database<typeof d1Schema>): Promise<Array<Omit<AdminUser, 'passwordHash' | 'salt'>>> {
+    const db = this.getActiveDb(d1Db);
+    await this.ensureInitializedAsync(db || undefined);
+    this.assertIsSuperAdmin(actor);
+
+    if (db) {
+      try {
+        const rows = await db.select().from(adminUsers);
+        return rows.map((r) => ({
+          id: r.id,
+          username: r.username,
+          email: r.email || undefined,
+          fullName: r.fullName,
+          role: r.role as 'MANAGER' | 'SUPER_ADMIN',
+          isActive: Boolean(r.isActive),
+          lastLoginAt: r.lastLoginAt || undefined,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+        }));
+      } catch (err) {
+        console.warn('[AdminService] listManagersAsync D1 fetch error:', err);
+      }
+    }
+
+    return this.listManagers(actor);
+  }
+
   /**
-   * Manajemen Akun Pengelola: Buat Pengelola Baru (SUPER_ADMIN ONLY)
+   * Manajemen Akun Pengelola: Buat Pengelola Baru (SUPER_ADMIN ONLY) - Sync Fallback
    */
   public createManager(
     actor: AuthSessionPayload,
@@ -696,7 +1354,121 @@ export class AdminService {
   }
 
   /**
-   * Manajemen Akun Pengelola: Ubah Status/Data Pengelola (SUPER_ADMIN ONLY)
+   * Manajemen Akun Pengelola: Buat Pengelola Baru dengan D1 Persistence
+   */
+  public async createManagerAsync(
+    actor: AuthSessionPayload,
+    payload: {
+      username: string;
+      passwordPlain: string;
+      fullName: string;
+      email?: string;
+      role?: 'MANAGER' | 'SUPER_ADMIN';
+    },
+    ipAddress?: string,
+    d1Db?: DrizzleD1Database<typeof d1Schema>
+  ): Promise<Omit<AdminUser, 'passwordHash' | 'salt'>> {
+    const db = this.getActiveDb(d1Db);
+    await this.ensureInitializedAsync(db || undefined);
+    this.assertIsSuperAdmin(actor);
+
+    if (!payload.username || payload.username.trim().length < 3) {
+      throw new Error('Nama pengguna minimal 3 karakter.');
+    }
+    if (!payload.passwordPlain || payload.passwordPlain.length < 6) {
+      throw new Error('Kata sandi minimal 6 karakter.');
+    }
+    if (!payload.fullName || payload.fullName.trim().length < 2) {
+      throw new Error('Nama lengkap pengelola wajib diisi.');
+    }
+
+    const trimmedUsername = payload.username.trim();
+
+    if (db) {
+      const existingInD1 = await db
+        .select()
+        .from(adminUsers)
+        .where(eq(adminUsers.username, trimmedUsername))
+        .limit(1);
+      if (existingInD1.length > 0) {
+        throw new Error(`Nama pengguna '${payload.username}' sudah digunakan.`);
+      }
+    }
+
+    const existingInMem = Array.from(this.adminUsers.values()).find(
+      (u) => u.username.toLowerCase() === trimmedUsername.toLowerCase()
+    );
+    if (existingInMem) {
+      throw new Error(`Nama pengguna '${payload.username}' sudah digunakan.`);
+    }
+
+    const { hash, salt } = this.hashPassword(payload.passwordPlain);
+    const newId = `admin_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const now = new Date().toISOString();
+
+    const newAdmin: AdminUser = {
+      id: newId,
+      username: trimmedUsername,
+      email: payload.email?.trim() || undefined,
+      fullName: payload.fullName.trim(),
+      passwordHash: hash,
+      salt,
+      role: payload.role || 'MANAGER',
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    if (db) {
+      await db.insert(adminUsers).values({
+        id: newAdmin.id,
+        username: newAdmin.username,
+        email: newAdmin.email,
+        fullName: newAdmin.fullName,
+        passwordHash: newAdmin.passwordHash,
+        salt: newAdmin.salt,
+        role: newAdmin.role,
+        isActive: newAdmin.isActive,
+        createdAt: newAdmin.createdAt,
+        updatedAt: newAdmin.updatedAt,
+      });
+    }
+
+    this.adminUsers.set(newAdmin.id, newAdmin);
+
+    const actorUser = this.adminUsers.get(actor.userId);
+    const actorName = actorUser ? actorUser.fullName : actor.userId;
+
+    await this.recordAuditLogAsync(
+      {
+        actorId: actor.userId,
+        actorName,
+        actorRole: actor.role as 'SUPER_ADMIN',
+        action: 'CREATE_MANAGER',
+        details: {
+          createdUserId: newAdmin.id,
+          createdUsername: newAdmin.username,
+          createdRole: newAdmin.role,
+        },
+        ipAddress,
+      },
+      db || undefined
+    );
+
+    return {
+      id: newAdmin.id,
+      username: newAdmin.username,
+      email: newAdmin.email,
+      fullName: newAdmin.fullName,
+      role: newAdmin.role,
+      isActive: newAdmin.isActive,
+      createdAt: newAdmin.createdAt,
+      updatedAt: newAdmin.updatedAt,
+    };
+  }
+
+  /**
+   * Manajemen Akun Pengelola: Ubah Status/Data Pengelola (Sync Fallback)
    */
   public updateManager(
     actor: AuthSessionPayload,
@@ -718,7 +1490,6 @@ export class AdminService {
       throw new Error('Akun pengelola tidak ditemukan.');
     }
 
-    // Jangan izinkan menonaktifkan akun sendiri jika superadmin
     if (actor.userId === managerId && payload.isActive === false) {
       throw new Error('Anda tidak dapat menonaktifkan akun Anda sendiri.');
     }
@@ -766,7 +1537,132 @@ export class AdminService {
   }
 
   /**
-   * Manajemen Akun Pengelola: Hapus Pengelola (SUPER_ADMIN ONLY)
+   * Manajemen Akun Pengelola: Ubah Status/Data Pengelola dengan D1 Persistence
+   */
+  public async updateManagerAsync(
+    actor: AuthSessionPayload,
+    managerId: string,
+    payload: {
+      fullName?: string;
+      email?: string;
+      role?: 'MANAGER' | 'SUPER_ADMIN';
+      isActive?: boolean;
+      passwordPlain?: string;
+    },
+    ipAddress?: string,
+    d1Db?: DrizzleD1Database<typeof d1Schema>
+  ): Promise<Omit<AdminUser, 'passwordHash' | 'salt'>> {
+    const db = this.getActiveDb(d1Db);
+    await this.ensureInitializedAsync(db || undefined);
+    this.assertIsSuperAdmin(actor);
+
+    let user = this.adminUsers.get(managerId);
+
+    if (db) {
+      const rows = await db
+        .select()
+        .from(adminUsers)
+        .where(eq(adminUsers.id, managerId))
+        .limit(1);
+      if (rows.length > 0) {
+        const row = rows[0];
+        user = {
+          id: row.id,
+          username: row.username,
+          email: row.email || undefined,
+          fullName: row.fullName,
+          passwordHash: row.passwordHash,
+          salt: row.salt,
+          role: row.role as 'MANAGER' | 'SUPER_ADMIN',
+          isActive: Boolean(row.isActive),
+          lastLoginAt: row.lastLoginAt || undefined,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        };
+      }
+    }
+
+    if (!user) {
+      throw new Error('Akun pengelola tidak ditemukan.');
+    }
+
+    if (actor.userId === managerId && payload.isActive === false) {
+      throw new Error('Anda tidak dapat menonaktifkan akun Anda sendiri.');
+    }
+
+    const updates: Partial<AdminUser> = {};
+    if (payload.fullName) {
+      user.fullName = payload.fullName.trim();
+      updates.fullName = user.fullName;
+    }
+    if (payload.email !== undefined) {
+      user.email = payload.email.trim();
+      updates.email = user.email;
+    }
+    if (payload.role) {
+      user.role = payload.role;
+      updates.role = user.role;
+    }
+    if (payload.isActive !== undefined) {
+      user.isActive = Boolean(payload.isActive);
+      updates.isActive = user.isActive;
+    }
+
+    if (payload.passwordPlain && payload.passwordPlain.length >= 6) {
+      const { hash, salt } = this.hashPassword(payload.passwordPlain);
+      user.passwordHash = hash;
+      user.salt = salt;
+      updates.passwordHash = hash;
+      updates.salt = salt;
+    }
+
+    const now = new Date().toISOString();
+    user.updatedAt = now;
+    updates.updatedAt = now;
+
+    this.adminUsers.set(user.id, user);
+
+    if (db) {
+      await db
+        .update(adminUsers)
+        .set(updates)
+        .where(eq(adminUsers.id, user.id));
+    }
+
+    const actorUser = this.adminUsers.get(actor.userId);
+    const actorName = actorUser ? actorUser.fullName : actor.userId;
+
+    await this.recordAuditLogAsync(
+      {
+        actorId: actor.userId,
+        actorName,
+        actorRole: actor.role as 'SUPER_ADMIN',
+        action: 'UPDATE_MANAGER',
+        details: {
+          targetUserId: user.id,
+          targetUsername: user.username,
+          updatedFields: Object.keys(payload),
+        },
+        ipAddress,
+      },
+      db || undefined
+    );
+
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+      isActive: user.isActive,
+      lastLoginAt: user.lastLoginAt,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+
+  /**
+   * Manajemen Akun Pengelola: Hapus Pengelola (SUPER_ADMIN ONLY) - Sync Fallback
    */
   public deleteManager(actor: AuthSessionPayload, managerId: string, ipAddress?: string): boolean {
     this.ensureInitialized();
@@ -803,6 +1699,77 @@ export class AdminService {
   }
 
   /**
+   * Manajemen Akun Pengelola: Hapus Pengelola dengan D1 Persistence
+   */
+  public async deleteManagerAsync(
+    actor: AuthSessionPayload,
+    managerId: string,
+    ipAddress?: string,
+    d1Db?: DrizzleD1Database<typeof d1Schema>
+  ): Promise<boolean> {
+    const db = this.getActiveDb(d1Db);
+    await this.ensureInitializedAsync(db || undefined);
+    this.assertIsSuperAdmin(actor);
+
+    if (actor.userId === managerId) {
+      throw new Error('Anda tidak dapat menghapus akun Anda sendiri.');
+    }
+
+    let user = this.adminUsers.get(managerId);
+
+    if (db) {
+      const rows = await db
+        .select()
+        .from(adminUsers)
+        .where(eq(adminUsers.id, managerId))
+        .limit(1);
+      if (rows.length > 0) {
+        user = {
+          id: rows[0].id,
+          username: rows[0].username,
+          email: rows[0].email || undefined,
+          fullName: rows[0].fullName,
+          passwordHash: rows[0].passwordHash,
+          salt: rows[0].salt,
+          role: rows[0].role as 'MANAGER' | 'SUPER_ADMIN',
+          isActive: Boolean(rows[0].isActive),
+          lastLoginAt: rows[0].lastLoginAt || undefined,
+          createdAt: rows[0].createdAt,
+          updatedAt: rows[0].updatedAt,
+        };
+        await db.delete(adminUsers).where(eq(adminUsers.id, managerId));
+      }
+    }
+
+    if (!user) {
+      throw new Error('Akun pengelola tidak ditemukan.');
+    }
+
+    this.adminUsers.delete(managerId);
+
+    const actorUser = this.adminUsers.get(actor.userId);
+    const actorName = actorUser ? actorUser.fullName : actor.userId;
+
+    await this.recordAuditLogAsync(
+      {
+        actorId: actor.userId,
+        actorName,
+        actorRole: actor.role as 'SUPER_ADMIN',
+        action: 'DELETE_MANAGER',
+        details: {
+          deletedUserId: user.id,
+          deletedUsername: user.username,
+          deletedRole: user.role,
+        },
+        ipAddress,
+      },
+      db || undefined
+    );
+
+    return true;
+  }
+
+  /**
    * Audit Logs (MANAGER / SUPER_ADMIN)
    */
   public getAuditLogs(actor: AuthSessionPayload, limit: number = 50): AdminAuditLog[] {
@@ -811,8 +1778,43 @@ export class AdminService {
     return [...this.auditLogs].reverse().slice(0, limit);
   }
 
+  public async getAuditLogsAsync(
+    actor: AuthSessionPayload,
+    limit: number = 50,
+    d1Db?: DrizzleD1Database<typeof d1Schema>
+  ): Promise<AdminAuditLog[]> {
+    const db = this.getActiveDb(d1Db);
+    await this.ensureInitializedAsync(db || undefined);
+    this.assertIsAdmin(actor);
+
+    if (db) {
+      try {
+        const rows = await db
+          .select()
+          .from(adminAuditLogs)
+          .orderBy(desc(adminAuditLogs.createdAt))
+          .limit(limit);
+
+        return rows.map((r) => ({
+          id: r.id,
+          actorId: r.actorId,
+          actorName: r.actorName,
+          actorRole: r.actorRole as 'MANAGER' | 'SUPER_ADMIN',
+          action: r.action,
+          details: (r.details as any) || undefined,
+          ipAddress: r.ipAddress || undefined,
+          createdAt: r.createdAt,
+        }));
+      } catch (err) {
+        console.warn('[AdminService] getAuditLogsAsync D1 fetch error:', err);
+      }
+    }
+
+    return this.getAuditLogs(actor, limit);
+  }
+
   /**
-   * Helper: Catat Log Audit
+   * Helper: Catat Log Audit (Sync)
    */
   private recordAuditLog(entry: Omit<AdminAuditLog, 'id' | 'createdAt'>) {
     const log: AdminAuditLog = {
@@ -821,6 +1823,40 @@ export class AdminService {
       ...entry,
     };
     this.auditLogs.push(log);
+  }
+
+  /**
+   * Helper: Catat Log Audit ke D1 dan Cache
+   */
+  public async recordAuditLogAsync(
+    entry: Omit<AdminAuditLog, 'id' | 'createdAt'>,
+    d1Db?: DrizzleD1Database<typeof d1Schema>
+  ): Promise<void> {
+    const db = this.getActiveDb(d1Db);
+    const log: AdminAuditLog = {
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      createdAt: new Date().toISOString(),
+      ...entry,
+    };
+
+    this.auditLogs.push(log);
+
+    if (db) {
+      try {
+        await db.insert(adminAuditLogs).values({
+          id: log.id,
+          actorId: log.actorId,
+          actorName: log.actorName,
+          actorRole: log.actorRole,
+          action: log.action,
+          details: log.details || null,
+          ipAddress: log.ipAddress || null,
+          createdAt: log.createdAt,
+        });
+      } catch (err) {
+        console.warn('[AdminService] recordAuditLogAsync D1 insert error:', err);
+      }
+    }
   }
 
   /**

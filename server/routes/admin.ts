@@ -43,7 +43,7 @@ router.post(
       const { username, password } = req.body;
       const ipAddress = req.ip || req.socket.remoteAddress || '127.0.0.1';
 
-      const authResult = adminService.authenticateAdmin(username, password, ipAddress);
+      const authResult = await adminService.authenticateAdminAsync(username, password, ipAddress);
 
       if (!authResult.success) {
         return res.status(401).json({
@@ -100,7 +100,7 @@ router.post('/auth/change-password', requireManager, async (req: AuthenticatedRe
       });
     }
 
-    const result = adminService.changePassword(req.user!, currentPassword, newPassword, ipAddress);
+    const result = await adminService.changePasswordAsync(req.user!, currentPassword, newPassword, ipAddress);
 
     return res.status(200).json({
       success: true,
@@ -123,7 +123,7 @@ router.post('/auth/change-password', requireManager, async (req: AuthenticatedRe
 
 router.get('/config', requireManager, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const config = adminService.getAdminConfig(req.user!);
+    const config = await adminService.getAdminConfigAsync(req.user!);
     return res.status(200).json({
       success: true,
       data: config,
@@ -142,7 +142,7 @@ router.get('/config', requireManager, async (req: AuthenticatedRequest, res: Res
 router.put('/config', requireManager, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const ipAddress = req.ip || req.socket.remoteAddress || '127.0.0.1';
-    const updated = adminService.updateAdminConfig(req.user!, req.body, ipAddress);
+    const updated = await adminService.updateAdminConfigAsync(req.user!, req.body, ipAddress);
 
     return res.status(200).json({
       success: true,
@@ -165,7 +165,7 @@ router.post('/qris', requireManager, async (req: AuthenticatedRequest, res: Resp
     const { qrisImage } = req.body;
     const ipAddress = req.ip || req.socket.remoteAddress || '127.0.0.1';
 
-    const result = adminService.updateQrisImage(req.user!, qrisImage, ipAddress);
+    const result = await adminService.updateQrisImageAsync(req.user!, qrisImage, ipAddress);
 
     return res.status(200).json({
       success: true,
@@ -190,7 +190,7 @@ router.post('/qris', requireManager, async (req: AuthenticatedRequest, res: Resp
 router.get('/audit-logs', requireManager, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const limit = Number(req.query.limit) || 50;
-    const logs = adminService.getAuditLogs(req.user!, limit);
+    const logs = await adminService.getAuditLogsAsync(req.user!, limit);
 
     return res.status(200).json({
       success: true,
@@ -213,7 +213,7 @@ router.get('/audit-logs', requireManager, async (req: AuthenticatedRequest, res:
 
 router.get('/managers', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const managers = adminService.listManagers(req.user!);
+    const managers = await adminService.listManagersAsync(req.user!);
     return res.status(200).json({
       success: true,
       data: managers,
@@ -232,7 +232,7 @@ router.get('/managers', requireSuperAdmin, async (req: AuthenticatedRequest, res
 router.post('/managers', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const ipAddress = req.ip || req.socket.remoteAddress || '127.0.0.1';
-    const newManager = adminService.createManager(req.user!, req.body, ipAddress);
+    const newManager = await adminService.createManagerAsync(req.user!, req.body, ipAddress);
 
     return res.status(201).json({
       success: true,
@@ -254,7 +254,7 @@ router.patch('/managers/:id', requireSuperAdmin, async (req: AuthenticatedReques
   try {
     const { id } = req.params;
     const ipAddress = req.ip || req.socket.remoteAddress || '127.0.0.1';
-    const updated = adminService.updateManager(req.user!, id, req.body, ipAddress);
+    const updated = await adminService.updateManagerAsync(req.user!, id, req.body, ipAddress);
 
     return res.status(200).json({
       success: true,
@@ -276,7 +276,7 @@ router.delete('/managers/:id', requireSuperAdmin, async (req: AuthenticatedReque
   try {
     const { id } = req.params;
     const ipAddress = req.ip || req.socket.remoteAddress || '127.0.0.1';
-    adminService.deleteManager(req.user!, id, ipAddress);
+    await adminService.deleteManagerAsync(req.user!, id, ipAddress);
 
     return res.status(200).json({
       success: true,
