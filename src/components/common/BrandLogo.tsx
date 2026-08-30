@@ -36,7 +36,7 @@ export function BrandLogo({
   const brandConfig = useBrandConfig();
 
   const appName = customAppName || brandConfig.appName || 'HIKMAT TANI';
-  const slogan = customSlogan || brandConfig.slogan || 'Cerdas Bertani, Bijak Mengambil Keputusan';
+  const slogan = customSlogan || brandConfig.slogan || 'CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.';
   const primaryLogo = customLogoUrl || brandConfig.logoPrimary || brandConfig.logoUrl || '/icon-512.png';
   const horizontalLogo = brandConfig.logoHorizontal || '/logo-hikmat-tani-full.png';
 

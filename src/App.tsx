@@ -332,6 +332,37 @@ export default function App() {
   }
 
   // --------------------------------------------------------------------------
+  // SPLASH / LOADING SCREEN (CENTERED MASTER LOGO & CLEAN BACKGROUND)
+  // --------------------------------------------------------------------------
+  if (isLoading && !farmer) {
+    return (
+      <div className="min-h-screen bg-[#072417] flex flex-col items-center justify-center p-6 text-white text-center">
+        <div className="flex flex-col items-center space-y-4 max-w-sm">
+          <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl overflow-hidden bg-[#0B3D26]/60 border border-[#2E7D4F]/40 p-2 shadow-2xl flex items-center justify-center">
+            <img
+              src="/icon-512.png"
+              alt="HIKMAT TANI"
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-wider">
+              <span className="text-[#D4AF37]">HIKMAT</span> TANI
+            </h1>
+            <p className="text-[11px] sm:text-xs font-bold text-[#D4AF37] tracking-widest uppercase mt-1">
+              CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN.
+            </p>
+          </div>
+          <div className="pt-4 flex items-center gap-2 text-xs text-emerald-200/90">
+            <div className="w-4 h-4 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin shrink-0" />
+            <span>Menyiapkan catatan lapang mandiri...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --------------------------------------------------------------------------
   // MAIN DASHBOARD (AUTHENTICATED & ISOLATED)
   // --------------------------------------------------------------------------
   return (
