@@ -117,6 +117,39 @@ function sanitizeAdmin(row: WorkerAdminRecord): Omit<WorkerAdminRecord, 'passwor
   };
 }
 
+/**
+ * Production D1 may contain a legacy admin_users table created before `salt`
+ * was introduced. CREATE TABLE IF NOT EXISTS cannot alter such a table.
+ * Ensure the column exists immediately before authentication as a second,
+ * independent safety net. This keeps login self-healing even when the normal
+ * application schema bootstrap was skipped or cached in an older isolate.
+ */
+async function ensureAdminSaltColumn(db: D1Like): Promise<void> {
+  const info = await db.prepare('PRAGMA table_info(admin_users)').first();
+  // D1 PRAGMA table_info returns rows, so `.first()` is not sufficient for
+  // detecting the complete schema. Use a harmless SELECT against the column
+  // as the authoritative compatibility check.
+  try {
+    await db.prepare('SELECT salt FROM admin_users LIMIT 1').first();
+    return;
+  } catch (err: any) {
+    const message = String(err?.message || err || '').toLowerCase();
+    if (!message.includes('no such column') || !message.includes('salt')) {
+      throw err;
+    }
+  }
+
+  try {
+    await db.prepare('ALTER TABLE admin_users ADD COLUMN salt TEXT').run();
+  } catch (err: any) {
+    // Another request may have added it between the SELECT and ALTER.
+    const message = String(err?.message || err || '').toLowerCase();
+    if (!message.includes('duplicate column') && !message.includes('already exists')) {
+      throw err;
+    }
+  }
+}
+
 export async function authenticateAdminOnWorker(
   db: D1Like,
   env: WorkerAdminEnv,
@@ -127,6 +160,13 @@ export async function authenticateAdminOnWorker(
   const identifier = usernameOrEmail.trim().toLowerCase();
   if (!identifier || !passwordPlain) {
     return { success: false, error: 'Nama pengguna/email atau kata sandi pengelola salah.' };
+  }
+
+  try {
+    await ensureAdminSaltColumn(db);
+  } catch (schemaErr: any) {
+    console.error('[Worker Admin Auth] admin_users schema repair failed:', schemaErr?.message || schemaErr);
+    return { success: false, error: 'Database pengelola belum tersinkron dengan versi Worker terbaru.' };
   }
 
   const row = await db.prepare(`
@@ -140,7 +180,7 @@ export async function authenticateAdminOnWorker(
     email?: string | null;
     full_name: string;
     password_hash: string;
-    salt: string;
+    salt: string | null;
     role: string;
     is_active: number | boolean;
   }>();
@@ -155,7 +195,7 @@ export async function authenticateAdminOnWorker(
     email: row.email || undefined,
     fullName: row.full_name,
     passwordHash: row.password_hash,
-    salt: row.salt,
+    salt: row.salt || '',
     role: row.role as 'MANAGER' | 'SUPER_ADMIN',
     isActive: Boolean(row.is_active),
   };
