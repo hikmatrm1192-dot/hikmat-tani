@@ -289,7 +289,9 @@ export const adminAuditLogs = pgTable('admin_audit_logs', {
   actorId: text('actor_id').notNull(),
   actorName: text('actor_name').notNull(),
   actorRole: text('actor_role').notNull(), // 'MANAGER' | 'SUPER_ADMIN'
-  action: text('action').notNull(), // 'UPDATE_CONFIG' | 'UPDATE_QRIS' | 'CREATE_MANAGER' | 'UPDATE_MANAGER' | 'DELETE_MANAGER' | 'LOGIN' | 'TOGGLE_DONATION'
+  action: text('action').notNull(), // 'UPDATE_CONFIG' | 'UPDATE_QRIS' | 'CREATE_MANAGER' | 'UPDATE_MANAGER' | 'DELETE_MANAGER' | 'LOGIN' | 'TOGGLE_DONATION' | 'CHANGE_PASSWORD'
+  entityType: text('entity_type').notNull(), // 'AUTH' | 'ADMIN_USER' | 'APP_CONFIG' | 'SYSTEM'
+  entityId: text('entity_id'),
   details: jsonb('details'),
   ipAddress: text('ip_address'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

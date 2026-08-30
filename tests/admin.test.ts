@@ -468,9 +468,46 @@ export async function runAdminTests(): Promise<{
       throw new Error('Audit logs dari instance sebelumnya gagal dimuat dari D1.');
     }
 
-    const hasLoginLog = logs.some((l) => l.action === 'LOGIN' && l.actorId === 'admin_super_pappizee');
-    if (!hasLoginLog) {
+    const loginLog = logs.find((l) => l.action === 'LOGIN' && l.actorId === 'admin_super_pappizee');
+    if (!loginLog) {
       throw new Error('Audit log LOGIN Super Admin tidak ditemukan di D1.');
+    }
+    if (loginLog.entityType !== 'AUTH') {
+      throw new Error(`entityType pada audit log LOGIN harus 'AUTH', didapat: ${loginLog.entityType}`);
+    }
+  });
+
+  // 16. D1 Persistence: Validasi entity_type valid dan konsisten di seluruh tipe aksi admin
+  await test('16. D1 Persistence: Validasi entity_type konsisten pada seluruh aksi admin (AUTH, APP_CONFIG, ADMIN_USER)', async () => {
+    const d1Mock = createTestD1Database();
+    await ensureD1CanonicalSchema(d1Mock as any);
+    const d1Client = createD1Client(d1Mock as any);
+
+    const adminService = new AdminService(d1Client);
+    await adminService.ensureInitializedAsync();
+
+    const saLogin = await adminService.authenticateAdminAsync('pappizee', currentSecret || 'HikmatTaniSuperAdmin2026Secret!');
+    const saSession = authService.verifyToken(saLogin.token!)!;
+
+    // 1. UPDATE_CONFIG
+    await adminService.updateAdminConfigAsync(saSession, { donationRecipientName: 'Yayasan Hikmat' });
+
+    // 2. CREATE_MANAGER
+    const newMgr = await adminService.createManagerAsync(saSession, {
+      username: 'manager_audit_test',
+      fullName: 'Manager Audit Test',
+      passwordPlain: 'ManagerAuditPass2026!',
+    });
+
+    const logs = await adminService.getAuditLogsAsync(saSession, 20);
+    const configLog = logs.find((l) => l.action === 'UPDATE_CONFIG');
+    const mgrLog = logs.find((l) => l.action === 'CREATE_MANAGER');
+
+    if (!configLog || configLog.entityType !== 'APP_CONFIG') {
+      throw new Error(`UPDATE_CONFIG entityType salah: ${configLog?.entityType}`);
+    }
+    if (!mgrLog || mgrLog.entityType !== 'ADMIN_USER') {
+      throw new Error(`CREATE_MANAGER entityType salah: ${mgrLog?.entityType}`);
     }
   });
 

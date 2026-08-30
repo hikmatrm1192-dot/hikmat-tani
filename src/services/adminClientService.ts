@@ -58,6 +58,8 @@ export interface AuditLogItem {
   actorName: string;
   actorRole: 'MANAGER' | 'SUPER_ADMIN';
   action: string;
+  entityType?: string;
+  entityId?: string;
   details?: Record<string, any>;
   ipAddress?: string;
   createdAt: string;

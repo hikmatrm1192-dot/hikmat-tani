@@ -67,6 +67,8 @@ export interface AdminAuditLog {
   actorName: string;
   actorRole: 'MANAGER' | 'SUPER_ADMIN';
   action: string;
+  entityType?: string; // 'AUTH' | 'ADMIN_USER' | 'APP_CONFIG' | 'SYSTEM'
+  entityId?: string;
   details?: Record<string, any>;
   ipAddress?: string;
   createdAt: string;
@@ -368,6 +370,8 @@ export class AdminService {
           actorName: r.actorName,
           actorRole: r.actorRole as 'MANAGER' | 'SUPER_ADMIN',
           action: r.action,
+          entityType: r.entityType || 'SYSTEM',
+          entityId: r.entityId || undefined,
           details: (r.details as any) || undefined,
           ipAddress: r.ipAddress || undefined,
           createdAt: r.createdAt,
@@ -555,6 +559,8 @@ export class AdminService {
       actorName: user.fullName,
       actorRole: user.role,
       action: 'LOGIN',
+      entityType: 'AUTH',
+      entityId: user.id,
       details: { username: user.username },
       ipAddress,
     });
@@ -701,6 +707,8 @@ export class AdminService {
         actorName: user.fullName,
         actorRole: user.role,
         action: 'LOGIN',
+        entityType: 'AUTH',
+        entityId: user.id,
         details: { username: user.username },
         ipAddress,
       },
@@ -792,6 +800,8 @@ export class AdminService {
       actorName: user.fullName,
       actorRole: user.role,
       action: 'CHANGE_PASSWORD',
+      entityType: 'AUTH',
+      entityId: user.id,
       details: { username: user.username },
       ipAddress,
     });
@@ -883,6 +893,8 @@ export class AdminService {
         actorName: user.fullName,
         actorRole: user.role,
         action: 'CHANGE_PASSWORD',
+        entityType: 'AUTH',
+        entityId: user.id,
         details: { username: user.username },
         ipAddress,
       },
@@ -1020,6 +1032,8 @@ export class AdminService {
       actorName,
       actorRole: actor.role as 'MANAGER' | 'SUPER_ADMIN',
       action: 'UPDATE_CONFIG',
+      entityType: 'APP_CONFIG',
+      entityId: 'official_config',
       details: {
         changedFields: Object.keys(payload),
         before: {
@@ -1129,6 +1143,8 @@ export class AdminService {
         actorName,
         actorRole: actor.role as 'MANAGER' | 'SUPER_ADMIN',
         action: 'UPDATE_CONFIG',
+        entityType: 'APP_CONFIG',
+        entityId: 'official_config',
         details: {
           changedFields: Object.keys(payload),
           before: {
@@ -1192,6 +1208,8 @@ export class AdminService {
       actorName,
       actorRole: actor.role as 'MANAGER' | 'SUPER_ADMIN',
       action: 'UPDATE_QRIS',
+      entityType: 'APP_CONFIG',
+      entityId: 'official_config',
       details: {
         hasQris: Boolean(trimmed),
         length: trimmed.length,
@@ -1266,6 +1284,8 @@ export class AdminService {
         actorName,
         actorRole: actor.role as 'MANAGER' | 'SUPER_ADMIN',
         action: 'UPDATE_QRIS',
+        entityType: 'APP_CONFIG',
+        entityId: 'official_config',
         details: {
           hasQris: Boolean(trimmed),
           length: trimmed.length,
@@ -1388,6 +1408,8 @@ export class AdminService {
       actorName,
       actorRole: actor.role as 'SUPER_ADMIN',
       action: 'CREATE_MANAGER',
+      entityType: 'ADMIN_USER',
+      entityId: newAdmin.id,
       details: {
         createdUserId: newAdmin.id,
         createdUsername: newAdmin.username,
@@ -1500,6 +1522,8 @@ export class AdminService {
         actorName,
         actorRole: actor.role as 'SUPER_ADMIN',
         action: 'CREATE_MANAGER',
+        entityType: 'ADMIN_USER',
+        entityId: newAdmin.id,
         details: {
           createdUserId: newAdmin.id,
           createdUsername: newAdmin.username,
@@ -1570,6 +1594,8 @@ export class AdminService {
       actorName,
       actorRole: actor.role as 'SUPER_ADMIN',
       action: 'UPDATE_MANAGER',
+      entityType: 'ADMIN_USER',
+      entityId: user.id,
       details: {
         targetUserId: user.id,
         targetUsername: user.username,
@@ -1693,6 +1719,8 @@ export class AdminService {
         actorName,
         actorRole: actor.role as 'SUPER_ADMIN',
         action: 'UPDATE_MANAGER',
+        entityType: 'ADMIN_USER',
+        entityId: user.id,
         details: {
           targetUserId: user.id,
           targetUsername: user.username,
@@ -1742,6 +1770,8 @@ export class AdminService {
       actorName,
       actorRole: actor.role as 'SUPER_ADMIN',
       action: 'DELETE_MANAGER',
+      entityType: 'ADMIN_USER',
+      entityId: managerId,
       details: {
         deletedUserId: user.id,
         deletedUsername: user.username,
@@ -1811,6 +1841,8 @@ export class AdminService {
         actorName,
         actorRole: actor.role as 'SUPER_ADMIN',
         action: 'DELETE_MANAGER',
+        entityType: 'ADMIN_USER',
+        entityId: managerId,
         details: {
           deletedUserId: user.id,
           deletedUsername: user.username,
@@ -1856,6 +1888,8 @@ export class AdminService {
           actorName: r.actorName,
           actorRole: r.actorRole as 'MANAGER' | 'SUPER_ADMIN',
           action: r.action,
+          entityType: r.entityType || 'SYSTEM',
+          entityId: r.entityId || undefined,
           details: (r.details as any) || undefined,
           ipAddress: r.ipAddress || undefined,
           createdAt: r.createdAt,
@@ -1904,6 +1938,8 @@ export class AdminService {
           actorName: log.actorName,
           actorRole: log.actorRole,
           action: log.action,
+          entityType: log.entityType || 'SYSTEM',
+          entityId: log.entityId || null,
           details: log.details || null,
           ipAddress: log.ipAddress || null,
           createdAt: log.createdAt,

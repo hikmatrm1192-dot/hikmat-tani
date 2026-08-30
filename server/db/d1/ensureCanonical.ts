@@ -197,6 +197,8 @@ export async function ensureD1CanonicalSchema(d1BindingOrDb: any, force = false)
         actor_name TEXT NOT NULL,
         actor_role TEXT NOT NULL,
         action TEXT NOT NULL,
+        entity_type TEXT NOT NULL DEFAULT 'SYSTEM',
+        entity_id TEXT,
         details TEXT,
         ip_address TEXT,
         created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
@@ -208,6 +210,8 @@ export async function ensureD1CanonicalSchema(d1BindingOrDb: any, force = false)
       { name: 'actor_name', typeAndDef: "TEXT NOT NULL DEFAULT ''" },
       { name: 'actor_role', typeAndDef: "TEXT NOT NULL DEFAULT 'MANAGER'" },
       { name: 'action', typeAndDef: "TEXT NOT NULL DEFAULT ''" },
+      { name: 'entity_type', typeAndDef: "TEXT NOT NULL DEFAULT 'SYSTEM'" },
+      { name: 'entity_id', typeAndDef: "TEXT" },
       { name: 'details', typeAndDef: "TEXT" },
       { name: 'ip_address', typeAndDef: "TEXT" },
       { name: 'created_at', typeAndDef: "TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)" },
@@ -223,10 +227,23 @@ export async function ensureD1CanonicalSchema(d1BindingOrDb: any, force = false)
     try {
       await d1.prepare(`UPDATE admin_audit_logs SET action = 'SYSTEM_ACTION' WHERE action IS NULL OR action = ''`).run();
     } catch {}
+    try {
+      await d1.prepare(`UPDATE admin_audit_logs SET entity_type = 'AUTH' WHERE action IN ('LOGIN', 'CHANGE_PASSWORD') AND (entity_type IS NULL OR entity_type = '' OR entity_type = 'SYSTEM')`).run();
+    } catch {}
+    try {
+      await d1.prepare(`UPDATE admin_audit_logs SET entity_type = 'ADMIN_USER' WHERE action IN ('CREATE_MANAGER', 'UPDATE_MANAGER', 'DELETE_MANAGER') AND (entity_type IS NULL OR entity_type = '' OR entity_type = 'SYSTEM')`).run();
+    } catch {}
+    try {
+      await d1.prepare(`UPDATE admin_audit_logs SET entity_type = 'APP_CONFIG' WHERE action IN ('UPDATE_CONFIG', 'UPDATE_QRIS', 'TOGGLE_DONATION') AND (entity_type IS NULL OR entity_type = '' OR entity_type = 'SYSTEM')`).run();
+    } catch {}
+    try {
+      await d1.prepare(`UPDATE admin_audit_logs SET entity_type = 'SYSTEM' WHERE entity_type IS NULL OR entity_type = ''`).run();
+    } catch {}
 
     const auditIndexes = [
       'CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created_at ON admin_audit_logs(created_at)',
       'CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_actor_id ON admin_audit_logs(actor_id)',
+      'CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_entity_type ON admin_audit_logs(entity_type)',
     ];
     for (const idx of auditIndexes) {
       try {

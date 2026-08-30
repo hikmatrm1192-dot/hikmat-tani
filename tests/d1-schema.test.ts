@@ -331,6 +331,50 @@ export async function runD1SchemaTests(): Promise<{
     if (!loginLog || loginLog.actorName !== 'Pappizee') {
       throw new Error(`Audit log login tidak valid: ${JSON.stringify(loginLog)}`);
     }
+    if (loginLog.entityType !== 'AUTH') {
+      throw new Error(`Audit log entityType harus 'AUTH', didapat: ${loginLog.entityType}`);
+    }
+  });
+
+  // 11. Regression Test: Worker Edge & AdminService audit log inserts include valid NOT NULL entity_type
+  await test('11. Regression: INSERT audit log pada login admin selalu menyertakan entity_type NOT NULL valid', async () => {
+    const { createTestD1Database } = await import('../server/db/d1/testD1.ts');
+    const { ensureD1CanonicalSchema, resetSchemaEnsuredCache } = await import('../server/db/d1/ensureCanonical.ts');
+    const { authenticateAdminOnWorker } = await import('../server/services/workerAdminAuth.ts');
+
+    resetSchemaEnsuredCache();
+    const d1Mock = createTestD1Database();
+    await ensureD1CanonicalSchema(d1Mock, true);
+
+    const currentSecret = process.env.SUPER_ADMIN_PASSWORD || process.env.ADMIN_INITIAL_PASSWORD || 'HikmatTaniSuperAdmin2026Secret!';
+    
+    // Uji login via Worker Edge Authenticator
+    const workerAuthRes = await authenticateAdminOnWorker(
+      d1Mock,
+      { SUPER_ADMIN_PASSWORD: currentSecret },
+      'pappizee',
+      currentSecret,
+      '192.168.1.1'
+    );
+
+    if (!workerAuthRes.success || !workerAuthRes.admin) {
+      throw new Error(`Worker authenticateAdminOnWorker gagal: ${JSON.stringify(workerAuthRes)}`);
+    }
+
+    // Periksa bahwa record di tabel admin_audit_logs memiliki entity_type NOT NULL dan nilainya 'AUTH'
+    const auditRows = await d1Mock.prepare(`SELECT * FROM admin_audit_logs WHERE action = 'LOGIN'`).all();
+    if (!auditRows.results || auditRows.results.length === 0) {
+      throw new Error('Record audit log LOGIN tidak ditemukan di D1.');
+    }
+
+    for (const row of auditRows.results) {
+      if (!row.entity_type || row.entity_type.trim() === '') {
+        throw new Error(`Regression FAIL: Record audit log memiliki entity_type kosong/null: ${JSON.stringify(row)}`);
+      }
+      if (row.entity_type !== 'AUTH') {
+        throw new Error(`Regression FAIL: entity_type untuk LOGIN harus 'AUTH', didapat: ${row.entity_type}`);
+      }
+    }
   });
 
   const total = results.length;

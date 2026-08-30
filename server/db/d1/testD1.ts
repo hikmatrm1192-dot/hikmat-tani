@@ -80,22 +80,90 @@ export class InMemoryD1Database implements D1Database {
       return this.tableColumns.get(normalized)!;
     }
     // Return default schema columns if table exists
-    const defaultCols: Record<string, string[]> = {
-      admin_audit_logs: ['id', 'actor_id', 'actor_name', 'actor_role', 'action', 'details', 'ip_address', 'created_at'],
-      admin_users: ['id', 'username', 'email', 'full_name', 'password_hash', 'salt', 'role', 'is_active', 'last_login_at', 'created_at', 'updated_at'],
-      app_configs: ['id', 'app_name', 'slogan', 'logo_url', 'logo_primary', 'logo_horizontal', 'app_icon', 'description', 'contact_phone', 'contact_email', 'support_title', 'support_description', 'donation_active', 'donation_recipient_name', 'donation_bank_name', 'donation_account_number', 'donation_ewallet_number', 'donation_qris_image', 'donation_url', 'updated_by', 'updated_at'],
-      auth_users: ['id', 'anonymous_id', 'role', 'is_active', 'last_seen_at', 'created_at', 'updated_at'],
-      farmers: ['id', 'name', 'phone_number', 'nik', 'pin_hash', 'salt', 'village', 'district', 'regency', 'province', 'farmer_group_name', 'auth_user_id', 'created_at', 'updated_at'],
+    const defaultCols: Record<string, Array<{ name: string; notnull: number; dflt_value: any }>> = {
+      admin_audit_logs: [
+        { name: 'id', notnull: 1, dflt_value: null },
+        { name: 'actor_id', notnull: 1, dflt_value: "''" },
+        { name: 'actor_name', notnull: 1, dflt_value: "''" },
+        { name: 'actor_role', notnull: 1, dflt_value: "'MANAGER'" },
+        { name: 'action', notnull: 1, dflt_value: "''" },
+        { name: 'entity_type', notnull: 1, dflt_value: null },
+        { name: 'entity_id', notnull: 0, dflt_value: null },
+        { name: 'details', notnull: 0, dflt_value: null },
+        { name: 'ip_address', notnull: 0, dflt_value: null },
+        { name: 'created_at', notnull: 1, dflt_value: 'CURRENT_TIMESTAMP' },
+      ],
+      admin_users: [
+        { name: 'id', notnull: 1, dflt_value: null },
+        { name: 'username', notnull: 1, dflt_value: null },
+        { name: 'email', notnull: 0, dflt_value: null },
+        { name: 'full_name', notnull: 1, dflt_value: null },
+        { name: 'password_hash', notnull: 1, dflt_value: null },
+        { name: 'salt', notnull: 1, dflt_value: null },
+        { name: 'role', notnull: 1, dflt_value: "'MANAGER'" },
+        { name: 'is_active', notnull: 1, dflt_value: '1' },
+        { name: 'last_login_at', notnull: 0, dflt_value: null },
+        { name: 'created_at', notnull: 1, dflt_value: 'CURRENT_TIMESTAMP' },
+        { name: 'updated_at', notnull: 1, dflt_value: 'CURRENT_TIMESTAMP' },
+      ],
+      app_configs: [
+        { name: 'id', notnull: 1, dflt_value: null },
+        { name: 'app_name', notnull: 1, dflt_value: "'HIKMAT TANI'" },
+        { name: 'slogan', notnull: 1, dflt_value: "''" },
+        { name: 'logo_url', notnull: 1, dflt_value: "''" },
+        { name: 'logo_primary', notnull: 1, dflt_value: "''" },
+        { name: 'logo_horizontal', notnull: 1, dflt_value: "''" },
+        { name: 'app_icon', notnull: 1, dflt_value: "''" },
+        { name: 'description', notnull: 1, dflt_value: "''" },
+        { name: 'contact_phone', notnull: 0, dflt_value: null },
+        { name: 'contact_email', notnull: 0, dflt_value: null },
+        { name: 'support_title', notnull: 1, dflt_value: "''" },
+        { name: 'support_description', notnull: 1, dflt_value: "''" },
+        { name: 'donation_active', notnull: 1, dflt_value: '1' },
+        { name: 'donation_recipient_name', notnull: 0, dflt_value: null },
+        { name: 'donation_bank_name', notnull: 0, dflt_value: null },
+        { name: 'donation_account_number', notnull: 0, dflt_value: null },
+        { name: 'donation_ewallet_number', notnull: 0, dflt_value: null },
+        { name: 'donation_qris_image', notnull: 0, dflt_value: null },
+        { name: 'donation_url', notnull: 0, dflt_value: null },
+        { name: 'updated_by', notnull: 0, dflt_value: null },
+        { name: 'updated_at', notnull: 1, dflt_value: 'CURRENT_TIMESTAMP' },
+      ],
+      auth_users: [
+        { name: 'id', notnull: 1, dflt_value: null },
+        { name: 'anonymous_id', notnull: 0, dflt_value: null },
+        { name: 'role', notnull: 1, dflt_value: "'farmer'" },
+        { name: 'is_active', notnull: 1, dflt_value: '1' },
+        { name: 'last_seen_at', notnull: 1, dflt_value: 'CURRENT_TIMESTAMP' },
+        { name: 'created_at', notnull: 1, dflt_value: 'CURRENT_TIMESTAMP' },
+        { name: 'updated_at', notnull: 1, dflt_value: 'CURRENT_TIMESTAMP' },
+      ],
+      farmers: [
+        { name: 'id', notnull: 1, dflt_value: null },
+        { name: 'name', notnull: 1, dflt_value: null },
+        { name: 'phone_number', notnull: 0, dflt_value: null },
+        { name: 'nik', notnull: 0, dflt_value: null },
+        { name: 'pin_hash', notnull: 1, dflt_value: null },
+        { name: 'salt', notnull: 1, dflt_value: null },
+        { name: 'village', notnull: 0, dflt_value: null },
+        { name: 'district', notnull: 0, dflt_value: null },
+        { name: 'regency', notnull: 0, dflt_value: null },
+        { name: 'province', notnull: 0, dflt_value: null },
+        { name: 'farmer_group_name', notnull: 0, dflt_value: null },
+        { name: 'auth_user_id', notnull: 0, dflt_value: null },
+        { name: 'created_at', notnull: 1, dflt_value: 'CURRENT_TIMESTAMP' },
+        { name: 'updated_at', notnull: 1, dflt_value: 'CURRENT_TIMESTAMP' },
+      ],
     };
 
     if (defaultCols[normalized]) {
-      const cols = defaultCols[normalized].map((name, idx) => ({
+      const cols = defaultCols[normalized].map((colDef, idx) => ({
         cid: idx,
-        name,
+        name: colDef.name,
         type: 'TEXT',
-        notnull: name === 'id' ? 1 : 0,
-        dflt_value: null,
-        pk: name === 'id' ? 1 : 0,
+        notnull: colDef.notnull,
+        dflt_value: colDef.dflt_value,
+        pk: colDef.name === 'id' ? 1 : 0,
       }));
       this.tableColumns.set(normalized, cols);
       return cols;
@@ -297,6 +365,14 @@ class InMemoryD1PreparedStatement {
             row[colName] = null;
           } else {
             row[colName] = valTokens[i].replace(/^['"`]|['"`]$/g, '');
+          }
+        }
+
+        // Validate NOT NULL constraints
+        const tableCols = this.db.getTableInfo(tableName);
+        for (const colDef of tableCols) {
+          if (colDef.notnull && colDef.dflt_value === null && (row[colDef.name] === undefined || row[colDef.name] === null)) {
+            throw new Error(`D1_ERROR: NOT NULL constraint failed: ${tableName}.${colDef.name}: SQLITE_CONSTRAINT`);
           }
         }
 

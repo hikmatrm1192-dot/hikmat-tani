@@ -276,14 +276,16 @@ export async function authenticateAdminOnWorker(
 
   await db.prepare(`
     INSERT INTO admin_audit_logs
-      (id, actor_id, actor_name, actor_role, action, details, ip_address, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      (id, actor_id, actor_name, actor_role, action, entity_type, entity_id, details, ip_address, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     `log_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     admin.id,
     admin.fullName,
     admin.role,
     'LOGIN',
+    'AUTH',
+    admin.id,
     JSON.stringify({ username: admin.username }),
     ipAddress,
     now,

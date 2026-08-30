@@ -254,6 +254,8 @@ CREATE TABLE IF NOT EXISTS admin_audit_logs (
     actor_name TEXT NOT NULL,
     actor_role TEXT NOT NULL,
     action TEXT NOT NULL,
+    entity_type TEXT NOT NULL DEFAULT 'SYSTEM',
+    entity_id TEXT,
     details TEXT, -- JSON text
     ip_address TEXT,
     created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
