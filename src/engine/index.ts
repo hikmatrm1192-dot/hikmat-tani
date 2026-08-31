@@ -13,3 +13,4 @@ export * from './recommendation/types.ts';
 export * from './recommendation/rules.ts';
 export * from './recommendation/weatherModifier.ts';
 export * from './recommendation/evaluator.ts';
+export * from './optRelevanceEngine.ts';

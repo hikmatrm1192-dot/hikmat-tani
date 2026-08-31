@@ -1,5 +1,5 @@
 /**
- * HIKMAT TANI - OPT Observation to PHT Recommendation Correlation Tests
+ * HIKMAT TANI - OPT Observation to PHT Recommendation & Library Correlation Tests
  * 
  * Memverifikasi korelasi antara:
  * 1. Pengamatan OPT Teridentifikasi (Dikenal) -> Rekomendasi PHT spesifik & proporsional
@@ -7,14 +7,33 @@
  * 3. Bahasa konsultatif & santun (tidak ada kata 'WAJIB', 'HARUS', 'PASTI', 'SEGERA')
  * 4. Prinsip 4 Pilar PHT (Kultur teknis, fisik/mekanis, musuh alami sebelum intervensi kuratif)
  * 5. Metadata relevan untuk navigasi rujukan PHT
+ * 6. Relevance Scoring Engine untuk Pencarian Pustaka:
+ *    - Tokenisasi & normalisasi kata
+ *    - Filter stopwords / kata noise non-agronomi
+ *    - Deteksi frasa kunci agronomi (N-grams)
+ *    - Pembobotan sinergi multi-gejala & bagian tanaman
+ *    - Penolakan diagnosis palsu pada hasil rujukan pembanding
+ *    - Penanganan query tanpa kemiripan (empty state)
  */
 
 import { buildFieldContext } from '../src/engine/contextEngine.ts';
 import { evaluateRecommendations } from '../src/engine/recommendation/evaluator.ts';
-import { Activity, CropSeason, Land, OptObservation, RiceVariety } from '../src/types/index.ts';
+import {
+  extractAgronomicTokens,
+  matchOptRelevance,
+  normalizeText,
+} from '../src/engine/optRelevanceEngine.ts';
+import { SEED_OPTS } from '../src/db/seedData.ts';
+import {
+  Activity,
+  CropSeason,
+  Land,
+  OptObservation,
+  RiceVariety,
+} from '../src/types/index.ts';
 
-function runOptCorrelationTests() {
-  console.log('=== MENJALANKAN UJI INTEGRASI KORELASI PENGAMATAN OPT -> REKOMENDASI PHT ===\n');
+export function runOptCorrelationTests() {
+  console.log('=== MENJALANKAN UJI INTEGRASI KORELASI PENGAMATAN OPT -> REKOMENDASI PHT & PUSTAKA ===\n');
 
   const dummyLand: Land = {
     id: 'land-test-opt',
@@ -52,6 +71,10 @@ function runOptCorrelationTests() {
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',
   };
+
+  // --------------------------------------------------------------------------
+  // BAGIAN I: UJI REKOMENDASI ENGINE (PHT & DIAGNOSIS PALSU)
+  // --------------------------------------------------------------------------
 
   // Test 1: OPT Dikenal dengan Serangan Ringan (LIGHT)
   {
@@ -223,7 +246,163 @@ function runOptCorrelationTests() {
     console.log('✓ Test 3 Lolos: Penanganan Gejala Tidak Dikenal (Mencegah Diagnosis Palsu & Memandu Pengamatan Visual)');
   }
 
-  console.log('\n=== SEMUA UJI KORELASI OPT -> REKOMENDASI PHT BERHASIL 100% ===\n');
+  // --------------------------------------------------------------------------
+  // BAGIAN II: UJI RELEVANCE MATCHING ENGINE (PUSTAKA PHT)
+  // --------------------------------------------------------------------------
+
+  // Test 4: Pencarian OPT Terdaftar (Exact/Alias Match)
+  {
+    const query = 'Sundep';
+    const matches = matchOptRelevance(SEED_OPTS, query);
+
+    if (matches.length === 0) {
+      throw new Error('Test 4 Gagal: Pencarian alias "Sundep" harus menemukan Penggerek Batang Padi');
+    }
+
+    const topMatch = matches[0];
+    if (!topMatch.opt.id.includes('penggerek')) {
+      throw new Error(`Test 4 Gagal: Top match untuk "Sundep" harus Penggerek Batang, didapat: ${topMatch.opt.commonName}`);
+    }
+
+    if (!topMatch.isExactMatch) {
+      throw new Error('Test 4 Gagal: Alias resmi harus ditandai isExactMatch: true');
+    }
+
+    console.log('✓ Test 4 Lolos: Pencarian OPT Terdaftar (Exact & Alias Match)');
+  }
+
+  // Test 5: Gejala Bebas "Belum Tahu" (Temuan Pengguna: "daun menguning dan rumpun kerdil" + "gejala terlihat di petak tanaman")
+  {
+    const freeformQuery = 'daun menguning dan rumpun kerdil gejala terlihat di petak tanaman';
+    const matches = matchOptRelevance(SEED_OPTS, freeformQuery, {
+      attackLocations: ['LEAF', 'WHOLE_PLANT'],
+    });
+
+    if (matches.length === 0) {
+      throw new Error('Test 5 Gagal: Gejala "daun menguning dan rumpun kerdil" tidak boleh menghasilkan 0 rujukan (OPT Tidak Ditemukan)!');
+    }
+
+    // Harus menemukan rujukan berkarakteristik kerdil/kuning (Tungro, Wereng Hijau, Wereng Coklat, dll.)
+    const matchedOptIds = matches.map((m) => m.opt.id);
+    const hasTungroOrWereng = matchedOptIds.some(
+      (id) => id.includes('tungro') || id.includes('wereng')
+    );
+
+    if (!hasTungroOrWereng) {
+      throw new Error('Test 5 Gagal: Gejala daun menguning & kerdil harus mencakup Tungro atau Wereng sebagai pembanding');
+    }
+
+    // Pastikan hasil pertama memiliki relevansi label yang tepat
+    const topMatch = matches[0];
+    if (!topMatch.relevanceLabel.includes('Rujukan Pembanding')) {
+      throw new Error(`Test 5 Gagal: Input gejala bebas harus berlabel Rujukan Pembanding, didapat: ${topMatch.relevanceLabel}`);
+    }
+
+    // Pastikan tidak ada klaim diagnosis pasti
+    if (!topMatch.disclaimer.includes('bukan diagnosis pasti')) {
+      throw new Error('Test 5 Gagal: Disclaimer non-diagnosis harus selalu disertakan');
+    }
+
+    console.log(`✓ Test 5 Lolos: Pencarian Gejala Bebas ("${freeformQuery}" -> ${matches.length} Rujukan Pembanding Relevan)`);
+  }
+
+  // Test 6: Pembersihan Stopwords & Kata Noise Non-Agronomi
+  {
+    const noiseOnly = 'gejala terlihat di petak tanaman sawah';
+    const extracted = extractAgronomicTokens(noiseOnly);
+
+    // Semua kata noise di atas harus difilter keluar
+    if (extracted.phrases.length > 0 || extracted.words.length > 0) {
+      throw new Error(`Test 6 Gagal: Kata noise umum harus difilter, tersisa: ${extracted.words.join(', ')}`);
+    }
+
+    const mixedQuery = 'terlihat daun menguning di petak sawah tanaman';
+    const mixedExtracted = extractAgronomicTokens(mixedQuery);
+
+    if (!mixedExtracted.phrases.includes('daun menguning') && !mixedExtracted.stems.includes('kuning')) {
+      throw new Error('Test 6 Gagal: Frasa bermakna "daun menguning" harus tetap terekstraksi dari query bernoise');
+    }
+
+    console.log('✓ Test 6 Lolos: Pembersihan Stopwords & Kata Noise Pengamatan');
+  }
+
+  // Test 7: Peningkatan Skor Relevansi Berdasarkan Bagian Tanaman (attackLocation)
+  {
+    const query = 'bercak';
+    const matchWithoutLoc = matchOptRelevance(SEED_OPTS, query);
+    const matchWithLeaf = matchOptRelevance(SEED_OPTS, query, {
+      attackLocations: ['LEAF'],
+    });
+
+    const blasNoLoc = matchWithoutLoc.find((m) => m.opt.id.includes('blas'));
+    const blasWithLoc = matchWithLeaf.find((m) => m.opt.id.includes('blas'));
+
+    if (!blasNoLoc || !blasWithLoc) {
+      throw new Error('Test 7 Gagal: Penyakit Blas harus ditemukan pada pencarian kata "bercak"');
+    }
+
+    if (blasWithLoc.score <= blasNoLoc.score) {
+      throw new Error('Test 7 Gagal: Penambahan attackLocation LEAF harus meningkatkan skor relevansi OPT bergejala daun');
+    }
+
+    console.log('✓ Test 7 Lolos: Pembobotan Bagian Tanaman (attackLocation)');
+  }
+
+  // Test 8: Sinergi Multi-Gejala (Co-occurrence Bonus)
+  {
+    const singleSymptomQuery = 'menguning';
+    const multiSymptomQuery = 'menguning kerdil';
+
+    const matchSingle = matchOptRelevance(SEED_OPTS, singleSymptomQuery);
+    const matchMulti = matchOptRelevance(SEED_OPTS, multiSymptomQuery);
+
+    const tungroSingle = matchSingle.find((m) => m.opt.id.includes('tungro'));
+    const tungroMulti = matchMulti.find((m) => m.opt.id.includes('tungro'));
+
+    if (!tungroSingle || !tungroMulti) {
+      throw new Error('Test 8 Gagal: Tungro harus ditemukan');
+    }
+
+    if (tungroMulti.score <= tungroSingle.score) {
+      throw new Error('Test 8 Gagal: Multi-gejala (menguning + kerdil) harus menghasilkan skor sinergi yang lebih tinggi');
+    }
+
+    console.log('✓ Test 8 Lolos: Sinergi Multi-Gejala (Co-occurrence Scoring)');
+  }
+
+  // Test 9: Input Tanpa Makna Agronomi (Gibberish / No Match)
+  {
+    const gibberishQuery = 'xyzabc12345 nonagronomitest';
+    const matches = matchOptRelevance(SEED_OPTS, gibberishQuery);
+
+    if (matches.length !== 0) {
+      throw new Error('Test 9 Gagal: Input tanpa makna agronomi harus menghasilkan 0 match untuk memicu empty state');
+    }
+
+    console.log('✓ Test 9 Lolos: Penanganan Query Tanpa Relevansi (Empty State)');
+  }
+
+  // Test 10: Prinsip Non-Diagnosis Pasti & Integritas Keputusan Petani
+  {
+    const query = 'pucuk kering mudah dicabut';
+    const matches = matchOptRelevance(SEED_OPTS, query);
+
+    if (matches.length === 0) {
+      throw new Error('Test 10 Gagal: Gejala pucuk kering mudah dicabut harus menemukan Penggerek Batang');
+    }
+
+    for (const match of matches) {
+      if (!match.isExactMatch) {
+        if (!match.disclaimer || !match.disclaimer.includes('bukan diagnosis pasti')) {
+          throw new Error('Test 10 Gagal: Setiap rujukan pembanding harus menyertakan disclaimer non-diagnosis pasti');
+        }
+      }
+    }
+
+    console.log('✓ Test 10 Lolos: Integritas Non-Diagnosis Pasti & Keputusan Mandiri Petani');
+  }
+
+  console.log('\n=== SEMUA 10 UJI KORELASI OPT -> REKOMENDASI PHT & PUSTAKA BERHASIL 100% ===\n');
 }
 
 runOptCorrelationTests();
