@@ -25,13 +25,16 @@ import {
   FarmerDecision,
   FarmerDecisionChoice,
   Fertilizer,
+  FertilizerApplication,
   Land,
   Opt,
+  OptObservation,
   RiceVariety,
   WeatherData,
 } from '../../types/index.ts';
 import { clientWeatherService } from '../../services/weatherService.ts';
 import { ActivityFormModal } from '../kegiatan/ActivityFormModal.tsx';
+import { ActivityDetailModal } from '../kegiatan/ActivityDetailModal.tsx';
 import { SeasonDetailModal } from '../lahan/SeasonDetailModal.tsx';
 import { ActiveLandCard } from './ActiveLandCard.tsx';
 import { FarmerDecisionModal } from './FarmerDecisionModal.tsx';
@@ -80,6 +83,9 @@ export function BerandaView({
   const [activityFormCategory, setActivityFormCategory] = useState<ActivityCategory | null>(null);
   const [isActivityFormOpen, setIsActivityFormOpen] = useState<boolean>(false);
   const [activeDecisionId, setActiveDecisionId] = useState<string | undefined>(undefined);
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [detailFertApps, setDetailFertApps] = useState<FertilizerApplication[]>([]);
+  const [detailOptObs, setDetailOptObs] = useState<OptObservation[]>([]);
 
   // Decision Modal state (Tiga Jalur Keputusan)
   const [selectedRecommendation, setSelectedRecommendation] = useState<EvaluatedRecommendation | null>(null);
@@ -309,6 +315,23 @@ export function BerandaView({
         />
       )}
 
+      {/* Modal Detail Kegiatan */}
+      <ActivityDetailModal
+        isOpen={selectedActivity !== null}
+        onClose={() => setSelectedActivity(null)}
+        activity={selectedActivity}
+        land={activeLand}
+        cropSeason={activeSeason}
+        fertilizerApps={detailFertApps}
+        optObs={detailOptObs}
+        opts={opts}
+        onNavigateToKnowledge={onNavigateToKnowledge}
+        onDeleted={async () => {
+          await onRefreshData();
+          setSelectedActivity(null);
+        }}
+      />
+
       {/* Modal Form Pencatatan Kegiatan */}
       {activeSeason && (
         <ActivityFormModal
@@ -324,8 +347,19 @@ export function BerandaView({
           varieties={varieties}
           opts={opts}
           decisionId={activeDecisionId}
-          onSuccess={async () => {
+          onNavigateToKnowledge={onNavigateToKnowledge}
+          onSuccess={async (createdActivity, createdOptObs) => {
             await onRefreshData();
+            if (createdActivity) {
+              setSelectedActivity(createdActivity);
+              if (createdOptObs) {
+                setDetailOptObs([createdOptObs]);
+                setDetailFertApps([]);
+              } else {
+                setDetailOptObs([]);
+                setDetailFertApps([]);
+              }
+            }
           }}
         />
       )}

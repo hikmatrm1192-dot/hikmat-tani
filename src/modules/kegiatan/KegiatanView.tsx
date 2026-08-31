@@ -591,6 +591,7 @@ export function KegiatanView({
         cropSeason={currentSeason}
         fertilizerApps={detailFertApps}
         optObs={detailOptObs}
+        opts={opts}
         onNavigateToKnowledge={onNavigateToKnowledge}
         onDeleted={async () => {
           await onRefreshData();
@@ -611,9 +612,23 @@ export function KegiatanView({
           varieties={varieties}
           opts={opts}
           onNavigateToKnowledge={onNavigateToKnowledge}
-          onSuccess={async () => {
+          onSuccess={async (createdActivity, createdOptObs) => {
             await onRefreshData();
             await loadSubData();
+            if (createdActivity) {
+              setSelectedActivity(createdActivity);
+              if (createdOptObs) {
+                setDetailOptObs([createdOptObs]);
+                setDetailFertApps([]);
+              } else if (createdActivity.category === 'FERTILIZER') {
+                const ferts = await activityRepository.getFertilizerApplications(createdActivity.id);
+                setDetailFertApps(ferts);
+                setDetailOptObs([]);
+              } else {
+                setDetailOptObs([]);
+                setDetailFertApps([]);
+              }
+            }
           }}
         />
       )}
