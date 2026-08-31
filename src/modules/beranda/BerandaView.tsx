@@ -47,6 +47,8 @@ interface BerandaViewProps {
   lands: Land[];
   activeSeasons: CropSeason[];
   allActivities: Activity[];
+  allFertApps?: FertilizerApplication[];
+  allOptObs?: OptObservation[];
   fertilizers: Fertilizer[];
   varieties: RiceVariety[];
   opts?: Opt[];
@@ -67,6 +69,8 @@ export function BerandaView({
   lands,
   activeSeasons,
   allActivities,
+  allFertApps = [],
+  allOptObs = [],
   fertilizers,
   varieties,
   opts = [],
@@ -174,9 +178,21 @@ export function BerandaView({
   );
   const varietyDurationDays = matchedVariety?.growthDurationDays || 120;
 
-  // Filter aktivitas terkait musim tanam aktif
+  // Filter aktivitas, pupuk & pengamatan OPT terkait musim tanam aktif
   const seasonActivities = activeSeason
     ? allActivities.filter((a) => a.cropSeasonId === activeSeason.id)
+    : [];
+
+  const seasonFertApps = activeSeason
+    ? allFertApps.filter((f) =>
+        seasonActivities.some((a) => a.id === f.activityId)
+      )
+    : [];
+
+  const seasonOptObs = activeSeason
+    ? allOptObs.filter((o) =>
+        seasonActivities.some((a) => a.id === o.activityId)
+      )
     : [];
 
   // Bangun Konteks Lapangan via Agriculture Engine
@@ -185,6 +201,9 @@ export function BerandaView({
         cropSeason: activeSeason,
         land: activeLand,
         activities: seasonActivities,
+        fertilizerApplications: seasonFertApps,
+        optObservations: seasonOptObs,
+        availableOpts: opts,
         targetDate: new Date(),
         varietyDurationDays,
         weatherData,

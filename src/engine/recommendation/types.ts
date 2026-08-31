@@ -11,6 +11,28 @@ import { FieldContext } from '../contextEngine.ts';
 
 export type RecommendationConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
 
+export interface EvaluatedRecommendationMetadata {
+  sourceActivity?: string;
+  mainFinding?: string;
+  attentionReason?: string;
+  supportingReference?: string;
+  optId?: string;
+  optName?: string;
+  customOptName?: string;
+  attackSeverity?: string;
+  attackLocation?: string[];
+  observedSymptoms?: string;
+  isUnknown?: boolean;
+  relevanceScore?: number;
+  relevanceLabel?: string;
+  matchedKeywords?: string[];
+  visualClues?: string[];
+  weatherContext?: string;
+  phtAdvice?: string;
+  hst?: number;
+  [key: string]: unknown;
+}
+
 export interface EvaluatedRecommendation {
   id: string;
   cropSeasonId: string;
@@ -22,7 +44,7 @@ export interface EvaluatedRecommendation {
   priority: RecommendationPriority;
   referenceIds: string[];
   suggestedActionType?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: EvaluatedRecommendationMetadata;
   createdAt: string;
 }
 
@@ -34,5 +56,5 @@ export interface AgronomyRule {
   priority: RecommendationPriority;
   referenceIds: string[];
   isApplicable: (context: FieldContext) => boolean;
-  evaluate: (context: FieldContext) => EvaluatedRecommendation | null;
+  evaluate: (context: FieldContext) => EvaluatedRecommendation | EvaluatedRecommendation[] | null;
 }

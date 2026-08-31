@@ -402,7 +402,181 @@ export function runOptCorrelationTests() {
     console.log('✓ Test 10 Lolos: Integritas Non-Diagnosis Pasti & Keputusan Mandiri Petani');
   }
 
-  console.log('\n=== SEMUA 10 UJI KORELASI OPT -> REKOMENDASI PHT & PUSTAKA BERHASIL 100% ===\n');
+  // --------------------------------------------------------------------------
+  // BAGIAN III: UJI KORELASI KEGIATAN LAPANG -> PERLU DIPERHATIKAN BERANDA
+  // --------------------------------------------------------------------------
+
+  // Test 11: Korelasi Multi-Pengamatan OPT Menghasilkan Saran Terstruktur & Terurut
+  {
+    const act1: Activity = {
+      id: 'act-multi-1',
+      cropSeasonId: dummySeason.id,
+      category: 'OPT',
+      activityDate: '2026-08-25',
+      hst: 25,
+      notes: 'Pengamatan petak sawah blok A',
+      createdAt: '2026-08-25T00:00:00.000Z',
+      updatedAt: '2026-08-25T00:00:00.000Z',
+    };
+
+    const obs1: OptObservation = {
+      id: 'obs-multi-1',
+      activityId: act1.id,
+      optId: 'opt-bph',
+      isUnknown: false,
+      customOptName: 'Wereng Batang Coklat',
+      attackSeverity: 'HEAVY',
+      attackLocation: ['STEM'],
+      observedSymptoms: 'Populasi wereng padat di pangkal batang',
+      createdAt: '2026-08-25T00:00:00.000Z',
+      updatedAt: '2026-08-25T00:00:00.000Z',
+    };
+
+    const obs2: OptObservation = {
+      id: 'obs-multi-2',
+      activityId: act1.id,
+      optId: 'opt-blas',
+      isUnknown: false,
+      customOptName: 'Blas Daun',
+      attackSeverity: 'LIGHT',
+      attackLocation: ['LEAF'],
+      observedSymptoms: 'Bercak belah ketupat kecil sporadis',
+      createdAt: '2026-08-25T00:00:00.000Z',
+      updatedAt: '2026-08-25T00:00:00.000Z',
+    };
+
+    const ctx = buildFieldContext({
+      cropSeason: dummySeason,
+      activities: [act1],
+      fertilizerApplications: [],
+      optObservations: [obs1, obs2],
+      varietyDurationDays: dummyVariety.growthDurationDays,
+      targetDate: new Date('2026-08-25'),
+    });
+
+    const recs = evaluateRecommendations(ctx, { skipWeatherModifier: true });
+    const optRecs = recs.filter((r) => r.contextType === 'OPT_CONTROL');
+
+    if (optRecs.length < 2) {
+      throw new Error(`Test 11 Gagal: Harus menghasilkan saran pertimbangan untuk setiap pengamatan OPT, didapat ${optRecs.length}`);
+    }
+
+    // Saran serangan berat (HEAVY) harus berada di urutan teratas
+    if (optRecs[0].priority !== 'HIGH' || !optRecs[0].title.includes('Wereng Batang Coklat')) {
+      throw new Error('Test 11 Gagal: Saran serangan berat (Wereng) harus diprioritaskan di posisi pertama');
+    }
+
+    // Verifikasi metadata kontekstual untuk card Beranda
+    for (const r of optRecs) {
+      if (!r.metadata?.sourceActivity) {
+        throw new Error('Test 11 Gagal: Metadata sourceActivity wajib terisi');
+      }
+      if (!r.metadata?.mainFinding) {
+        throw new Error('Test 11 Gagal: Metadata mainFinding wajib terisi');
+      }
+      if (!r.metadata?.attentionReason) {
+        throw new Error('Test 11 Gagal: Metadata attentionReason wajib terisi');
+      }
+      if (!r.metadata?.supportingReference) {
+        throw new Error('Test 11 Gagal: Metadata supportingReference wajib terisi');
+      }
+    }
+
+    console.log('✓ Test 11 Lolos: Multi-Pengamatan OPT Menghasilkan Saran Terstruktur dengan Metadata Lengkap');
+  }
+
+  // Test 12: Temuan "Padi kerdil dan daun menguning" menghasilkan saran rujukan agronomi santun
+  {
+    const actKerdil: Activity = {
+      id: 'act-kerdil-1',
+      cropSeasonId: dummySeason.id,
+      category: 'OPT',
+      activityDate: '2026-08-28',
+      hst: 28,
+      notes: 'Petani mencatat tanaman tampak kerdil dan daun menguning',
+      createdAt: '2026-08-28T00:00:00.000Z',
+      updatedAt: '2026-08-28T00:00:00.000Z',
+    };
+
+    const obsKerdil: OptObservation = {
+      id: 'obs-kerdil-1',
+      activityId: actKerdil.id,
+      isUnknown: true,
+      customOptName: 'Padi Kerdil Daun Menguning',
+      attackSeverity: 'MEDIUM',
+      attackLocation: ['LEAF', 'WHOLE_PLANT'],
+      observedSymptoms: 'padi kerdil dan daun menguning di beberapa rumpun',
+      createdAt: '2026-08-28T00:00:00.000Z',
+      updatedAt: '2026-08-28T00:00:00.000Z',
+    };
+
+    const ctx = buildFieldContext({
+      cropSeason: dummySeason,
+      activities: [actKerdil],
+      fertilizerApplications: [],
+      optObservations: [obsKerdil],
+      varietyDurationDays: dummyVariety.growthDurationDays,
+      targetDate: new Date('2026-08-28'),
+    });
+
+    const recs = evaluateRecommendations(ctx, { skipWeatherModifier: true });
+    const kerdilRec = recs.find((r) => r.contextType === 'OPT_CONTROL');
+
+    if (!kerdilRec) {
+      throw new Error('Test 12 Gagal: Rekomendasi tidak terbentuk untuk temuan kerdil daun menguning');
+    }
+
+    // Harus merujuk kemiripan dengan Tungro atau Wereng
+    const isRelevantMatch =
+      kerdilRec.message.includes('Tungro') ||
+      kerdilRec.message.includes('Wereng') ||
+      kerdilRec.basis.includes('Tungro') ||
+      kerdilRec.basis.includes('Wereng');
+
+    if (!isRelevantMatch) {
+      throw new Error('Test 12 Gagal: Harus menemukan rujukan agronomi relevan (Tungro/Wereng) untuk gejala kerdil & menguning');
+    }
+
+    if (!kerdilRec.message.includes('belum teridentifikasi pasti')) {
+      throw new Error('Test 12 Gagal: Harus mempertahankan prinsip tidak memvonis diagnosis pasti');
+    }
+
+    console.log('✓ Test 12 Lolos: Rujukan Agronomi Santun untuk Temuan "padi kerdil dan daun menguning"');
+  }
+
+  // Test 13: Pencatatan Kegiatan Tanpa Masalah Tidak Memaksakan Saran Berlebihan
+  {
+    const actNormal: Activity = {
+      id: 'act-normal-1',
+      cropSeasonId: dummySeason.id,
+      category: 'IRRIGATION',
+      activityDate: '2026-08-15',
+      hst: 15,
+      notes: 'Pengairan macak-macak kondisi sawah prima',
+      createdAt: '2026-08-15T00:00:00.000Z',
+      updatedAt: '2026-08-15T00:00:00.000Z',
+    };
+
+    const ctx = buildFieldContext({
+      cropSeason: dummySeason,
+      activities: [actNormal],
+      fertilizerApplications: [],
+      optObservations: [],
+      varietyDurationDays: dummyVariety.growthDurationDays,
+      targetDate: new Date('2026-08-15'),
+    });
+
+    const recs = evaluateRecommendations(ctx, { skipWeatherModifier: true });
+    const optRecs = recs.filter((r) => r.contextType === 'OPT_CONTROL');
+
+    if (optRecs.length > 0) {
+      throw new Error('Test 13 Gagal: Jika tidak ada pengamatan OPT, tidak boleh memaksakan saran OPT!');
+    }
+
+    console.log('✓ Test 13 Lolos: Integritas Kondisi Normal (Tidak Memaksakan Saran Tanpa Dasar)');
+  }
+
+  console.log('\n=== SEMUA 13 UJI KORELASI OPT -> REKOMENDASI PHT & PUSTAKA BERHASIL 100% ===\n');
 }
 
 runOptCorrelationTests();

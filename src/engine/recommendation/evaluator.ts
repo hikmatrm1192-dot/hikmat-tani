@@ -44,9 +44,13 @@ export function evaluateRecommendations(
 
     try {
       if (rule.isApplicable(context)) {
-        const rec = rule.evaluate(context);
-        if (rec) {
-          recommendations.push(rec);
+        const res = rule.evaluate(context);
+        if (Array.isArray(res)) {
+          for (const item of res) {
+            if (item) recommendations.push(item);
+          }
+        } else if (res) {
+          recommendations.push(res);
         }
       }
     } catch (err) {
@@ -55,19 +59,41 @@ export function evaluateRecommendations(
     }
   }
 
-  // Urutkan prioritas (HIGH -> MEDIUM -> LOW -> INFO)
-  const priorityWeight: Record<string, number> = {
-    CRITICAL: 5,
-    HIGH: 4,
-    MEDIUM: 3,
-    LOW: 2,
-    INFO: 1,
+  // Hitung bobot relevansi dan prioritas secara deterministik
+  const getRecommendationScore = (rec: EvaluatedRecommendation): number => {
+    let score = 0;
+    const priorityWeight: Record<string, number> = {
+      CRITICAL: 500,
+      HIGH: 400,
+      MEDIUM: 300,
+      LOW: 200,
+      INFO: 100,
+    };
+    score += priorityWeight[rec.priority] || 100;
+
+    // Temuan lapangan (OPT_CONTROL) dengan intensitas sedang/berat diprioritaskan
+    if (rec.contextType === 'OPT_CONTROL') {
+      score += 50;
+      if (rec.metadata?.attackSeverity === 'HEAVY') score += 40;
+      else if (rec.metadata?.attackSeverity === 'MEDIUM') score += 20;
+
+      if (typeof rec.metadata?.relevanceScore === 'number') {
+        score += Math.min(30, Math.floor(rec.metadata.relevanceScore / 4));
+      }
+    } else if (rec.contextType === 'GROWTH_STAGE') {
+      score += 20;
+    } else if (rec.contextType === 'FERTILIZER') {
+      score += 15;
+    }
+
+    if (rec.confidence === 'HIGH') score += 10;
+    else if (rec.confidence === 'MEDIUM') score += 5;
+
+    return score;
   };
 
   const sorted = recommendations.sort((a, b) => {
-    const weightA = priorityWeight[a.priority] || 0;
-    const weightB = priorityWeight[b.priority] || 0;
-    return weightB - weightA;
+    return getRecommendationScore(b) - getRecommendationScore(a);
   });
 
   // Terapkan pertimbangan cuaca (Weather Context Modifier) jika tersedia & tidak diskip

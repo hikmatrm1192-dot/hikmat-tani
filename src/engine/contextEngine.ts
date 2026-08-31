@@ -23,6 +23,7 @@ import {
   FertilizerApplication,
   FieldWeatherContext,
   Land,
+  Opt,
   OptObservation,
   WeatherData,
 } from '../types/index.ts';
@@ -72,6 +73,12 @@ export interface FieldContext {
     waterCondition?: string;
   };
 
+  // Semua Pengamatan OPT Musim Ini (jika ada)
+  allOptObservations?: OptObservation[];
+
+  // Master OPT Pustaka (opsional untuk evaluasi)
+  availableOpts?: Opt[];
+
   // Kualitas Kelengkapan Data
   dataQuality: FieldContextDataQuality;
 
@@ -85,6 +92,7 @@ export interface BuildFieldContextParams {
   activities?: Activity[];
   fertilizerApplications?: FertilizerApplication[];
   optObservations?: OptObservation[];
+  availableOpts?: Opt[];
   targetDate?: string | Date;
   varietyDurationDays?: number | null;
   weatherData?: WeatherData | null;
@@ -146,6 +154,7 @@ export function buildFieldContext({
   activities = [],
   fertilizerApplications = [],
   optObservations = [],
+  availableOpts = [],
   targetDate = new Date(),
   varietyDurationDays,
   weatherData = null,
@@ -223,9 +232,26 @@ export function buildFieldContext({
   // 6. Pengamatan OPT Terakhir
   const optActivities = sortedActivities.filter((a) => a.category === 'OPT');
   const recentOptActivity = optActivities.length > 0 ? optActivities[0] : null;
-  const recentOptObs = recentOptActivity
+  let recentOptObs = recentOptActivity
     ? optObservations.filter((o) => o.activityId === recentOptActivity.id)
     : [];
+
+  // Fallback jika ada kegiatan OPT tetapi belum ada baris OptObservation tersendiri di DB
+  if (recentOptActivity && recentOptObs.length === 0) {
+    recentOptObs = [
+      {
+        id: `obs-fallback-${recentOptActivity.id}`,
+        activityId: recentOptActivity.id,
+        isUnknown: true,
+        customOptName: recentOptActivity.notes ? recentOptActivity.notes.slice(0, 50) : 'Pengamatan OPT Lapang',
+        observedSymptoms: recentOptActivity.notes || 'Pengamatan visual di petak sawah',
+        attackSeverity: 'MEDIUM',
+        attackLocation: ['LEAF'],
+        createdAt: recentOptActivity.createdAt,
+        updatedAt: recentOptActivity.updatedAt,
+      },
+    ];
+  }
 
   const hasActiveInfestation = recentOptObs.some(
     (o) => o.attackSeverity !== 'LIGHT' || (o.attackPercentage && o.attackPercentage > 5)
@@ -272,6 +298,9 @@ export function buildFieldContext({
       activity: recentWaterActivity,
       waterCondition: recentWaterActivity?.notes,
     },
+
+    allOptObservations: optObservations,
+    availableOpts,
 
     dataQuality: {
       hasPlantingDate,

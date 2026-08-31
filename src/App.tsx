@@ -375,6 +375,8 @@ export default function App() {
           lands={lands}
           activeSeasons={activeSeasons}
           allActivities={allActivities}
+          allFertApps={allFertApps}
+          allOptObs={allOptObs}
           fertilizers={fertilizers}
           varieties={varieties}
           opts={opts}
