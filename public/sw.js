@@ -7,7 +7,7 @@
  * - Kebijakan Stale-While-Revalidate untuk aset statis agar pembaruan tetap masuk saat online.
  */
 
-const CACHE_NAME = 'hikmat-tani-shell-v6';
+const CACHE_NAME = 'hikmat-tani-shell-v7';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

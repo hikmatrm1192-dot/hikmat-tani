@@ -192,6 +192,12 @@ export async function runD1SchemaTests(): Promise<{
     if (!wranglerContent.includes('migrations_dir = "server/db/d1/migrations"')) {
       throw new Error('migrations_dir di wrangler.toml harus "server/db/d1/migrations"');
     }
+    if (!wranglerContent.includes('app.hikmattani.id')) {
+      throw new Error('Custom domain "app.hikmattani.id" harus terdaftar di routes wrangler.toml');
+    }
+    if (!wranglerContent.includes('workers_dev = true')) {
+      throw new Error('workers_dev = true harus dipertahankan sebagai fallback di wrangler.toml');
+    }
   });
 
   // 7. Cloudflare Worker Entry Point

@@ -22,14 +22,18 @@
 import worker from '../server/worker.ts';
 import { InMemoryD1Database } from '../server/db/d1/testD1.ts';
 
-const PROD_URL = 'https://hikmat-tani.hikmat-rm1192.workers.dev';
+const PROD_CUSTOM_DOMAIN = 'https://app.hikmattani.id';
+const PROD_FALLBACK_URL = 'https://hikmat-tani.hikmat-rm1192.workers.dev';
+const PROD_URL = process.env.PROD_URL || PROD_CUSTOM_DOMAIN;
 const D1_DATABASE_ID = 'dea96ce1-84ab-49a5-9ea9-92d4fa45d55b';
 
 async function runLiveProductionVerification() {
   console.log(`\n=== UJI LIVE VERIFIKASI PRODUCTION WORKER HIKMAT TANI ===`);
   console.log(`Target Worker Name: hikmat-tani`);
   console.log(`Target Cloudflare D1 Database: hikmat-tani-db (${D1_DATABASE_ID})`);
-  console.log(`Public Endpoint: ${PROD_URL}\n`);
+  console.log(`Production Custom Domain: ${PROD_CUSTOM_DOMAIN}`);
+  console.log(`Production Fallback Domain: ${PROD_FALLBACK_URL}`);
+  console.log(`Active Public Endpoint: ${PROD_URL}\n`);
 
   let passed = 0;
   let failed = 0;

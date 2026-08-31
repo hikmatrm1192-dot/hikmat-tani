@@ -48,8 +48,39 @@ export default {
       config.jwtSecret = env.JWT_SECRET;
     }
 
+    const requestOrigin = request.headers.get('Origin') || '';
+    const allowedOrigins = [
+      'https://app.hikmattani.id',
+      'https://hikmat-tani.hikmat-rm1192.workers.dev',
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://127.0.0.1:3000',
+    ];
+
+    let allowOrigin = '*';
+    if (env.CORS_ORIGIN && env.CORS_ORIGIN !== '*') {
+      const configuredOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim());
+      if (configuredOrigins.includes(requestOrigin)) {
+        allowOrigin = requestOrigin;
+      } else if (configuredOrigins.includes('*')) {
+        allowOrigin = '*';
+      } else {
+        allowOrigin = configuredOrigins[0];
+      }
+    } else if (requestOrigin) {
+      if (
+        allowedOrigins.includes(requestOrigin) ||
+        requestOrigin.endsWith('.hikmattani.id') ||
+        requestOrigin.endsWith('.workers.dev')
+      ) {
+        allowOrigin = requestOrigin;
+      } else {
+        allowOrigin = '*';
+      }
+    }
+
     const corsHeaders: Record<string, string> = {
-      'Access-Control-Allow-Origin': env.CORS_ORIGIN || '*',
+      'Access-Control-Allow-Origin': allowOrigin,
       'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
       'X-Content-Type-Options': 'nosniff',

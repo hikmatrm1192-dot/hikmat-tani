@@ -10,6 +10,17 @@ name = "hikmat-tani"
 main = "server/worker.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# ==============================================================================
+# Custom Domain Route Configuration
+# ==============================================================================
+# Domain Utama: https://app.hikmattani.id
+# Fallback / Compatibility: https://hikmat-tani.hikmat-rm1192.workers.dev
+# ==============================================================================
+routes = [
+  { pattern = "app.hikmattani.id", custom_domain = true }
+]
 
 # Static Assets (SPA Frontend)
 [assets]
