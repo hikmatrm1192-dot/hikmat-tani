@@ -8,7 +8,9 @@
  */
 
 import { useState, type FormEvent, useEffect } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { Modal } from '../../components/common/Modal.tsx';
+import { FertilizerPickerModal } from '../kegiatan/FertilizerPickerModal.tsx';
 import { calculateHST } from '../../engine/hstCalculator.ts';
 import { calculateNutrients } from '../../engine/nutrientEngine.ts';
 import { activityRepository } from '../../db/repositories/activityRepository.ts';
@@ -52,6 +54,7 @@ export function QuickActivityModal({
 
   // Fertilizer specific state
   const [selectedFertId, setSelectedFertId] = useState<string>('');
+  const [isFertPickerOpen, setIsFertPickerOpen] = useState<boolean>(false);
   const [customFertName, setCustomFertName] = useState<string>('');
   const [amountKg, setAmountKg] = useState<string>('50');
   const [method, setMethod] = useState<string>('BROADCAST');
@@ -251,24 +254,70 @@ export function QuickActivityModal({
         {category === 'FERTILIZER' && (
           <div className="space-y-3.5 p-4 bg-emerald-50/60 rounded-xl border border-emerald-200/80">
             <div>
-              <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
-                Pilih Jenis Pupuk <span className="text-red-500">*</span>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+                <span>Pilih Jenis Pupuk <span className="text-red-500">*</span></span>
+                {fertilizers.find((f) => f.id === selectedFertId)?.isSubsidized && (
+                  <span className="text-[10px] bg-emerald-100 text-emerald-900 px-1.5 py-0.5 rounded font-bold border border-emerald-300">
+                    Subsidi Pemerintah
+                  </span>
+                )}
               </label>
-              <select
-                value={selectedFertId}
-                onChange={(e) => setSelectedFertId(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+
+              {/* Trigger Pemilihan Pupuk Proporsional */}
+              <button
+                type="button"
+                onClick={() => setIsFertPickerOpen(true)}
+                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 hover:border-emerald-500 rounded-xl text-left flex items-center justify-between min-h-[46px] shadow-2xs group transition-all"
               >
-                {fertilizers.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name} {f.formula ? `(${f.formula})` : ''}
-                  </option>
-                ))}
-                <option value="">Lainnya / Pupuk Racikan</option>
-              </select>
+                <div className="flex-1 min-w-0 pr-2">
+                  {selectedFertId === '__CUSTOM__' || !selectedFertId ? (
+                    <div>
+                      <span className="text-sm font-bold text-slate-900 block truncate">
+                        {customFertName.trim() ? customFertName : '+ Pupuk Lainnya / Isi Manual'}
+                      </span>
+                      <span className="text-[11px] text-slate-500 block truncate">
+                        Pupuk Khusus / Manual
+                      </span>
+                    </div>
+                  ) : (() => {
+                    const sel = fertilizers.find((f) => f.id === selectedFertId);
+                    return sel ? (
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-sm sm:text-[15px] font-bold text-slate-900 truncate">
+                            {sel.name}
+                          </span>
+                          {sel.isSubsidized && (
+                            <span className="shrink-0 text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-300">
+                              Subsidi
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5 truncate">
+                          {sel.formula && (
+                            <span className="font-medium text-slate-600 bg-slate-100 px-1 py-0.2 rounded text-[11px]">
+                              {sel.formula}
+                            </span>
+                          )}
+                          {sel.brand && sel.brand !== sel.name && (
+                            <span className="text-[11px]">• {sel.brand}</span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-slate-400">Pilih Jenis Pupuk...</span>
+                    );
+                  })()}
+                </div>
+
+                <div className="flex items-center gap-1 text-slate-400 group-hover:text-emerald-700 shrink-0">
+                  <span className="text-xs font-semibold text-emerald-700 hidden sm:inline">Pilih</span>
+                  <ChevronDown className="w-4 h-4" />
+                </div>
+              </button>
             </div>
 
-            {!selectedFertId && (
+            {(selectedFertId === '__CUSTOM__' || !selectedFertId) && (
               <div>
                 <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
                   Nama Pupuk Khusus
@@ -425,6 +474,15 @@ export function QuickActivityModal({
           </button>
         </div>
       </form>
+
+      {/* Modal Pemilihan Jenis Pupuk Proporsional Mobile */}
+      <FertilizerPickerModal
+        isOpen={isFertPickerOpen}
+        onClose={() => setIsFertPickerOpen(false)}
+        fertilizers={fertilizers}
+        selectedFertId={selectedFertId}
+        onSelectFertilizer={(id) => setSelectedFertId(id)}
+      />
     </Modal>
   );
 }
