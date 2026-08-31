@@ -14,6 +14,7 @@
  *     ! Sinkronisasi tertunda
  */
 
+import Dexie from 'dexie';
 import { db } from '../db/database.ts';
 import { outboxRepository } from '../db/repositories/outboxRepository.ts';
 import { SyncOutboxItem } from '../types/sync.ts';
@@ -109,10 +110,12 @@ class SyncEngine {
    * Notifikasi adanya mutasi lokal baru dari repository
    */
   public notifyMutation(): void {
-    this.refreshPendingCount().catch(() => {});
-    if (this.isOnline) {
-      this.debounceSync();
-    }
+    Dexie.ignoreTransaction(() => {
+      this.refreshPendingCount().catch(() => {});
+      if (this.isOnline) {
+        this.debounceSync();
+      }
+    });
   }
 
   private debounceSync(): void {
@@ -127,7 +130,7 @@ class SyncEngine {
    */
   public async refreshPendingCount(): Promise<number> {
     try {
-      this.pendingCount = await outboxRepository.countPending();
+      this.pendingCount = await Dexie.ignoreTransaction(() => outboxRepository.countPending());
       this.notifyListeners();
       return this.pendingCount;
     } catch {

@@ -2,15 +2,20 @@
  * HIKMAT TANI - Sync Outbox Repository (Storage Foundation)
  */
 
+import Dexie from 'dexie';
 import { SyncOutboxItem, SyncStatus } from '../../types/index.ts';
 import { db } from '../database.ts';
 import { syncEngine } from '../../sync/syncEngine.ts';
+
+export interface OutboxMutationOptions {
+  skipNotify?: boolean;
+}
 
 export const outboxRepository = {
   /**
    * Menambahkan item ke antrean sinkronisasi dengan jaminan idempotency via operationId.
    */
-  async add(item: SyncOutboxItem): Promise<string> {
+  async add(item: SyncOutboxItem, options?: OutboxMutationOptions): Promise<string> {
     if (item.operationId) {
       const existing = await db.syncOutbox.where('operationId').equals(item.operationId).first();
       if (existing) {
@@ -18,7 +23,11 @@ export const outboxRepository = {
       }
     }
     const id = await db.syncOutbox.add(item);
-    syncEngine.notifyMutation();
+    if (!options?.skipNotify) {
+      Dexie.ignoreTransaction(() => {
+        syncEngine.notifyMutation();
+      });
+    }
     return id;
   },
 
@@ -30,7 +39,8 @@ export const outboxRepository = {
     entityId: string,
     action: SyncOutboxItem['action'],
     payload: Record<string, any> | any,
-    operationId?: string
+    operationId?: string,
+    options?: OutboxMutationOptions
   ): Promise<string> {
     const opId = operationId || `op-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const item: SyncOutboxItem = {
@@ -44,7 +54,7 @@ export const outboxRepository = {
       retryCount: 0,
       status: 'PENDING',
     };
-    return await this.add(item);
+    return await this.add(item, options);
   },
 
   /**
@@ -55,9 +65,10 @@ export const outboxRepository = {
     entityId: string,
     action: SyncOutboxItem['action'],
     payload: Record<string, any> | any,
-    operationId?: string
+    operationId?: string,
+    options?: OutboxMutationOptions
   ): Promise<string> {
-    return await this.enqueue(entityType, entityId, action, payload, operationId);
+    return await this.enqueue(entityType, entityId, action, payload, operationId, options);
   },
 
   async getPending(): Promise<SyncOutboxItem[]> {

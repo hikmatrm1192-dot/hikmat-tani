@@ -15,6 +15,7 @@ import {
 } from '../../types/index.ts';
 import { db } from '../database.ts';
 import { outboxRepository } from './outboxRepository.ts';
+import { syncEngine } from '../../sync/syncEngine.ts';
 
 export const activityRepository = {
   async getById(id: string): Promise<Activity | undefined> {
@@ -67,16 +68,21 @@ export const activityRepository = {
       createdAt: fertilizerApp.createdAt || now,
     };
 
-    return await db.transaction('rw', [db.activities, db.fertilizerApplications, db.syncOutbox], async () => {
+    const result = await db.transaction('rw', [db.activities, db.fertilizerApplications, db.syncOutbox], async () => {
       await db.activities.add(actItem);
       await db.fertilizerApplications.add(fertItem);
-      await outboxRepository.recordMutation('ACTIVITY', actItem.id, 'CREATE', actItem);
-      await outboxRepository.recordMutation('FERTILIZER_APPLICATION', fertItem.id, 'CREATE', fertItem);
+      await outboxRepository.recordMutation('ACTIVITY', actItem.id, 'CREATE', actItem, undefined, { skipNotify: true });
+      await outboxRepository.recordMutation('FERTILIZER_APPLICATION', fertItem.id, 'CREATE', fertItem, undefined, { skipNotify: true });
       return {
         activityId: actItem.id,
         fertilizerAppId: fertItem.id,
       };
     });
+
+    // Notifikasi sinkronisasi setelah transaksi selesai di-commit ke IndexedDB
+    syncEngine.notifyMutation();
+
+    return result;
   },
 
   /**
@@ -97,16 +103,21 @@ export const activityRepository = {
       createdAt: optObservation.createdAt || now,
     };
 
-    return await db.transaction('rw', [db.activities, db.optObservations, db.syncOutbox], async () => {
+    const result = await db.transaction('rw', [db.activities, db.optObservations, db.syncOutbox], async () => {
       await db.activities.add(actItem);
       await db.optObservations.add(optItem);
-      await outboxRepository.recordMutation('ACTIVITY', actItem.id, 'CREATE', actItem);
-      await outboxRepository.recordMutation('OPT_OBSERVATION', optItem.id, 'CREATE', optItem);
+      await outboxRepository.recordMutation('ACTIVITY', actItem.id, 'CREATE', actItem, undefined, { skipNotify: true });
+      await outboxRepository.recordMutation('OPT_OBSERVATION', optItem.id, 'CREATE', optItem, undefined, { skipNotify: true });
       return {
         activityId: actItem.id,
         optObservationId: optItem.id,
       };
     });
+
+    // Notifikasi sinkronisasi setelah transaksi selesai di-commit ke IndexedDB
+    syncEngine.notifyMutation();
+
+    return result;
   },
 
   async getFertilizerApplications(activityId: string): Promise<FertilizerApplication[]> {

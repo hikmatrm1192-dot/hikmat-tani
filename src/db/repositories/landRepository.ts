@@ -5,6 +5,7 @@
 import { Land } from '../../types/index.ts';
 import { db } from '../database.ts';
 import { outboxRepository } from './outboxRepository.ts';
+import { syncEngine } from '../../sync/syncEngine.ts';
 
 export const landRepository = {
   async getById(id: string): Promise<Land | undefined> {
@@ -118,14 +119,17 @@ export const landRepository = {
 
           // Hapus musim tanam
           await db.cropSeasons.delete(seasonId);
-          await outboxRepository.recordMutation('CROP_SEASON', seasonId, 'DELETE', { id: seasonId });
+          await outboxRepository.recordMutation('CROP_SEASON', seasonId, 'DELETE', { id: seasonId }, undefined, { skipNotify: true });
         }
 
         // Hapus lahan
         await db.lands.delete(id);
-        await outboxRepository.recordMutation('LAND', id, 'DELETE', { id });
+        await outboxRepository.recordMutation('LAND', id, 'DELETE', { id }, undefined, { skipNotify: true });
       }
     );
+
+    // Notifikasi sinkronisasi setelah transaksi selesai di-commit ke IndexedDB
+    syncEngine.notifyMutation();
   },
 
   async delete(id: string): Promise<void> {
