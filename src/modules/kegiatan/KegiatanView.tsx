@@ -610,6 +610,7 @@ export function KegiatanView({
           fertilizers={fertilizers}
           varieties={varieties}
           opts={opts}
+          onNavigateToKnowledge={onNavigateToKnowledge}
           onSuccess={async () => {
             await onRefreshData();
             await loadSubData();

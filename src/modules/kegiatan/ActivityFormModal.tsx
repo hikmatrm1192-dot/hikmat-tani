@@ -18,6 +18,7 @@ import { useState, type FormEvent, useEffect, type ChangeEvent } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
+  BookOpen,
   Bug,
   Calendar,
   Camera,
@@ -29,6 +30,7 @@ import {
   Leaf,
   Plus,
   Scissors,
+  Search,
   Sparkles,
   Sprout,
   Trash2,
@@ -66,6 +68,11 @@ interface ActivityFormModalProps {
   varieties?: RiceVariety[];
   opts?: Opt[];
   decisionId?: string; // Tautan jika dipicu dari Keputusan Petani
+  onNavigateToKnowledge?: (
+    category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan',
+    itemId?: string,
+    searchQuery?: string
+  ) => void;
   onSuccess: () => void;
 }
 
@@ -79,6 +86,7 @@ export function ActivityFormModal({
   varieties = [],
   opts = [],
   decisionId,
+  onNavigateToKnowledge,
   onSuccess,
 }: ActivityFormModalProps) {
   const [category, setCategory] = useState<ActivityCategory | null>(initialCategory);
@@ -105,6 +113,17 @@ export function ActivityFormModal({
   const [optPhoto, setOptPhoto] = useState<string | null>(null);
   const [isCompressingPhoto, setIsCompressingPhoto] = useState<boolean>(false);
 
+  // --- State Sukses Pengamatan OPT ---
+  const [submittedOptSummary, setSubmittedOptSummary] = useState<{
+    optName: string;
+    locationLabel: string;
+    severityLabel: string;
+    severity: AttackSeverity;
+    symptoms: string;
+    optId?: string;
+    isUnknown: boolean;
+  } | null>(null);
+
   // --- State Khusus Pengairan ---
   const [waterCondition, setWaterCondition] = useState<string>('Macak-macak (1-2 cm - Fase Anakan)');
 
@@ -129,6 +148,7 @@ export function ActivityFormModal({
       setError(null);
       setOptPhoto(null);
       setIsCompressingPhoto(false);
+      setSubmittedOptSummary(null);
       if (fertilizers.length > 0) {
         setSelectedFertId(fertilizers[0].id);
       }
@@ -254,6 +274,33 @@ export function ActivityFormModal({
         baseActivity.notes = baseActivity.notes || `Pengamatan ${finalOptName} (Tingkat: ${severity})`;
         actionDescription = `Pengamatan OPT ${finalOptName} pada bagian ${optLocation}`;
         await activityRepository.createOptActivity(baseActivity, optObs);
+
+        const locationLabels: Record<string, string> = {
+          LEAF: 'Daun / Pelepah',
+          STEM: 'Batang / Pangkal Batang',
+          ROOT: 'Akar Tanaman',
+          PANICLE: 'Malai / Butir Gabah',
+          WHOLE_PLANT: 'Seluruh Rumpun Tanaman',
+        };
+        const severityLabels: Record<string, string> = {
+          LIGHT: 'Ringan (Beberapa rumpun acak)',
+          MEDIUM: 'Sedang (Mulai menyebar di petak)',
+          HEAVY: 'Berat (Populasi meluas)',
+        };
+
+        setSubmittedOptSummary({
+          optName: finalOptName,
+          locationLabel: locationLabels[optLocation] || optLocation,
+          severityLabel: severityLabels[severity] || severity,
+          severity,
+          symptoms: finalSymptom,
+          optId: isUnknownOpt ? undefined : selectedOptId,
+          isUnknown: isUnknownOpt,
+        });
+
+        // Trigger background refresh
+        onSuccess();
+        return;
       } else if (category === 'IRRIGATION') {
         baseActivity.notes = `Pengairan: ${waterCondition}${notes ? ` • ${notes}` : ''}`;
         actionDescription = `Pengaturan kondisi air sawah: ${waterCondition}`;
@@ -319,11 +366,127 @@ export function ActivityFormModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={getTitle()}
+      title={submittedOptSummary ? 'Pengamatan Dicatat' : getTitle()}
       subtitle={`Lahan: ${land.name} • Varietas: ${activeSeason.varietyName || 'Padi'} (~${hstSnapshot} HST)`}
     >
-      {/* 1. Pemilihan Kategori (Jika belum terpilih) */}
-      {!category ? (
+      {/* Jika Pengamatan OPT Baru Saja Disimpan: Tampilkan Ringkasan Visual Kontekstual */}
+      {submittedOptSummary ? (
+        <div className="space-y-4 py-1 animate-in fade-in duration-200">
+          {/* Header Sukses Ramah */}
+          <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 mt-0.5">
+              <CheckCircle2 className="w-6 h-6 text-emerald-700" />
+            </div>
+            <div className="space-y-0.5">
+              <h3 className="text-sm sm:text-base font-bold text-emerald-950">
+                Pengamatan Anda Sudah Dicatat
+              </h3>
+              <p className="text-xs text-emerald-800 leading-relaxed">
+                Data pengamatan lapang telah tersimpan aman di perangkat dan terhubung dengan saran budidaya Beranda.
+              </p>
+            </div>
+          </div>
+
+          {/* Ringkasan Visual: Pengamatan Anda */}
+          <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-2.5 shadow-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                <Bug className="w-4 h-4 text-amber-700" />
+                Pengamatan Anda
+              </span>
+              <span className="text-[11px] text-slate-500 font-medium">
+                {activityDate} • {hstSnapshot} HST
+              </span>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between items-start gap-2">
+                <span className="text-slate-500 shrink-0">OPT / Sasaran:</span>
+                <span className="font-bold text-slate-900 text-right">
+                  {submittedOptSummary.optName}
+                  {submittedOptSummary.isUnknown && (
+                    <span className="ml-1.5 text-[10px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-normal">
+                      Belum teridentifikasi
+                    </span>
+                  )}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center gap-2">
+                <span className="text-slate-500">Bagian Tanaman:</span>
+                <span className="font-semibold text-slate-800">
+                  {submittedOptSummary.locationLabel}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center gap-2">
+                <span className="text-slate-500">Tingkat Serangan:</span>
+                <span
+                  className={`font-bold px-2 py-0.5 rounded text-[11px] ${
+                    submittedOptSummary.severity === 'LIGHT'
+                      ? 'bg-emerald-100 text-emerald-900'
+                      : submittedOptSummary.severity === 'MEDIUM'
+                      ? 'bg-amber-100 text-amber-900'
+                      : 'bg-orange-100 text-orange-900'
+                  }`}
+                >
+                  {submittedOptSummary.severityLabel}
+                </span>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100">
+                <span className="text-slate-500 block mb-1">Gejala yang Diamati:</span>
+                <p className="text-slate-700 bg-slate-50 p-2.5 rounded-xl text-xs leading-relaxed font-medium">
+                  {submittedOptSummary.symptoms}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Jembatan Visual: Berdasarkan Pengamatan Anda */}
+          <div className="p-4 bg-amber-50/70 rounded-2xl border border-amber-200/90 space-y-1.5">
+            <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-amber-700" />
+              Berdasarkan pengamatan Anda...
+            </span>
+            <p className="text-xs text-amber-900 leading-relaxed">
+              {submittedOptSummary.isUnknown
+                ? 'Karena nama OPT belum teridentifikasi pasti, Anda dapat membuka rujukan pembanding gejala lapang dan melihat musuh alami yang relevan untuk membantu pengamatan lebih lanjut.'
+                : `Saran pertimbangan lapang berbasis 4 Pilar PHT telah diperbarui. Anda dapat membuka panduan pengendalian terpadu dan daftar musuh alami untuk ${submittedOptSummary.optName}.`}
+            </p>
+          </div>
+
+          {/* Tombol Aksi Langsung ke Rujukan PHT */}
+          <div className="pt-2 space-y-2">
+            <button
+              type="button"
+              onClick={() => {
+                const queryOrId = submittedOptSummary.optId;
+                const queryText = submittedOptSummary.isUnknown
+                  ? submittedOptSummary.symptoms || submittedOptSummary.optName
+                  : undefined;
+
+                onClose();
+                if (onNavigateToKnowledge) {
+                  onNavigateToKnowledge('opt', queryOrId, queryText);
+                }
+              }}
+              className="w-full py-3 px-4 min-h-[48px] bg-emerald-800 hover:bg-emerald-900 active:bg-emerald-950 text-white font-bold text-xs sm:text-sm rounded-xl transition-colors flex items-center justify-center gap-2 shadow-xs"
+            >
+              <BookOpen className="w-4 h-4 text-amber-300" />
+              <span>Buka Panduan PHT & Musuh Alami</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full py-2.5 px-4 min-h-[44px] bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl transition-colors"
+            >
+              Lihat Saran di Beranda
+            </button>
+          </div>
+        </div>
+      ) : !category ? (
         <div className="space-y-3">
           <p className="text-xs text-slate-500 font-medium">
             Pilih jenis kegiatan yang Anda lakukan di petak sawah:
@@ -570,30 +733,50 @@ export function ActivityFormModal({
 
           {/* --- FORM 2: PENGAMATAN OPT (RAMAH PEMULA) --- */}
           {category === 'OPT' && (
-            <div className="space-y-3 p-3.5 bg-amber-50/50 rounded-2xl border border-amber-200/80">
-              {/* Toggle Ramah: Belum Tahu Nama OPT */}
-              <div className="flex items-center gap-2 p-2.5 bg-white rounded-xl border border-amber-200">
-                <input
-                  type="checkbox"
-                  id="unknown-opt"
-                  checked={isUnknownOpt}
-                  onChange={(e) => setIsUnknownOpt(e.target.checked)}
-                  className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500"
-                />
-                <label htmlFor="unknown-opt" className="text-xs font-bold text-slate-800 cursor-pointer">
-                  Belum tahu pasti nama OPT / Hama (Cukup catat gejala yang terlihat)
+            <div className="space-y-4 p-4 bg-amber-50/50 rounded-2xl border border-amber-200/80">
+              {/* Mode Identifikasi: Terdaftar vs Belum Tahu */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Cara Pencatatan OPT / Hama
                 </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsUnknownOpt(false)}
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition-all text-left flex items-center gap-2 min-h-[44px] ${
+                      !isUnknownOpt
+                        ? 'bg-amber-700 text-white border-amber-700 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50/60'
+                    }`}
+                  >
+                    <Bug className="w-4 h-4 shrink-0" />
+                    <span>Pilih dari Daftar Terdaftar</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsUnknownOpt(true)}
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition-all text-left flex items-center gap-2 min-h-[44px] ${
+                      isUnknownOpt
+                        ? 'bg-amber-700 text-white border-amber-700 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50/60'
+                    }`}
+                  >
+                    <Search className="w-4 h-4 shrink-0" />
+                    <span>Belum Tahu Pasti (Catat Gejala)</span>
+                  </button>
+                </div>
               </div>
 
               {!isUnknownOpt ? (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Pilih Hama / Penyakit Terdaftar
+                    Pilih Hama / Penyakit Terdaftar <span className="text-amber-800">*</span>
                   </label>
                   <select
                     value={selectedOptId}
                     onChange={(e) => setSelectedOptId(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-600 min-h-[44px]"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-600 min-h-[44px]"
                   >
                     {opts.map((o) => (
                       <option key={o.id} value={o.id}>
@@ -605,55 +788,106 @@ export function ActivityFormModal({
               ) : (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Nama Deskriptif (Opsional)
+                    Nama Sementara / Deskripsi Singkat (Opsional)
                   </label>
                   <input
                     type="text"
                     value={customOptName}
                     onChange={(e) => setCustomOptName(e.target.value)}
                     placeholder="Contoh: Daun menguning bercak coklat / Ulat penggerek"
-                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-600 min-h-[44px]"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-600 min-h-[44px]"
                   />
+                  <p className="text-[11px] text-amber-800 mt-1">
+                    Anda tidak perlu menebak nama pasti; sistem akan menyelaraskan panduan berdasarkan gejala dan bagian tanaman.
+                  </p>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Bagian Tanaman Terkena
-                  </label>
-                  <select
-                    value={optLocation}
-                    onChange={(e) => setOptLocation(e.target.value as AttackLocation)}
-                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-600 min-h-[44px]"
-                  >
-                    <option value="LEAF">Daun / Pelepah Daun</option>
-                    <option value="STEM">Batang / Pangkal Batang</option>
-                    <option value="ROOT">Akar Tanaman</option>
-                    <option value="PANICLE">Malai / Butir Gabah</option>
-                    <option value="WHOLE_PLANT">Seluruh Rumpun Tanaman</option>
-                  </select>
+              {/* Pilihan Bagian Tanaman */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Bagian Tanaman yang Terkena Serangan
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    { id: 'LEAF' as AttackLocation, label: 'Daun / Pelepah' },
+                    { id: 'STEM' as AttackLocation, label: 'Batang / Pangkal' },
+                    { id: 'PANICLE' as AttackLocation, label: 'Malai / Gabah' },
+                    { id: 'ROOT' as AttackLocation, label: 'Akar Tanaman' },
+                    { id: 'WHOLE_PLANT' as AttackLocation, label: 'Seluruh Rumpun' },
+                  ].map((loc) => (
+                    <button
+                      key={loc.id}
+                      type="button"
+                      onClick={() => setOptLocation(loc.id)}
+                      className={`py-2 px-3 text-xs font-bold rounded-xl border text-center transition-all min-h-[44px] flex items-center justify-center ${
+                        optLocation === loc.id
+                          ? 'bg-amber-100 text-amber-950 border-amber-400 font-extrabold shadow-2xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50/50'
+                      }`}
+                    >
+                      {loc.label}
+                    </button>
+                  ))}
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Tingkat Serangan
-                  </label>
-                  <select
-                    value={severity}
-                    onChange={(e) => setSeverity(e.target.value as AttackSeverity)}
-                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-600 min-h-[44px]"
-                  >
-                    <option value="LIGHT">Ringan (Terlihat di beberapa rumpun acak)</option>
-                    <option value="MEDIUM">Sedang (Mulai menyebar di beberapa petak)</option>
-                    <option value="HEAVY">Berat (Mengancam pertanaman secara luas)</option>
-                  </select>
+              {/* Pilihan Tingkat Serangan */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Tingkat Serangan di Lapang
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {[
+                    {
+                      id: 'LIGHT' as AttackSeverity,
+                      title: 'Ringan',
+                      desc: 'Terlihat di beberapa rumpun acak',
+                      colorActive: 'bg-emerald-100 text-emerald-950 border-emerald-400',
+                      badge: 'Aman / Pantau',
+                    },
+                    {
+                      id: 'MEDIUM' as AttackSeverity,
+                      title: 'Sedang',
+                      desc: 'Mulai menyebar di beberapa petak',
+                      colorActive: 'bg-amber-100 text-amber-950 border-amber-400',
+                      badge: 'Waspada',
+                    },
+                    {
+                      id: 'HEAVY' as AttackSeverity,
+                      title: 'Berat',
+                      desc: 'Populasi meluas di sebagian besar petak',
+                      colorActive: 'bg-orange-100 text-orange-950 border-orange-400',
+                      badge: 'Perlu Tindakan',
+                    },
+                  ].map((sev) => (
+                    <button
+                      key={sev.id}
+                      type="button"
+                      onClick={() => setSeverity(sev.id)}
+                      className={`p-3 text-left rounded-xl border transition-all flex flex-col justify-between min-h-[64px] ${
+                        severity === sev.id
+                          ? `${sev.colorActive} shadow-xs font-bold ring-1 ring-amber-400`
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold">{sev.title}</span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/80 border border-black/10">
+                          {sev.badge}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-600 mt-1 leading-snug">
+                        {sev.desc}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
               {/* Opsi Cepat Gejala */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
                   Pilihan Cepat Gejala Lapang
                 </label>
                 <div className="flex flex-wrap gap-1.5">
@@ -670,9 +904,9 @@ export function ActivityFormModal({
                       key={sym}
                       type="button"
                       onClick={() => setSymptomPreset(sym)}
-                      className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-colors border ${
+                      className={`px-3 py-2 text-xs rounded-xl font-medium transition-colors border min-h-[38px] ${
                         symptomPreset === sym
-                          ? 'bg-amber-600 text-white border-amber-600'
+                          ? 'bg-amber-700 text-white border-amber-700 font-bold'
                           : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50'
                       }`}
                     >
@@ -704,7 +938,7 @@ export function ActivityFormModal({
                     <button
                       type="button"
                       onClick={() => setOptPhoto(null)}
-                      className="absolute top-1.5 right-1.5 p-1 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-xs"
+                      className="absolute top-1.5 right-1.5 p-1 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-xs min-h-[32px] min-w-[32px] flex items-center justify-center"
                       title="Hapus foto"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -714,7 +948,7 @@ export function ActivityFormModal({
                   <div>
                     <label
                       htmlFor="opt-photo-input"
-                      className={`inline-flex items-center gap-2 px-3.5 py-2.5 bg-white border border-dashed border-amber-300 hover:border-amber-500 rounded-xl text-xs font-bold text-slate-700 hover:bg-amber-50/60 cursor-pointer transition-colors ${
+                      className={`inline-flex items-center gap-2 px-3.5 py-2.5 bg-white border border-dashed border-amber-300 hover:border-amber-500 rounded-xl text-xs font-bold text-slate-700 hover:bg-amber-50/60 cursor-pointer transition-colors min-h-[44px] ${
                         isCompressingPhoto ? 'opacity-60 pointer-events-none' : ''
                       }`}
                     >

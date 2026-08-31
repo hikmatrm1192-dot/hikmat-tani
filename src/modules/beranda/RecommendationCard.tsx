@@ -11,7 +11,7 @@
  * - Progressive disclosure: Layar utama tetap bersih, tombol "Lihat alasan" menampilkan rujukan ilmiah.
  */
 
-import { BookOpen, Check, CheckCircle2, ChevronDown, ChevronUp, Info, Lightbulb, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { BookOpen, Check, CheckCircle2, ChevronDown, ChevronUp, CloudSun, Info, Lightbulb, ShieldCheck, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { EvaluatedRecommendation } from '../../engine/recommendation/types.ts';
 import { FarmerDecision } from '../../types/index.ts';
@@ -128,6 +128,8 @@ export function RecommendationCard({
           const isExpanded = expandedId === rec.id;
           const isHighPriority = rec.priority === 'HIGH' || rec.priority === 'CRITICAL';
           const decision = existingDecisions.find((d) => d.recommendationId === rec.id);
+          const isOptControl = rec.contextType === 'OPT_CONTROL';
+          const meta = (rec.metadata || {}) as any;
 
           return (
             <div
@@ -139,6 +141,14 @@ export function RecommendationCard({
               }`}
             >
               <div className="p-4 sm:p-5 space-y-3">
+                {/* Header Konteks: Berdasarkan Pengamatan Anda */}
+                {isOptControl && (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-100/90 text-amber-950 rounded-lg text-[11px] font-extrabold w-fit border border-amber-300/80">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+                    <span>BERDASARKAN PENGAMATAN ANDA</span>
+                  </div>
+                )}
+
                 <div className="flex items-start gap-3">
                   <div
                     className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
@@ -169,6 +179,32 @@ export function RecommendationCard({
                     <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-normal">
                       {rec.message}
                     </p>
+
+                    {/* Ringkasan Parameter Pengamatan yang Memicu */}
+                    {isOptControl && (meta.observedSymptoms || meta.attackSeverity || meta.customOptName) && (
+                      <div className="mt-2 p-2.5 bg-amber-100/40 rounded-xl border border-amber-200/60 text-xs space-y-1">
+                        <span className="text-[11px] font-bold text-amber-950 block">
+                          Catatan Pengamatan Terakhir:
+                        </span>
+                        <div className="flex flex-wrap gap-2 text-slate-700">
+                          {meta.customOptName && (
+                            <span className="bg-white/80 px-2 py-0.5 rounded text-[11px] font-medium border border-amber-200">
+                              Sasaran: <strong>{meta.customOptName}</strong>
+                            </span>
+                          )}
+                          {meta.attackSeverity && (
+                            <span className="bg-white/80 px-2 py-0.5 rounded text-[11px] font-medium border border-amber-200">
+                              Tingkat Serangan: <strong>{meta.attackSeverity}</strong>
+                            </span>
+                          )}
+                          {meta.observedSymptoms && (
+                            <span className="bg-white/80 px-2 py-0.5 rounded text-[11px] font-medium border border-amber-200">
+                              Gejala: <strong>{meta.observedSymptoms}</strong>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -189,20 +225,41 @@ export function RecommendationCard({
 
                 {/* Progressive Disclosure & Aksi Keputusan */}
                 <div className="pt-2.5 border-t border-slate-100/80 flex flex-wrap items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => toggleExpand(rec.id)}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0F5132] hover:text-[#0B3D26] min-h-[36px] py-1 px-2 rounded-lg hover:bg-emerald-50 transition-colors"
-                    aria-expanded={isExpanded}
-                  >
-                    <BookOpen className="w-3.5 h-3.5 text-[#D4AF37]" />
-                    <span>{isExpanded ? 'Sembunyikan Rujukan' : 'Lihat Alasan & Rujukan'}</span>
-                    {isExpanded ? (
-                      <ChevronUp className="w-3.5 h-3.5" />
-                    ) : (
-                      <ChevronDown className="w-3.5 h-3.5" />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(rec.id)}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0F5132] hover:text-[#0B3D26] min-h-[36px] py-1 px-2 rounded-lg hover:bg-emerald-50 transition-colors"
+                      aria-expanded={isExpanded}
+                    >
+                      <BookOpen className="w-3.5 h-3.5 text-[#D4AF37]" />
+                      <span>{isExpanded ? 'Sembunyikan Rujukan' : 'Lihat Alasan & Rujukan'}</span>
+                      {isExpanded ? (
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+
+                    {isOptControl && onNavigateToKnowledge && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (meta?.optId) {
+                            onNavigateToKnowledge('opt', meta.optId);
+                          } else if (meta?.observedSymptoms || meta?.customOptName) {
+                            onNavigateToKnowledge('opt', undefined, meta.observedSymptoms || meta.customOptName);
+                          } else {
+                            onNavigateToKnowledge('opt');
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900 bg-amber-100/80 hover:bg-amber-200 px-2.5 py-1 rounded-lg border border-amber-300/80 transition-colors min-h-[36px]"
+                      >
+                        <BookOpen className="w-3 h-3 text-amber-700" />
+                        <span>Panduan PHT & Musuh Alami</span>
+                      </button>
                     )}
-                  </button>
+                  </div>
 
                   {onOpenDecisionModal && (
                     <button
@@ -225,6 +282,19 @@ export function RecommendationCard({
                       </span>
                       <p className="text-slate-600 leading-relaxed">{rec.basis}</p>
                     </div>
+
+                    {/* Catatan Cuaca Kontekstual jika ada */}
+                    {meta.weatherContext && (
+                      <div className="p-2.5 bg-sky-50 rounded-lg border border-sky-200 text-sky-900 space-y-0.5">
+                        <span className="font-bold text-[11px] flex items-center gap-1">
+                          <CloudSun className="w-3.5 h-3.5 text-sky-700" />
+                          Pertimbangan Cuaca:
+                        </span>
+                        <p className="text-[11px] leading-relaxed text-sky-800">
+                          {meta.weatherContext}
+                        </p>
+                      </div>
+                    )}
 
                     {rec.referenceIds && rec.referenceIds.length > 0 && (
                       <div className="pt-2 border-t border-slate-200/60">
@@ -257,7 +327,6 @@ export function RecommendationCard({
                           type="button"
                           onClick={() => {
                             if (rec.contextType === 'OPT_CONTROL') {
-                              const meta = rec.metadata as any;
                               if (meta?.optId) {
                                 onNavigateToKnowledge('opt', meta.optId);
                               } else if (meta?.observedSymptoms || meta?.customOptName) {

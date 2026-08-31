@@ -16,6 +16,7 @@ import {
   Leaf,
   Search,
   ShieldAlert,
+  Sparkles,
   Sprout,
   X,
 } from 'lucide-react';
@@ -118,6 +119,28 @@ export function OptCatalog({
 
   return (
     <div className="space-y-4">
+      {/* Banner Konteks Jika Dibuka Berdasarkan Pengamatan/Gejala Petani */}
+      {query && (
+        <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 flex items-center justify-between gap-3 text-xs text-amber-950 shadow-xs animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-700 shrink-0" />
+            <div>
+              <span className="font-bold block">Rujukan Berdasarkan Pengamatan Anda</span>
+              <span className="text-amber-900 text-[11px]">
+                Menampilkan hama/penyakit yang relevan dengan kata kunci: <strong>"{query}"</strong>
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleSearchInput('')}
+            className="px-2.5 py-1 bg-white hover:bg-amber-100/60 active:bg-amber-200 text-amber-900 font-bold rounded-lg border border-amber-300 text-[11px] transition-colors shrink-0"
+          >
+            Tampilkan Semua
+          </button>
+        </div>
+      )}
+
       {/* Kolom Pencarian Cepat */}
       <div className="relative">
         <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -133,6 +156,7 @@ export function OptCatalog({
             type="button"
             onClick={() => handleSearchInput('')}
             className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full"
+            title="Hapus pencarian"
           >
             <X className="w-4 h-4" />
           </button>

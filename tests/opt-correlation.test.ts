@@ -20,10 +20,10 @@ function runOptCorrelationTests() {
     id: 'land-test-opt',
     farmerId: 'farmer-1',
     name: 'Petak Sawah Blok Timur',
-    areaM2: 5000,
-    areaDisplayUnit: 'HECTARE',
-    ownershipStatus: 'OWNED',
-    irrigationType: 'SEMI_TECHNICAL',
+    areaHa: 0.5,
+    waterSource: 'IRRIGATION_SEMI_TECHNICAL',
+    landType: 'LOWLAND_PADDY',
+    status: 'ACTIVE',
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',
   };
@@ -31,25 +31,23 @@ function runOptCorrelationTests() {
   const dummyVariety: RiceVariety = {
     id: 'var-inparis42',
     name: 'Inpari 42 Agritan GSR',
-    durationDays: 112,
-    yieldPotentialTonPerHa: 10.5,
-    resistance: {
-      blas: 'Tahan',
-      bph: 'Agak Tahan Biotipe 1, 2',
-      tungro: 'Moderat',
-    },
-    recommendationContext: 'Sawah irigasi',
+    aliases: ['Inpari 42'],
+    growthDurationDays: 112,
+    potentialYieldKgHa: 10500,
+    resistanceProfile: 'Tahan Blas, Agak Tahan BPH',
+    createdAt: '2026-08-01T00:00:00.000Z',
+    updatedAt: '2026-08-01T00:00:00.000Z',
   };
 
   const dummySeason: CropSeason = {
     id: 'season-test-opt',
     landId: dummyLand.id,
-    seasonName: 'Musim Gadu 2026',
+    commodity: 'Padi',
     varietyId: dummyVariety.id,
     varietyName: dummyVariety.name,
     plantingDate: '2026-08-01',
-    seedlingAgeDays: 18,
-    plantingSystem: 'TAPA',
+    plantedAreaHa: 0.5,
+    plantingSystem: 'JAJAR_LEGOWO_2_1',
     status: 'ACTIVE',
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',
@@ -84,14 +82,14 @@ function runOptCorrelationTests() {
     const ctx = buildFieldContext({
       cropSeason: dummySeason,
       activities: [optAct],
-      fertilizerApps: [],
+      fertilizerApplications: [],
       optObservations: [optObs],
-      varietyDurationDays: dummyVariety.durationDays,
-      referenceDate: new Date('2026-08-20'),
+      varietyDurationDays: dummyVariety.growthDurationDays,
+      targetDate: new Date('2026-08-20'),
     });
 
-    const recs不易 = evaluateRecommendations(ctx, { skipWeatherModifier: true });
-    const optRec = recs不易.find((r) => r.contextType === 'OPT_CONTROL');
+    const recs = evaluateRecommendations(ctx, { skipWeatherModifier: true });
+    const optRec = recs.find((r) => r.contextType === 'OPT_CONTROL');
 
     if (!optRec) {
       throw new Error('Test 1 Gagal: Rekomendasi OPT tidak dihasilkan untuk OPT Dikenal');
@@ -138,16 +136,16 @@ function runOptCorrelationTests() {
       updatedAt: '2026-08-25T00:00:00.000Z',
     };
 
-    const ctx進 = buildFieldContext({
+    const ctx = buildFieldContext({
       cropSeason: dummySeason,
       activities: [optAct],
-      fertilizerApps: [],
+      fertilizerApplications: [],
       optObservations: [optObs],
-      varietyDurationDays: dummyVariety.durationDays,
-      referenceDate: new Date('2026-08-25'),
+      varietyDurationDays: dummyVariety.growthDurationDays,
+      targetDate: new Date('2026-08-25'),
     });
 
-    const recs = evaluateRecommendations(ctx進, { skipWeatherModifier: true });
+    const recs = evaluateRecommendations(ctx, { skipWeatherModifier: true });
     const optRec = recs.find((r) => r.contextType === 'OPT_CONTROL');
 
     if (!optRec) {
@@ -201,24 +199,24 @@ function runOptCorrelationTests() {
     const ctx = buildFieldContext({
       cropSeason: dummySeason,
       activities: [optAct],
-      fertilizerApps: [],
+      fertilizerApplications: [],
       optObservations: [optObs],
-      varietyDurationDays: dummyVariety.durationDays,
-      referenceDate: new Date('2026-08-28'),
+      varietyDurationDays: dummyVariety.growthDurationDays,
+      targetDate: new Date('2026-08-28'),
     });
 
     const recs = evaluateRecommendations(ctx, { skipWeatherModifier: true });
-    const optRec的的 = recs.find((r) => r.contextType === 'OPT_CONTROL');
+    const optRec = recs.find((r) => r.contextType === 'OPT_CONTROL');
 
-    if (!optRec的的) {
+    if (!optRec) {
       throw new Error('Test 3 Gagal: Rekomendasi tidak dihasilkan untuk gejala tidak dikenal');
     }
 
-    if (!optRec的的.message.includes('belum teridentifikasi pasti')) {
+    if (!optRec.message.includes('belum teridentifikasi pasti')) {
       throw new Error('Test 3 Gagal: Harus menyatakan secara jujur bahwa jenis OPT belum teridentifikasi pasti');
     }
 
-    if (!optRec的的.message.includes('lengkapi pengamatan')) {
+    if (!optRec.message.includes('lengkapi pengamatan')) {
       throw new Error('Test 3 Gagal: Harus menyarankan melengkapi pengamatan visual');
     }
 
