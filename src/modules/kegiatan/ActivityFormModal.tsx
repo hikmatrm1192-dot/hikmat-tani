@@ -728,49 +728,49 @@ export function ActivityFormModal({
                   <button
                     type="button"
                     onClick={() => setIsFertPickerOpen(true)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 hover:border-emerald-500 rounded-xl text-left flex items-center justify-between min-h-[46px] shadow-2xs group transition-all"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 hover:border-emerald-500 rounded-xl text-left flex items-center justify-between min-h-[42px] shadow-2xs group transition-all"
                   >
                     <div className="flex-1 min-w-0 pr-2">
                       {isCustomFert ? (
                         <div>
-                          <span className="text-sm font-bold text-slate-900 block truncate">
+                          <span className="text-xs sm:text-[13px] font-bold text-slate-900 block truncate">
                             {customFertName.trim() ? customFertName : '+ Pupuk Lainnya / Isi Manual'}
                           </span>
-                          <span className="text-[11px] text-slate-500 block truncate">
+                          <span className="text-[10px] sm:text-[11px] text-slate-500 block truncate">
                             Kategori: {customCategory} {customFormula ? `• (${customFormula})` : ''}
                           </span>
                         </div>
                       ) : selectedFert ? (
                         <div>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-sm sm:text-[15px] font-bold text-slate-900 truncate">
+                            <span className="text-xs sm:text-[13px] font-bold text-slate-900 truncate">
                               {selectedFert.name}
                             </span>
                             {selectedFert.isSubsidized && (
-                              <span className="shrink-0 text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-300">
+                              <span className="shrink-0 text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-300">
                                 Subsidi
                               </span>
                             )}
                           </div>
-                          <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5 truncate">
+                          <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5 truncate">
                             {selectedFert.formula && (
-                              <span className="font-medium text-slate-600 bg-slate-100 px-1 py-0.2 rounded text-[11px]">
+                              <span className="font-medium text-slate-600 bg-slate-100 px-1 py-0.2 rounded text-[10px]">
                                 {selectedFert.formula}
                               </span>
                             )}
                             {selectedFert.brand && selectedFert.brand !== selectedFert.name && (
-                              <span className="text-[11px]">• {selectedFert.brand}</span>
+                              <span className="text-[10px] sm:text-[11px]">• {selectedFert.brand}</span>
                             )}
                           </div>
                         </div>
                       ) : (
-                        <span className="text-sm text-slate-400">Pilih Jenis Pupuk...</span>
+                        <span className="text-xs sm:text-[13px] text-slate-400">Pilih Jenis Pupuk...</span>
                       )}
                     </div>
 
                     <div className="flex items-center gap-1 text-slate-400 group-hover:text-emerald-700 shrink-0">
                       <span className="text-xs font-semibold text-emerald-700 hidden sm:inline">Pilih</span>
-                      <ChevronDown className="w-4 h-4" />
+                      <ChevronDown className="w-3.5 h-3.5" />
                     </div>
                   </button>
                 </div>
@@ -890,7 +890,7 @@ export function ActivityFormModal({
                 <select
                   value={method}
                   onChange={(e) => setMethod(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-[13px] font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
                 >
                   <option value="BROADCAST">Tabur Merata di Permukaan (Broadcast)</option>
                   <option value="SIDE_DRESS">Larikan / Samping Tanaman (Side-dress)</option>
@@ -1727,7 +1727,7 @@ export function ActivityFormModal({
                 <select
                   value={waterCondition}
                   onChange={(e) => setWaterCondition(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-600 min-h-[44px]"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-[13px] font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600 min-h-[40px]"
                 >
                   <option value="Macak-macak (1-2 cm - Fase Anakan)">
                     Macak-macak (1-2 cm • Merangsang Anakan Produktif)
@@ -1760,7 +1760,7 @@ export function ActivityFormModal({
                   <select
                     value={maintenanceType}
                     onChange={(e) => setMaintenanceType(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 min-h-[44px]"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-[13px] font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 min-h-[40px]"
                   >
                     <option value="Penyiangan Gulma (Matun ke-1)">Penyiangan Gulma (Matun ke-1 • ~15-21 HST)</option>
                     <option value="Penyiangan Gulma (Matun ke-2)">Penyiangan Gulma (Matun ke-2 • ~35-40 HST)</option>
@@ -1777,7 +1777,7 @@ export function ActivityFormModal({
                   <select
                     value={maintenanceTool}
                     onChange={(e) => setMaintenanceTool(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 min-h-[44px]"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-[13px] font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 min-h-[40px]"
                   >
                     <option value="Manual Tangan & Gasrok">Manual Tangan & Landak / Gasrok</option>
                     <option value="Mesin Penyiang Bermotor">Mesin Penyiang Bermotor (Power Weeder)</option>
@@ -1804,7 +1804,7 @@ export function ActivityFormModal({
                     value={harvestYieldKg}
                     onChange={(e) => setHarvestYieldKg(e.target.value)}
                     placeholder="Contoh: 4500"
-                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-yellow-600 min-h-[44px]"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-[13px] font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-yellow-600 min-h-[40px]"
                     required
                   />
                 </div>
@@ -1816,7 +1816,7 @@ export function ActivityFormModal({
                   <select
                     value={grainCondition}
                     onChange={(e) => setGrainCondition(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-yellow-600 min-h-[44px]"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-[13px] font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-yellow-600 min-h-[40px]"
                   >
                     <option value="Gabah Kering Panen (GKP) Bernas">Gabah Kering Panen (GKP) Bernas</option>
                     <option value="Gabah Kering Giling (GKG)">Gabah Kering Giling (GKG)</option>
@@ -1851,7 +1851,7 @@ export function ActivityFormModal({
                   <select
                     value={plantingSystem}
                     onChange={(e) => setPlantingSystem(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-[13px] font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
                   >
                     <option value="JAJAR_LEGOWO_2_1">Jajar Legowo 2:1 (Sangat Dianjurkan)</option>
                     <option value="JAJAR_LEGOWO_4_1">Jajar Legowo 4:1</option>
@@ -1872,7 +1872,7 @@ export function ActivityFormModal({
                     value={seedlingAgeDays}
                     onChange={(e) => setSeedlingAgeDays(e.target.value)}
                     placeholder="Contoh: 15-21"
-                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-[13px] font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
                   />
                 </div>
               </div>

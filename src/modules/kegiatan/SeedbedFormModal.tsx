@@ -249,13 +249,13 @@ export function SeedbedFormModal({
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
               Metode / Sistem Persemaian *
             </label>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {NURSERY_METHODS.map((m) => (
                 <label
                   key={m.id}
-                  className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                  className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-all ${
                     nurseryMethod === m.id
-                      ? 'bg-emerald-50/80 border-emerald-600 ring-1 ring-emerald-600'
+                      ? 'bg-emerald-50/80 border-emerald-600 ring-1 ring-emerald-600 shadow-2xs'
                       : 'bg-white border-slate-200 hover:bg-slate-50'
                   }`}
                 >
@@ -265,24 +265,24 @@ export function SeedbedFormModal({
                     value={m.id}
                     checked={nurseryMethod === m.id}
                     onChange={() => setNurseryMethod(m.id)}
-                    className="mt-0.5 text-emerald-700 focus:ring-emerald-600 w-4 h-4"
+                    className="mt-0.5 text-emerald-700 focus:ring-emerald-600 w-3.5 h-3.5"
                   />
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">{m.label}</div>
-                    <div className="text-[11px] text-slate-500 leading-normal">{m.desc}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs sm:text-[13px] font-bold text-slate-900 leading-tight">{m.label}</div>
+                    <div className="text-[10px] sm:text-[11px] text-slate-500 leading-tight mt-0.5">{m.desc}</div>
                   </div>
                 </label>
               ))}
             </div>
 
             {nurseryMethod === 'OTHER' && (
-              <div className="mt-2 pl-7">
+              <div className="mt-2 pl-6">
                 <input
                   type="text"
                   value={customMethodName}
                   onChange={(e) => setCustomMethodName(e.target.value)}
                   placeholder="Ketik metode persemaian yang digunakan..."
-                  className="w-full px-3.5 py-2 min-h-[44px] bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-700"
+                  className="w-full px-3 py-2 min-h-[40px] bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-[13px] font-semibold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-700"
                 />
               </div>
             )}

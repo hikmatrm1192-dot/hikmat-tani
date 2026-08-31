@@ -158,7 +158,7 @@ export function StartSeasonModal({
                 const found = allLands.find((l) => l.id === e.target.value);
                 if (found) setPlantedAreaHa(found.areaHa);
               }}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-[13px] focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
             >
               {allLands.map((l) => (
                 <option key={l.id} value={l.id}>
@@ -176,7 +176,7 @@ export function StartSeasonModal({
             type="text"
             value={commodity}
             onChange={(e) => setCommodity(e.target.value)}
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-[13px] focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
           />
         </div>
 
@@ -188,7 +188,7 @@ export function StartSeasonModal({
           <select
             value={selectedVarietyOption}
             onChange={(e) => setSelectedVarietyOption(e.target.value)}
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 font-medium min-h-[44px]"
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-[13px] focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 font-medium min-h-[40px]"
           >
             {uniqueVarieties.map((v) => (
               <option key={v.id} value={v.name}>
@@ -200,7 +200,7 @@ export function StartSeasonModal({
 
           {/* Form Varietas Lokal / Khusus jika dipilih */}
           {isCustomVarietySelected && (
-            <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-2.5 animate-fadeIn">
+            <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-2 animate-fadeIn">
               <div className="text-xs font-bold text-emerald-950">
                 Data Varietas Lokal / Kustom
               </div>
@@ -215,7 +215,7 @@ export function StartSeasonModal({
                     value={customVarietyName}
                     onChange={(e) => setCustomVarietyName(e.target.value)}
                     placeholder="Contoh: Pandan Wangi / Rojolele / Mentik"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-emerald-600 focus:outline-none min-h-[40px]"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-emerald-600 focus:outline-none min-h-[38px]"
                   />
                 </div>
                 <div>
@@ -228,7 +228,7 @@ export function StartSeasonModal({
                     max="180"
                     value={customDurationDays}
                     onChange={(e) => setCustomDurationDays(parseInt(e.target.value, 10) || 120)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-emerald-600 focus:outline-none min-h-[40px]"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-emerald-600 focus:outline-none min-h-[38px]"
                   />
                 </div>
               </div>
@@ -247,7 +247,7 @@ export function StartSeasonModal({
               required
               value={plantingDate}
               onChange={(e) => setPlantingDate(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-[13px] focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
             />
           </div>
 
@@ -262,7 +262,7 @@ export function StartSeasonModal({
               required
               value={plantedAreaHa || ''}
               onChange={(e) => setPlantedAreaHa(parseFloat(e.target.value) || 0)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-[13px] focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
             />
           </div>
         </div>
@@ -273,7 +273,7 @@ export function StartSeasonModal({
           <select
             value={plantingSystem}
             onChange={(e) => setPlantingSystem(e.target.value as PlantingSystem)}
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-[13px] focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
           >
             <option value="JAJAR_LEGOWO_2_1">Jajar Legowo 2:1</option>
             <option value="JAJAR_LEGOWO_4_1">Jajar Legowo 4:1</option>

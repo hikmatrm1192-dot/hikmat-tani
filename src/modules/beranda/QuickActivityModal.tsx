@@ -267,15 +267,15 @@ export function QuickActivityModal({
               <button
                 type="button"
                 onClick={() => setIsFertPickerOpen(true)}
-                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 hover:border-emerald-500 rounded-xl text-left flex items-center justify-between min-h-[46px] shadow-2xs group transition-all"
+                className="w-full px-3 py-2 bg-white border border-slate-300 hover:border-emerald-500 rounded-xl text-left flex items-center justify-between min-h-[42px] shadow-2xs group transition-all"
               >
                 <div className="flex-1 min-w-0 pr-2">
                   {selectedFertId === '__CUSTOM__' || !selectedFertId ? (
                     <div>
-                      <span className="text-sm font-bold text-slate-900 block truncate">
+                      <span className="text-xs sm:text-[13px] font-bold text-slate-900 block truncate">
                         {customFertName.trim() ? customFertName : '+ Pupuk Lainnya / Isi Manual'}
                       </span>
-                      <span className="text-[11px] text-slate-500 block truncate">
+                      <span className="text-[10px] sm:text-[11px] text-slate-500 block truncate">
                         Pupuk Khusus / Manual
                       </span>
                     </div>
@@ -284,42 +284,42 @@ export function QuickActivityModal({
                     return sel ? (
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-sm sm:text-[15px] font-bold text-slate-900 truncate">
+                          <span className="text-xs sm:text-[13px] font-bold text-slate-900 truncate">
                             {sel.name}
                           </span>
                           {sel.isSubsidized && (
-                            <span className="shrink-0 text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-300">
+                            <span className="shrink-0 text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-300">
                               Subsidi
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5 truncate">
+                        <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5 truncate">
                           {sel.formula && (
-                            <span className="font-medium text-slate-600 bg-slate-100 px-1 py-0.2 rounded text-[11px]">
+                            <span className="font-medium text-slate-600 bg-slate-100 px-1 py-0.2 rounded text-[10px]">
                               {sel.formula}
                             </span>
                           )}
                           {sel.brand && sel.brand !== sel.name && (
-                            <span className="text-[11px]">• {sel.brand}</span>
+                            <span className="text-[10px] sm:text-[11px]">• {sel.brand}</span>
                           )}
                         </div>
                       </div>
                     ) : (
-                      <span className="text-sm text-slate-400">Pilih Jenis Pupuk...</span>
+                      <span className="text-xs sm:text-[13px] text-slate-400">Pilih Jenis Pupuk...</span>
                     );
                   })()}
                 </div>
 
                 <div className="flex items-center gap-1 text-slate-400 group-hover:text-emerald-700 shrink-0">
                   <span className="text-xs font-semibold text-emerald-700 hidden sm:inline">Pilih</span>
-                  <ChevronDown className="w-4 h-4" />
+                  <ChevronDown className="w-3.5 h-3.5" />
                 </div>
               </button>
             </div>
 
             {(selectedFertId === '__CUSTOM__' || !selectedFertId) && (
               <div>
-                <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+                <label className="block text-xs font-bold text-slate-800 mb-1">
                   Nama Pupuk Khusus
                 </label>
                 <input
@@ -327,14 +327,14 @@ export function QuickActivityModal({
                   value={customFertName}
                   onChange={(e) => setCustomFertName(e.target.value)}
                   placeholder="Contoh: Kompos Kandang Matang"
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
                 />
               </div>
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+                <label className="block text-xs font-bold text-slate-800 mb-1">
                   Jumlah (Kg) <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -343,19 +343,19 @@ export function QuickActivityModal({
                   min="0.1"
                   value={amountKg}
                   onChange={(e) => setAmountKg(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-[13px] font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+                <label className="block text-xs font-bold text-slate-800 mb-1">
                   Metode Aplikasi
                 </label>
                 <select
                   value={method}
                   onChange={(e) => setMethod(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-[13px] font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
                 >
                   <option value="BROADCAST">Tabur Merata (Broadcast)</option>
                   <option value="BAND">Larik / Alur di Sela Legowo</option>
@@ -368,9 +368,9 @@ export function QuickActivityModal({
         )}
 
         {category === 'OPT' && (
-          <div className="space-y-3.5 p-4 bg-amber-50/60 rounded-xl border border-amber-200/80">
+          <div className="space-y-3 p-3.5 bg-amber-50/60 rounded-xl border border-amber-200/80">
             <div>
-              <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+              <label className="block text-xs font-bold text-slate-800 mb-1">
                 Hama / Penyakit yang Diamati <span className="text-red-500">*</span>
               </label>
               <input
@@ -378,20 +378,20 @@ export function QuickActivityModal({
                 value={optName}
                 onChange={(e) => setOptName(e.target.value)}
                 placeholder="Contoh: Wereng Coklat, Penggerek Batang, atau Gejala Daun Kuning"
-                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
                 required
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+                <label className="block text-xs font-bold text-slate-800 mb-1">
                   Tingkat Serangan
                 </label>
                 <select
                   value={severity}
                   onChange={(e) => setSeverity(e.target.value as AttackSeverity)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-[13px] font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
                 >
                   <option value="LIGHT">Ringan (Terlihat di beberapa rumpun)</option>
                   <option value="MEDIUM">Sedang (Mulai menyebar)</option>
@@ -400,13 +400,13 @@ export function QuickActivityModal({
               </div>
 
               <div>
-                <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+                <label className="block text-xs font-bold text-slate-800 mb-1">
                   Bagian Tanaman <span className="text-slate-500 font-normal">(Opsional)</span>
                 </label>
                 <select
                   value={optLocation}
                   onChange={(e) => setOptLocation(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-[13px] font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
                 >
                   <option value="">-- Tidak Dipilih / Seluruh Petak (Opsional) --</option>
                   <option value="LEAF">Daun / Pelepah</option>
@@ -421,15 +421,15 @@ export function QuickActivityModal({
         )}
 
         {category === 'IRRIGATION' && (
-          <div className="space-y-3.5 p-4 bg-sky-50/60 rounded-xl border border-sky-200/80">
+          <div className="space-y-3 p-3.5 bg-sky-50/60 rounded-xl border border-sky-200/80">
             <div>
-              <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+              <label className="block text-xs font-bold text-slate-800 mb-1">
                 Kondisi Air di Petak Sawah
               </label>
               <select
                 value={waterCondition}
                 onChange={(e) => setWaterCondition(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-[13px] font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
               >
                 <option value="Macak-macak (1-2 cm)">Macak-macak (1-2 cm - Fase Anakan)</option>
                 <option value="Tergenang Dangkal (3-5 cm)">Tergenang Dangkal (3-5 cm - Bunting/Berbunga)</option>
