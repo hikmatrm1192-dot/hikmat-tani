@@ -87,6 +87,7 @@ export default function App() {
   const [knowledgeNavigationTarget, setKnowledgeNavigationTarget] = useState<{
     category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan';
     itemId?: string;
+    searchQuery?: string;
   } | null>(null);
 
   const [selectedLandId, setSelectedLandId] = useState<string | null>(null);
@@ -280,9 +281,10 @@ export default function App() {
   // Handler: Navigasi Lintas Modul ke Informasi
   const handleNavigateToKnowledge = (
     category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan',
-    itemId?: string
+    itemId?: string,
+    searchQuery?: string
   ) => {
-    setKnowledgeNavigationTarget({ category, itemId });
+    setKnowledgeNavigationTarget({ category, itemId, searchQuery });
     setActiveTab('informasi');
   };
 

@@ -7,7 +7,7 @@
  * - Kartu informasi responsif dan berkontras tinggi.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   Bug,
@@ -48,12 +48,22 @@ export function OptCatalog({
   const query = (onSearchChange ? searchQuery : localSearch).toLowerCase().trim();
 
   // Buka modal jika selectedOptId diberikan dari navigasi lintas modul
-  useMemo(() => {
+  useEffect(() => {
     if (selectedOptId) {
       const found = opts.find((o) => o.id === selectedOptId);
-      if (found) setActiveModalOpt(found);
+      if (found) {
+        setSelectedCategory('ALL');
+        setActiveModalOpt(found);
+      }
     }
   }, [selectedOptId, opts]);
+
+  // Jika ada searchQuery dari luar, pastikan kategori direset ke ALL agar pencarian tidak terhambat
+  useEffect(() => {
+    if (searchQuery) {
+      setSelectedCategory('ALL');
+    }
+  }, [searchQuery]);
 
   const filteredOpts = useMemo(() => {
     return opts.filter((opt) => {

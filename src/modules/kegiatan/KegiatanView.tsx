@@ -61,7 +61,11 @@ interface KegiatanViewProps {
   opts?: Opt[];
   selectedLandId?: string;
   onSelectLandId?: (landId: string) => void;
-  onNavigateToKnowledge?: (category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan', itemId?: string) => void;
+  onNavigateToKnowledge?: (
+    category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan',
+    itemId?: string,
+    searchQuery?: string
+  ) => void;
   onRefreshData: () => Promise<void>;
 }
 

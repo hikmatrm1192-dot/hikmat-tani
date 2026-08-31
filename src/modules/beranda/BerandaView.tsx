@@ -50,7 +50,11 @@ interface BerandaViewProps {
   selectedLandId: string | null;
   onSelectLandId: (landId: string) => void;
   onNavigateToTab: (tab: 'beranda' | 'lahan' | 'kegiatan' | 'informasi' | 'saya') => void;
-  onNavigateToKnowledge?: (category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan', itemId?: string) => void;
+  onNavigateToKnowledge?: (
+    category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan',
+    itemId?: string,
+    searchQuery?: string
+  ) => void;
   onOpenAddLand: () => void;
   onOpenStartSeason: (landId?: string) => void;
   onRefreshData: () => Promise<void>;

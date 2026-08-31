@@ -45,7 +45,11 @@ interface ActivityDetailModalProps {
   fertilizerApps?: FertilizerApplication[];
   optObs?: OptObservation[];
   onDeleted?: () => void;
-  onNavigateToKnowledge?: (category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan', itemId?: string) => void;
+  onNavigateToKnowledge?: (
+    category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan',
+    itemId?: string,
+    searchQuery?: string
+  ) => void;
 }
 
 export function ActivityDetailModal({
@@ -283,12 +287,19 @@ export function ActivityDetailModal({
                       type="button"
                       onClick={() => {
                         onClose();
-                        onNavigateToKnowledge('opt', obs.optId);
+                        if (obs.optId) {
+                          onNavigateToKnowledge('opt', obs.optId);
+                        } else {
+                          const query = obs.observedSymptoms || obs.customOptName || obs.attackLocation?.[0] || '';
+                          onNavigateToKnowledge('opt', undefined, query);
+                        }
                       }}
                       className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900 hover:text-amber-950 hover:underline"
                     >
                       <BookOpen className="w-3 h-3 text-amber-700" />
-                      <span>Buka Panduan PHT & Musuh Alami</span>
+                      <span>
+                        {obs.optId ? 'Buka Panduan PHT & Musuh Alami' : 'Cari Rujukan Gejala di Pustaka PHT'}
+                      </span>
                     </button>
                   </div>
                 )}

@@ -21,7 +21,11 @@ interface RecommendationCardProps {
   hasActiveSeason: boolean;
   onOpenSeasonForm?: () => void;
   onOpenDecisionModal?: (rec: EvaluatedRecommendation) => void;
-  onNavigateToKnowledge?: (category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan', itemId?: string) => void;
+  onNavigateToKnowledge?: (
+    category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan',
+    itemId?: string,
+    searchQuery?: string
+  ) => void;
   existingDecisions?: FarmerDecision[];
 }
 
@@ -252,24 +256,30 @@ export function RecommendationCard({
                         <button
                           type="button"
                           onClick={() => {
-                            const cat =
-                              rec.contextType === 'FERTILIZER'
-                                ? 'pupuk'
-                                : rec.contextType === 'OPT_CONTROL'
-                                ? 'opt'
-                                : 'panduan';
-                            onNavigateToKnowledge(cat);
+                            if (rec.contextType === 'OPT_CONTROL') {
+                              const meta = rec.metadata as any;
+                              if (meta?.optId) {
+                                onNavigateToKnowledge('opt', meta.optId);
+                              } else if (meta?.observedSymptoms || meta?.customOptName) {
+                                onNavigateToKnowledge('opt', undefined, meta.observedSymptoms || meta.customOptName);
+                              } else {
+                                onNavigateToKnowledge('opt');
+                              }
+                            } else if (rec.contextType === 'FERTILIZER') {
+                              onNavigateToKnowledge('pupuk');
+                            } else {
+                              onNavigateToKnowledge('panduan');
+                            }
                           }}
                           className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 hover:underline"
                         >
                           <BookOpen className="w-3 h-3 text-emerald-600" />
                           <span>
-                            Buka Pustaka{' '}
-                            {rec.contextType === 'FERTILIZER'
-                              ? 'Pupuk & Nutrisi'
-                              : rec.contextType === 'OPT_CONTROL'
-                              ? 'Hama & OPT'
-                              : 'Informasi'}
+                            {rec.contextType === 'OPT_CONTROL'
+                              ? 'Buka Panduan PHT & Musuh Alami'
+                              : rec.contextType === 'FERTILIZER'
+                              ? 'Buka Pustaka Pupuk & Nutrisi'
+                              : 'Buka Panduan Terkait'}
                           </span>
                         </button>
                       </div>

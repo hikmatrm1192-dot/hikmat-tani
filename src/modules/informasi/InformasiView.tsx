@@ -50,9 +50,10 @@ import { VarietyCatalog } from './VarietyCatalog.tsx';
 
 export type InfoCategory = 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan';
 
-interface NavigationTarget {
+export interface NavigationTarget {
   category: InfoCategory;
   itemId?: string;
+  searchQuery?: string;
 }
 
 interface InformasiViewProps {
@@ -84,6 +85,7 @@ export function InformasiView({
 }: InformasiViewProps) {
   const [activeCategory, setActiveCategory] = useState<InfoCategory>('opt');
   const [targetItemId, setTargetItemId] = useState<string | null>(null);
+  const [targetSearchQuery, setTargetSearchQuery] = useState<string>('');
   const [syncInfo, setSyncInfo] = useState<KnowledgeSyncInfo>(() =>
     clientKnowledgeSync.getSyncInfo()
   );
@@ -103,6 +105,9 @@ export function InformasiView({
       setActiveCategory(navigationTarget.category);
       if (navigationTarget.itemId) {
         setTargetItemId(navigationTarget.itemId);
+      }
+      if (navigationTarget.searchQuery) {
+        setTargetSearchQuery(navigationTarget.searchQuery);
       }
       if (onClearNavigationTarget) {
         onClearNavigationTarget();
@@ -261,6 +266,8 @@ export function InformasiView({
             naturalEnemies={naturalEnemies}
             references={references}
             selectedOptId={targetItemId}
+            searchQuery={targetSearchQuery}
+            onSearchChange={setTargetSearchQuery}
             onSelectNaturalEnemy={(enemy) => {
               setActiveCategory('musuh_alami');
               setTargetItemId(enemy.id);
