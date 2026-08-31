@@ -643,3 +643,105 @@ export function matchOptRelevance(
   // Urutkan berdasarkan skor tertinggi (Rank Descending)
   return results.sort((a, b) => b.score - a.score);
 }
+
+/**
+ * Memberikan label tingkat kemungkinan / kemiripan rujukan secara konsultatif
+ */
+export function getMatchConfidenceLabel(score: number, isExactMatch: boolean): {
+  badgeText: string;
+  badgeColor: string;
+  confidenceCategory: 'HIGH' | 'MODERATE' | 'UNCERTAIN';
+} {
+  if (isExactMatch || score >= 100) {
+    return {
+      badgeText: 'Kemungkinan Sangat Kuat',
+      badgeColor: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+      confidenceCategory: 'HIGH',
+    };
+  }
+  if (score >= 45) {
+    return {
+      badgeText: 'Kemungkinan Mendekati',
+      badgeColor: 'bg-amber-100 text-amber-900 border-amber-300',
+      confidenceCategory: 'MODERATE',
+    };
+  }
+  return {
+    badgeText: 'Rujukan Pembanding • Belum Pasti',
+    badgeColor: 'bg-slate-100 text-slate-800 border-slate-300',
+    confidenceCategory: 'UNCERTAIN',
+  };
+}
+
+/**
+ * Menyusun poin pemeriksaan lapangan tambahan untuk verifikasi kondisi tidak pasti
+ */
+export function getFieldInspectionPoints(
+  attackLocations: (AttackLocation | string)[] = [],
+  detectedKeywords: string[] = []
+): string[] {
+  const points: string[] = [];
+  const locSet = new Set(attackLocations.map((l) => String(l).toUpperCase()));
+  const kwSet = new Set(detectedKeywords.map((k) => k.toLowerCase()));
+
+  if (locSet.has('LEAF') || locSet.size === 0) {
+    points.push(
+      'Periksa bagian bawah helai daun dan pelepah: amati apakah terdapat koloni serangga (wereng/kepik), kutu, atau kelompok telur berbulu/putih.'
+    );
+    points.push(
+      'Amati tepi dan pola bercak: apakah berbentuk belah ketupat runcing di kedua ujung (blas daun) atau garis memanjang bergelombang kebasahan (hawar kresek).'
+    );
+    points.push(
+      'Periksa apakah ada helai daun yang terlipat/tergulung rapat membungkus ulat pelipat daun.'
+    );
+  }
+
+  if (locSet.has('STEM')) {
+    points.push(
+      'Tarik pucuk daun yang menguning: jika mudah tercabut dengan bekas potongan ulat di pangkalnya, itu indikasi kuat sundep (penggerek batang).'
+    );
+    points.push(
+      'Periksa pangkal rumpun dekat permukaan air: amati adanya lubang gerek kecil, serbuk kotoran ulat, atau busuk coklat kehitaman.'
+    );
+  }
+
+  if (locSet.has('PANICLE') || locSet.has('GRAIN')) {
+    points.push(
+      'Amati malai tegak berwarna putih hampa (beluk) vs bulir berbintik coklat/hitam dengan bau menyengat (walang sangit).'
+    );
+    points.push(
+      'Cek pangkal tangkai malai: jika busuk kehitaman dan patah, itu indikasi blas leher (patah leher).'
+    );
+  }
+
+  if (locSet.has('ROOT')) {
+    points.push(
+      'Cabut satu rumpun sampel: amati perakaran apakah berwarna coklat/hitam berbau busuk, atau terpotong hama tanah (orong-orong).'
+    );
+    points.push(
+      'Periksa drainase: tanah yang tergenang terus-menerus tanpa aerasi dapat memicu keracunan besi (Fe) yang mirip gejala penyakit.'
+    );
+  }
+
+  if (locSet.has('WHOLE_PLANT')) {
+    points.push(
+      'Amati pola sebaran di petak: apakah melingkar seperti terbakar (hopperburn wereng) atau menyebar acak di seluruh petak.'
+    );
+    points.push(
+      'Bandingkan tinggi rumpun: kerdil rumput memiliki anakan berlebihan, sedangkan tungro/kerdil hampa anakan sangat sedikit dengan daun menguning oranye.'
+    );
+  }
+
+  // Jika belum ada poin khusus yang tercakup, berikan panduan umum
+  if (points.length === 0) {
+    points.push(
+      'Amati waktu kemunculan gejala dan bandingkan dengan petak sawah tetangga.'
+    );
+    points.push(
+      'Cek pangkal batang dan balik helai daun pada pagi hari saat embun masih ada.'
+    );
+  }
+
+  return points.slice(0, 4);
+}
+

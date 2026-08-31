@@ -16,7 +16,7 @@
  * - PHT & musuh alami ditampilkan lebih dulu, bahan aktif kimia sebagai opsi lanjutan.
  */
 
-import { useState, type FormEvent, useEffect, type ChangeEvent } from 'react';
+import { useState, useMemo, type FormEvent, useEffect, type ChangeEvent } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -24,16 +24,19 @@ import {
   Calendar,
   Camera,
   Check,
+  CheckCircle2,
   Droplets,
   Eye,
   FileText,
   FlaskConical,
+  HelpCircle,
   Image as ImageIcon,
   Info,
   Leaf,
   Plus,
   Scissors,
   Search,
+  ShieldCheck,
   Sparkles,
   Sprout,
   Trash2,
@@ -51,7 +54,11 @@ import {
   analyzePlantPhoto,
   type VisualAnalysisResult,
 } from '../../engine/visualAnalysisEngine.ts';
-import { matchOptRelevance } from '../../engine/optRelevanceEngine.ts';
+import {
+  matchOptRelevance,
+  getFieldInspectionPoints,
+  getMatchConfidenceLabel,
+} from '../../engine/optRelevanceEngine.ts';
 import {
   Activity,
   ActivityCategory,
@@ -112,9 +119,10 @@ export function ActivityFormModal({
   const [amountKg, setAmountKg] = useState<string>('50');
   const [method, setMethod] = useState<string>('BROADCAST');
 
-  // --- State Khusus OPT (Ramah Pemula & Berbasis Bukti Lapang) ---
-  const [isUnknownOpt, setIsUnknownOpt] = useState<boolean>(true);
+  // --- State Khusus OPT (Ramah Pemula, Berbasis Foto, Fleksibel) ---
+  const [optApproach, setOptApproach] = useState<'PHOTO' | 'MANUAL_LIST' | 'SYMPTOM'>('PHOTO');
   const [selectedOptId, setSelectedOptId] = useState<string>('');
+  const [selectedCandidateOptId, setSelectedCandidateOptId] = useState<string | null>(null);
   const [customOptName, setCustomOptName] = useState<string>('');
   const [severity, setSeverity] = useState<AttackSeverity>('LIGHT');
   const [optLocation, setOptLocation] = useState<AttackLocation>('LEAF');
@@ -124,21 +132,18 @@ export function ActivityFormModal({
   const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState<boolean>(false);
   const [visualAnalysisResult, setVisualAnalysisResult] = useState<VisualAnalysisResult | null>(null);
 
-  // --- State Khusus Pengairan ---
-  const [waterCondition, setWaterCondition] = useState<string>('Macak-macak (1-2 cm - Fase Anakan)');
-
-  // --- State Khusus Perawatan ---
-  const [maintenanceType, setMaintenanceType] = useState<string>('Penyiangan Gulma (Matun)');
-  const [maintenanceTool, setMaintenanceTool] = useState<string>('Manual Tangan & Gasrok');
-
-  // --- State Khusus Panen ---
-  const [harvestYieldKg, setHarvestYieldKg] = useState<string>('3500');
-  const [grainCondition, setGrainCondition] = useState<string>('Kering Panen (GKP) Bernas');
-  const [completeSeason, setCompleteSeason] = useState<boolean>(false);
-
-  // --- State Khusus Tanam ---
-  const [plantingSystem, setPlantingSystem] = useState<string>('JAJAR_LEGOWO_2_1');
-  const [seedlingAgeDays, setSeedlingAgeDays] = useState<string>('18');
+  // Fungsi reset total seluruh data sementara pengamatan
+  const resetAllTemporaryOptState = () => {
+    setOptPhoto(null);
+    setVisualAnalysisResult(null);
+    setSelectedCandidateOptId(null);
+    setCustomOptName('');
+    setSymptomPreset('');
+    setIsCompressingPhoto(false);
+    setIsAnalyzingPhoto(false);
+    setSeverity('LIGHT');
+    setOptLocation('LEAF');
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -146,16 +151,16 @@ export function ActivityFormModal({
       setActivityDate(new Date().toISOString().split('T')[0]);
       setNotes('');
       setError(null);
-      setOptPhoto(null);
-      setVisualAnalysisResult(null);
-      setIsCompressingPhoto(false);
-      setIsAnalyzingPhoto(false);
+      setOptApproach('PHOTO');
+      resetAllTemporaryOptState();
       if (fertilizers.length > 0) {
         setSelectedFertId(fertilizers[0].id);
       }
       if (opts.length > 0) {
         setSelectedOptId(opts[0].id);
       }
+    } else {
+      resetAllTemporaryOptState();
     }
   }, [isOpen, initialCategory, fertilizers, opts]);
 
@@ -172,7 +177,23 @@ export function ActivityFormModal({
     ? calculateNutrients(currentKg, selectedFert.nutrientComposition)
     : calculateNutrients(currentKg, null);
 
-  // Fungsi kompresi dan analisis foto tanaman
+  // Kalkulasi Realtime Kandidat OPT berdasarkan foto/gejala untuk mode PHOTO dan SYMPTOM
+  const realtimeCandidates = useMemo(() => {
+    if (category !== 'OPT') return [];
+    const query = [customOptName, symptomPreset, notes].filter(Boolean).join(' ');
+    return matchOptRelevance(opts, query, {
+      attackLocations: [optLocation],
+      visualTokens: visualAnalysisResult?.detectedKeywords,
+      visualClues: visualAnalysisResult?.visualClues,
+      minScoreThreshold: 5,
+    });
+  }, [category, customOptName, symptomPreset, notes, optLocation, visualAnalysisResult, opts]);
+
+  const inspectionPoints = useMemo(() => {
+    return getFieldInspectionPoints([optLocation], visualAnalysisResult?.detectedKeywords || []);
+  }, [optLocation, visualAnalysisResult]);
+
+  // Fungsi kompresi dan analisis foto tanaman On-Device (HP Local Processing)
   const handlePhotoUpload = async (file: File) => {
     if (!file) return;
     setIsCompressingPhoto(true);
@@ -187,12 +208,20 @@ export function ActivityFormModal({
       setOptPhoto(compressed);
       setIsCompressingPhoto(false);
 
-      // Jalankan visual analysis engine di client-side
+      // Jalankan visual analysis engine 100% on-device (Canvas API)
       const analysis = await analyzePlantPhoto(compressed, optLocation);
       setVisualAnalysisResult(analysis);
+
+      // Berikan auto-saran bagian tanaman & keparahan jika AI mendeteksi petunjuk kuat
+      if (analysis.suggestedLocations.length > 0 && analysis.suggestedLocations[0]) {
+        setOptLocation(analysis.suggestedLocations[0]);
+      }
+      if (analysis.suggestedSeverity) {
+        setSeverity(analysis.suggestedSeverity);
+      }
     } catch (err) {
-      console.warn('Gagal memproses foto tanaman:', err);
-      setError('Gagal memproses foto. Anda tetap dapat melanjutkan pencatatan secara manual.');
+      console.warn('Gagal memproses foto tanaman on-device:', err);
+      setError('Gagal memproses foto di perangkat. Anda tetap dapat melanjutkan pencatatan secara manual.');
     } finally {
       setIsCompressingPhoto(false);
       setIsAnalyzingPhoto(false);
@@ -202,7 +231,24 @@ export function ActivityFormModal({
   const handleRemovePhoto = () => {
     setOptPhoto(null);
     setVisualAnalysisResult(null);
+    setSelectedCandidateOptId(null);
   };
+
+  // --- State Khusus Pengairan ---
+  const [waterCondition, setWaterCondition] = useState<string>('Macak-macak (1-2 cm - Fase Anakan)');
+
+  // --- State Khusus Perawatan ---
+  const [maintenanceType, setMaintenanceType] = useState<string>('Penyiangan Gulma (Matun)');
+  const [maintenanceTool, setMaintenanceTool] = useState<string>('Manual Tangan & Gasrok');
+
+  // --- State Khusus Panen ---
+  const [harvestYieldKg, setHarvestYieldKg] = useState<string>('3500');
+  const [grainCondition, setGrainCondition] = useState<string>('Kering Panen (GKP) Bernas');
+  const [completeSeason, setCompleteSeason] = useState<boolean>(false);
+
+  // --- State Khusus Tanam ---
+  const [plantingSystem, setPlantingSystem] = useState<string>('JAJAR_LEGOWO_2_1');
+  const [seedlingAgeDays, setSeedlingAgeDays] = useState<string>('18');
 
   if (!isOpen || !land || !activeSeason) return null;
 
@@ -284,17 +330,40 @@ export function ActivityFormModal({
         actionDescription = `Aplikasi pupuk ${fertName} sebanyak ${kg} kg`;
         await activityRepository.createFertilizerActivity(baseActivity, fertApp);
       } else if (category === 'OPT') {
-        const targetOpt = opts.find((o) => o.id === selectedOptId);
-        const finalOptName = isUnknownOpt
-          ? customOptName.trim() || 'Pengamatan Gejala Hama/Penyakit'
-          : targetOpt?.commonName || 'OPT Sawah';
+        if (optApproach === 'MANUAL_LIST') {
+          if (!selectedOptId) {
+            throw new Error('Silakan pilih nama Hama / Penyakit dari daftar terdaftar.');
+          }
+        }
 
-        const finalSymptom = [symptomPreset, notes.trim()].filter(Boolean).join(' - ') || 'Gejala terlihat di petak tanaman';
+        const effectiveOptId =
+          optApproach === 'MANUAL_LIST'
+            ? selectedOptId
+            : selectedCandidateOptId || undefined;
+        const targetOpt = opts.find((o) => o.id === effectiveOptId);
+        const isUnknown = !effectiveOptId;
+
+        let finalOptName = '';
+        if (targetOpt) {
+          finalOptName = targetOpt.commonName;
+        } else if (customOptName.trim()) {
+          finalOptName = customOptName.trim();
+        } else if (optPhoto) {
+          finalOptName = 'Pengamatan Gejala Lapang (Foto)';
+        } else {
+          finalOptName = 'Pengamatan Gejala Hama/Penyakit';
+        }
+
+        const finalSymptom =
+          [symptomPreset, notes.trim()].filter(Boolean).join(' - ') ||
+          (optPhoto
+            ? 'Pengamatan berbasis dokumentasi foto lapang'
+            : 'Gejala terlihat di petak tanaman');
 
         // Pre-compute candidate references to persist with the observation
         let queryForCandidates = '';
-        if (isUnknownOpt) {
-          queryForCandidates = [finalOptName, finalSymptom].filter(Boolean).join(' ');
+        if (isUnknown) {
+          queryForCandidates = [finalOptName, customOptName, finalSymptom].filter(Boolean).join(' ');
         } else {
           queryForCandidates = [targetOpt?.commonName, finalOptName, finalSymptom].filter(Boolean).join(' ');
         }
@@ -309,16 +378,26 @@ export function ActivityFormModal({
         const optObs: OptObservation = {
           id: `obs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           activityId,
-          optId: isUnknownOpt ? undefined : selectedOptId,
-          isUnknown: isUnknownOpt,
+          optId: effectiveOptId,
+          isUnknown,
           customOptName: finalOptName,
           attackSeverity: severity,
           attackLocation: [optLocation],
           observedSymptoms: finalSymptom,
-          photoLocalUri: optPhoto || undefined,
-          visualClues: visualAnalysisResult?.visualClues,
+          identificationMethod:
+            optApproach === 'PHOTO'
+              ? 'AI_IMAGE_CAPTURE'
+              : optApproach === 'MANUAL_LIST'
+              ? 'MANUAL_LIST'
+              : 'SYMPTOM',
+          confidenceLevel:
+            visualAnalysisResult?.confidence || (effectiveOptId ? 'HIGH' : 'UNCERTAIN'),
+          detectedTraits: visualAnalysisResult?.detectedTraits || [],
+          visualClues: visualAnalysisResult?.visualClues || [],
           candidateOptIds: candidateIds,
-          photoAnalysisNotes: visualAnalysisResult?.clarityMessage,
+          photoAnalysisNotes:
+            visualAnalysisResult?.summaryText || visualAnalysisResult?.clarityMessage,
+          photoLocalUri: undefined, // FOTO TIDAK DISIMPAN KE DATABASE (Zero-storage privacy rule)
           createdAt: now,
           updatedAt: now,
         };
@@ -617,72 +696,655 @@ export function ActivityFormModal({
           {/* --- FORM 2: PENGAMATAN OPT TERPADU (TERMASUK ANALISIS FOTO & RUJUKAN AGRONOMI) --- */}
           {category === 'OPT' && (
             <div className="space-y-4 p-3.5 bg-amber-50/50 rounded-2xl border border-amber-200/80">
-              {/* Pilihan Metode Input: Terdaftar vs Gejala Bebas */}
+              {/* Pilihan Metode Input: Foto (Utama) vs Daftar Terdaftar vs Catat Gejala */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1.5">
                   Pendekatan Identifikasi Hama / Penyakit
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsUnknownOpt(false)}
-                    className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition-all text-left flex items-center gap-2 min-h-[44px] ${
-                      !isUnknownOpt
-                        ? 'bg-amber-700 text-white border-amber-700 shadow-xs'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50/60'
+                    onClick={() => {
+                      setOptApproach('PHOTO');
+                    }}
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition-all text-left flex flex-col justify-center min-h-[48px] ${
+                      optApproach === 'PHOTO'
+                        ? 'bg-amber-700 text-white border-amber-700 shadow-xs ring-1 ring-amber-600'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50/70'
                     }`}
                   >
-                    <Bug className="w-4 h-4 shrink-0" />
-                    <span>Pilih dari Daftar Terdaftar</span>
+                    <div className="flex items-center gap-1.5">
+                      <Camera className="w-4 h-4 shrink-0" />
+                      <span className="font-extrabold">Identifikasi dari Foto</span>
+                    </div>
+                    <span
+                      className={`text-[10px] mt-0.5 ${
+                        optApproach === 'PHOTO' ? 'text-amber-100' : 'text-slate-500'
+                      }`}
+                    >
+                      Utamakan bukti foto lapang
+                    </span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setIsUnknownOpt(true)}
-                    className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition-all text-left flex items-center gap-2 min-h-[44px] ${
-                      isUnknownOpt
-                        ? 'bg-amber-700 text-white border-amber-700 shadow-xs'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50/60'
+                    onClick={() => {
+                      setOptApproach('MANUAL_LIST');
+                      setSelectedCandidateOptId(null);
+                    }}
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition-all text-left flex flex-col justify-center min-h-[48px] ${
+                      optApproach === 'MANUAL_LIST'
+                        ? 'bg-amber-700 text-white border-amber-700 shadow-xs ring-1 ring-amber-600'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50/70'
                     }`}
                   >
-                    <Search className="w-4 h-4 shrink-0" />
-                    <span>Belum Tahu Pasti (Catat Gejala)</span>
+                    <div className="flex items-center gap-1.5">
+                      <Bug className="w-4 h-4 shrink-0" />
+                      <span className="font-extrabold">Pilih dari Daftar</span>
+                    </div>
+                    <span
+                      className={`text-[10px] mt-0.5 ${
+                        optApproach === 'MANUAL_LIST' ? 'text-amber-100' : 'text-slate-500'
+                      }`}
+                    >
+                      Pilih dari master resmi
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOptApproach('SYMPTOM');
+                      setSelectedCandidateOptId(null);
+                    }}
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition-all text-left flex flex-col justify-center min-h-[48px] ${
+                      optApproach === 'SYMPTOM'
+                        ? 'bg-amber-700 text-white border-amber-700 shadow-xs ring-1 ring-amber-600'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50/70'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Search className="w-4 h-4 shrink-0" />
+                      <span className="font-extrabold">Catat Gejala Bebas</span>
+                    </div>
+                    <span
+                      className={`text-[10px] mt-0.5 ${
+                        optApproach === 'SYMPTOM' ? 'text-amber-100' : 'text-slate-500'
+                      }`}
+                    >
+                      Ciri visual & deskripsi
+                    </span>
                   </button>
                 </div>
               </div>
 
-              {!isUnknownOpt ? (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Pilih Hama / Penyakit Terdaftar <span className="text-amber-800">*</span>
-                  </label>
-                  <select
-                    value={selectedOptId}
-                    onChange={(e) => setSelectedOptId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-600 min-h-[44px]"
-                  >
-                    {opts.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.commonName} ({o.scientificName})
-                      </option>
-                    ))}
-                  </select>
+              {/* TAMPILAN KHUSUS BERDASARKAN PENDEKATAN */}
+
+              {/* 1. JIKA PENDEKATAN FOTO (OPSI UTAMA) */}
+              {optApproach === 'PHOTO' && (
+                <div className="space-y-3">
+                  {/* Bagian Unggah / Ambil Foto Utama */}
+                  <div className="p-3.5 bg-white rounded-2xl border border-amber-200 shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <Camera className="w-4 h-4 text-amber-700" />
+                        <span>Foto Tanaman / Gejala di Petak</span>
+                      </label>
+                      <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        Sumber Utama Identifikasi
+                      </span>
+                    </div>
+
+                    {optPhoto ? (
+                      <div className="space-y-3">
+                        <div className="flex flex-col sm:flex-row items-start gap-3 p-3 bg-amber-50/50 rounded-xl border border-amber-200">
+                          <div className="relative rounded-xl overflow-hidden border border-amber-300 shrink-0 bg-slate-900 w-full sm:w-36">
+                            <img
+                              src={optPhoto}
+                              alt="Foto Gejala Tanaman"
+                              className="w-full h-32 object-cover"
+                            />
+                            {visualAnalysisResult && (
+                              <div className="absolute bottom-1.5 left-1.5 right-1.5 bg-slate-900/80 backdrop-blur-xs text-[10px] text-white px-1.5 py-0.5 rounded text-center truncate">
+                                {visualAnalysisResult.clarityStatus === 'CLEAR'
+                                  ? 'Foto Terdeteksi Jelas'
+                                  : 'Pencahayaan Minim'}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex-1 space-y-2 w-full">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                                Foto Berhasil Dimuat
+                              </span>
+                              <button
+                                type="button"
+                                onClick={handleRemovePhoto}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Hapus / Ganti</span>
+                              </button>
+                            </div>
+
+                            {isAnalyzingPhoto ? (
+                              <div className="p-3 bg-white rounded-xl border border-amber-200 flex items-center gap-2.5 text-xs text-amber-900 font-medium">
+                                <Sparkles className="w-4 h-4 animate-spin text-amber-600 shrink-0" />
+                                <span>Menganalisis fitur visual on-device di HP...</span>
+                              </div>
+                            ) : visualAnalysisResult ? (
+                              <div className="p-3 bg-white rounded-xl border border-amber-200 space-y-2 text-xs">
+                                <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                                  <span className="font-extrabold text-slate-900 flex items-center gap-1.5">
+                                    <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                                    Hasil Analisis Foto
+                                  </span>
+                                  <span
+                                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                      visualAnalysisResult.confidence === 'HIGH'
+                                        ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                        : visualAnalysisResult.confidence === 'MODERATE'
+                                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                        : 'bg-slate-100 text-slate-800 border-slate-300'
+                                    }`}
+                                  >
+                                    Keyakinan:{' '}
+                                    {visualAnalysisResult.confidence === 'HIGH'
+                                      ? 'Tinggi / Sangat Kuat'
+                                      : visualAnalysisResult.confidence === 'MODERATE'
+                                      ? 'Mendekati'
+                                      : 'Belum Pasti'}
+                                  </span>
+                                </div>
+
+                                {/* Ciri Visual Terdeteksi (Traits Chips) */}
+                                {visualAnalysisResult.detectedTraits &&
+                                  visualAnalysisResult.detectedTraits.length > 0 && (
+                                    <div className="space-y-1">
+                                      <span className="text-[11px] font-semibold text-slate-600 block">
+                                        Ciri Visual yang Terdeteksi:
+                                      </span>
+                                      <div className="flex flex-wrap gap-1">
+                                        {visualAnalysisResult.detectedTraits.map((trait, idx) => (
+                                          <span
+                                            key={idx}
+                                            className="px-2 py-0.5 bg-amber-50 text-amber-950 border border-amber-200 rounded-md text-[10px] font-medium"
+                                          >
+                                            {trait}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                {/* Petunjuk Visual Detail */}
+                                {visualAnalysisResult.visualClues.length > 0 && (
+                                  <ul className="space-y-1 mt-1 pt-1 border-t border-slate-100">
+                                    {visualAnalysisResult.visualClues.map((clue, idx) => (
+                                      <li
+                                        key={idx}
+                                        className="flex items-start gap-1.5 text-[11px] text-slate-700 font-medium leading-relaxed"
+                                      >
+                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-600 mt-1.5 shrink-0" />
+                                        <span>{clue}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+
+                                {/* Peringatan jika foto buram / gelap */}
+                                {(visualAnalysisResult.clarityStatus === 'BLURRY_OR_DARK' ||
+                                  visualAnalysisResult.clarityStatus === 'UNCLEAR') && (
+                                  <div className="mt-2 p-2.5 bg-amber-50 rounded-xl text-[11px] text-amber-950 border border-amber-300 space-y-1.5">
+                                    <div className="flex items-center gap-1 font-bold text-amber-900">
+                                      <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                      <span>Foto belum cukup jelas untuk identifikasi pasti.</span>
+                                    </div>
+                                    <p className="text-amber-800 leading-snug">
+                                      {visualAnalysisResult.clarityMessage}
+                                    </p>
+                                    <div className="flex gap-2 pt-1">
+                                      <label
+                                        htmlFor="opt-camera-reinput"
+                                        className="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-[10px] font-bold cursor-pointer inline-flex items-center gap-1"
+                                      >
+                                        <Camera className="w-3 h-3" />
+                                        <span>Ambil Foto Lagi</span>
+                                      </label>
+                                      <input
+                                        id="opt-camera-reinput"
+                                        type="file"
+                                        accept="image/*"
+                                        capture="environment"
+                                        className="hidden"
+                                        onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) handlePhotoUpload(file);
+                                          e.target.value = '';
+                                        }}
+                                      />
+
+                                      <label
+                                        htmlFor="opt-gallery-reinput"
+                                        className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-[10px] font-bold cursor-pointer inline-flex items-center gap-1"
+                                      >
+                                        <ImageIcon className="w-3 h-3" />
+                                        <span>Pilih Foto Lain</span>
+                                      </label>
+                                      <input
+                                        id="opt-gallery-reinput"
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) handlePhotoUpload(file);
+                                          e.target.value = '';
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="pt-1 text-[10px] text-slate-500 flex items-center gap-1">
+                                  <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                                  <span>Diproses on-device di HP • Foto tidak diunggah ke server</span>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        {/* HASIL KANDIDAT & RUJUKAN PEMBANDING DARI FOTO */}
+                        <div className="p-3 bg-white rounded-xl border border-amber-200 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                              <Sparkles className="w-4 h-4 text-amber-600" />
+                              Kandidat Hama / Penyakit Relevan
+                            </span>
+                            <span className="text-[10px] text-slate-500">
+                              (Pilihan bersifat opsional)
+                            </span>
+                          </div>
+
+                          {realtimeCandidates.length > 0 ? (
+                            <div className="space-y-2">
+                              {realtimeCandidates.slice(0, 3).map((candidate) => {
+                                const confidence = getMatchConfidenceLabel(
+                                  candidate.score,
+                                  candidate.isExactMatch
+                                );
+                                const isSelected =
+                                  selectedCandidateOptId === candidate.opt.id;
+
+                                return (
+                                  <div
+                                    key={candidate.opt.id}
+                                    className={`p-2.5 rounded-xl border transition-all ${
+                                      isSelected
+                                        ? 'bg-emerald-50/80 border-emerald-400 ring-1 ring-emerald-400'
+                                        : 'bg-slate-50/70 border-slate-200 hover:bg-amber-50/40'
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <strong className="text-xs text-slate-900 font-bold">
+                                            {candidate.opt.commonName}
+                                          </strong>
+                                          <span className="text-[11px] text-slate-500 italic">
+                                            ({candidate.opt.scientificName})
+                                          </span>
+                                          <span
+                                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${confidence.badgeColor}`}
+                                          >
+                                            {confidence.badgeText}
+                                          </span>
+                                        </div>
+                                        <p className="text-[11px] text-slate-600 mt-1 leading-snug">
+                                          {candidate.similarityReason}
+                                        </p>
+                                        <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">
+                                          <span className="font-semibold text-slate-700">Gejala khas:</span> {candidate.opt.symptoms}
+                                        </p>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (isSelected) {
+                                            setSelectedCandidateOptId(null);
+                                            setCustomOptName('');
+                                          } else {
+                                            setSelectedCandidateOptId(candidate.opt.id);
+                                            setCustomOptName(candidate.opt.commonName);
+                                          }
+                                        }}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 min-h-[36px] flex items-center gap-1 ${
+                                          isSelected
+                                            ? 'bg-emerald-700 text-white hover:bg-emerald-800'
+                                            : 'bg-amber-700 text-white hover:bg-amber-800'
+                                        }`}
+                                      >
+                                        {isSelected ? (
+                                          <>
+                                            <Check className="w-3.5 h-3.5" />
+                                            <span>Terpilih</span>
+                                          </>
+                                        ) : (
+                                          <span>Gunakan Nama Ini</span>
+                                        )}
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+
+                              {selectedCandidateOptId && (
+                                <p className="text-[11px] text-emerald-800 font-semibold bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                                  ✓ Nama pengamatan ditetapkan sebagai "
+                                  {opts.find((o) => o.id === selectedCandidateOptId)?.commonName}". Anda dapat membatalkannya kapan saja untuk menyimpan tanpa nama pasti.
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 space-y-1">
+                              <span className="font-bold text-slate-800 block">
+                                Status: Belum Pasti (Perlu Verifikasi Lapang)
+                              </span>
+                              <p className="text-[11px] text-slate-600 leading-relaxed">
+                                Foto belum cukup spesifik untuk menentukan jenis OPT secara tunggal. Pengamatan Anda tetap dapat disimpan sebagai catatan gejala lapang.
+                              </p>
+                            </div>
+                          )}
+
+                          {/* POIN PEMERIKSAAN LAPANGAN TAMBAHAN */}
+                          <div className="p-3 bg-amber-50/70 rounded-xl border border-amber-200/80 space-y-1.5">
+                            <span className="text-xs font-bold text-amber-950 flex items-center gap-1">
+                              <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
+                              Poin Pemeriksaan Lapangan Tambahan:
+                            </span>
+                            <ul className="space-y-1 mt-1">
+                              {inspectionPoints.map((point, idx) => (
+                                <li
+                                  key={idx}
+                                  className="text-[11px] text-amber-900 leading-snug flex items-start gap-1.5"
+                                >
+                                  <span className="text-amber-700 font-bold">•</span>
+                                  <span>{point}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {/* Tombol Ambil Foto Kamera */}
+                          <label
+                            htmlFor="opt-camera-input"
+                            className={`py-3.5 px-3 bg-white hover:bg-amber-50/80 active:bg-amber-100 border-2 border-dashed border-amber-300 hover:border-amber-500 rounded-xl text-xs font-bold text-slate-800 transition-colors flex items-center justify-center gap-2 cursor-pointer min-h-[48px] shadow-2xs ${
+                              isCompressingPhoto ? 'opacity-60 pointer-events-none' : ''
+                            }`}
+                          >
+                            <Camera className="w-5 h-5 text-amber-700 shrink-0" />
+                            <span>
+                              {isCompressingPhoto
+                                ? 'Memproses...'
+                                : 'Ambil Foto Langsung (Kamera)'}
+                            </span>
+                          </label>
+                          <input
+                            id="opt-camera-input"
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                              const file = e.target.files?.[0];
+                              if (file) handlePhotoUpload(file);
+                              e.target.value = '';
+                            }}
+                          />
+
+                          {/* Tombol Pilih dari Galeri */}
+                          <label
+                            htmlFor="opt-gallery-input"
+                            className={`py-3.5 px-3 bg-white hover:bg-amber-50/80 active:bg-amber-100 border-2 border-dashed border-amber-300 hover:border-amber-500 rounded-xl text-xs font-bold text-slate-800 transition-colors flex items-center justify-center gap-2 cursor-pointer min-h-[48px] shadow-2xs ${
+                              isCompressingPhoto ? 'opacity-60 pointer-events-none' : ''
+                            }`}
+                          >
+                            <ImageIcon className="w-5 h-5 text-amber-700 shrink-0" />
+                            <span>Pilih Foto dari Galeri</span>
+                          </label>
+                          <input
+                            id="opt-gallery-input"
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                              const file = e.target.files?.[0];
+                              if (file) handlePhotoUpload(file);
+                              e.target.value = '';
+                            }}
+                          />
+                        </div>
+
+                        <div className="p-2.5 bg-amber-50/70 rounded-xl border border-amber-200 text-[11px] text-amber-900 space-y-1">
+                          <p className="font-semibold">
+                            💡 Pengamatan BISA disimpan hanya dengan foto dan informasi lapangan.
+                          </p>
+                          <p className="text-amber-800">
+                            Anda tidak wajib memilih nama Hama/OPT dari daftar. Sistem akan menganalisis foto dan mencarikan rujukan pembanding yang relevan.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Input Catatan / Nama Sementara Opsional */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Nama Sementara / Catatan Lapang Tambahan (Opsional)
+                    </label>
+                    <input
+                      type="text"
+                      value={customOptName}
+                      onChange={(e) => setCustomOptName(e.target.value)}
+                      placeholder="Contoh: Daun menguning di ujung, terlihat beberapa ulat kecil..."
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-600 min-h-[44px]"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Boleh dikosongkan. Pengamatan akan tetap tersimpan aman di riwayat aktivitas.
+                    </p>
+                  </div>
                 </div>
-              ) : (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Nama Sementara / Deskripsi Singkat Bebas
-                  </label>
-                  <input
-                    type="text"
-                    value={customOptName}
-                    onChange={(e) => setCustomOptName(e.target.value)}
-                    placeholder="Contoh: Daun menguning dan rumpun kerdil / Ulat pelipat daun"
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-600 min-h-[44px]"
-                  />
-                  <p className="text-[11px] text-amber-900/80 mt-1">
-                    Masukkan apa yang terlihat di petak. Sistem akan mencari rujukan pembanding yang paling relevan.
-                  </p>
+              )}
+
+              {/* 2. JIKA PENDEKATAN DAFTAR TERDAFTAR (MANUAL RESMI) */}
+              {optApproach === 'MANUAL_LIST' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Pilih Hama / Penyakit Terdaftar <span className="text-amber-800">*</span>
+                    </label>
+                    <select
+                      value={selectedOptId}
+                      onChange={(e) => setSelectedOptId(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-600 min-h-[44px]"
+                    >
+                      {opts.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.commonName} ({o.scientificName})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Pilih nama OPT resmi dari katalog Kementan RI & BBPadi jika sudah teridentifikasi pasti.
+                    </p>
+                  </div>
+
+                  {/* Unggah Foto Tambahan (Opsional di mode Manual) */}
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                      <span>Lampirkan Foto Pengamatan (Opsional)</span>
+                    </div>
+                    {optPhoto ? (
+                      <div className="flex items-center gap-3 p-2 bg-slate-50 rounded-lg">
+                        <img
+                          src={optPhoto}
+                          alt="Foto"
+                          className="w-16 h-14 object-cover rounded-lg border border-slate-200"
+                        />
+                        <div className="flex-1">
+                          <span className="text-xs text-slate-800 font-semibold block">
+                            Foto terlampir
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleRemovePhoto}
+                            className="text-[11px] text-red-700 font-bold hover:underline"
+                          >
+                            Hapus Foto
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <label
+                          htmlFor="manual-opt-camera"
+                          className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-700 text-center cursor-pointer min-h-[40px] flex items-center justify-center gap-1"
+                        >
+                          <Camera className="w-4 h-4 text-slate-600" />
+                          <span>Kamera</span>
+                        </label>
+                        <input
+                          id="manual-opt-camera"
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                            const file = e.target.files?.[0];
+                            if (file) handlePhotoUpload(file);
+                            e.target.value = '';
+                          }}
+                        />
+
+                        <label
+                          htmlFor="manual-opt-gallery"
+                          className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-700 text-center cursor-pointer min-h-[40px] flex items-center justify-center gap-1"
+                        >
+                          <ImageIcon className="w-4 h-4 text-slate-600" />
+                          <span>Galeri</span>
+                        </label>
+                        <input
+                          id="manual-opt-gallery"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                            const file = e.target.files?.[0];
+                            if (file) handlePhotoUpload(file);
+                            e.target.value = '';
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 3. JIKA PENDEKATAN GEJALA BEBAS */}
+              {optApproach === 'SYMPTOM' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Nama Sementara / Deskripsi Singkat Gejala Bebas
+                    </label>
+                    <input
+                      type="text"
+                      value={customOptName}
+                      onChange={(e) => setCustomOptName(e.target.value)}
+                      placeholder="Contoh: Daun menguning dan rumpun kerdil / Ulat pelipat daun"
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-600 min-h-[44px]"
+                    />
+                    <p className="text-[11px] text-amber-900/80 mt-1">
+                      Masukkan apa yang terlihat di petak. Sistem akan mencari rujukan pembanding yang paling relevan.
+                    </p>
+                  </div>
+
+                  {/* Unggah Foto Tambahan (Opsional di mode Gejala) */}
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                      <span>Lampirkan Foto Pengamatan (Opsional)</span>
+                    </div>
+                    {optPhoto ? (
+                      <div className="flex items-center gap-3 p-2 bg-slate-50 rounded-lg">
+                        <img
+                          src={optPhoto}
+                          alt="Foto"
+                          className="w-16 h-14 object-cover rounded-lg border border-slate-200"
+                        />
+                        <div className="flex-1">
+                          <span className="text-xs text-slate-800 font-semibold block">
+                            Foto terlampir
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleRemovePhoto}
+                            className="text-[11px] text-red-700 font-bold hover:underline"
+                          >
+                            Hapus Foto
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <label
+                          htmlFor="symptom-opt-camera"
+                          className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-700 text-center cursor-pointer min-h-[40px] flex items-center justify-center gap-1"
+                        >
+                          <Camera className="w-4 h-4 text-slate-600" />
+                          <span>Kamera</span>
+                        </label>
+                        <input
+                          id="symptom-opt-camera"
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                            const file = e.target.files?.[0];
+                            if (file) handlePhotoUpload(file);
+                            e.target.value = '';
+                          }}
+                        />
+
+                        <label
+                          htmlFor="symptom-opt-gallery"
+                          className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-700 text-center cursor-pointer min-h-[40px] flex items-center justify-center gap-1"
+                        >
+                          <ImageIcon className="w-4 h-4 text-slate-600" />
+                          <span>Galeri</span>
+                        </label>
+                        <input
+                          id="symptom-opt-gallery"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                            const file = e.target.files?.[0];
+                            if (file) handlePhotoUpload(file);
+                            e.target.value = '';
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -797,143 +1459,6 @@ export function ActivityFormModal({
                     </button>
                   ))}
                 </div>
-              </div>
-
-              {/* FOTO GEJALA / TANAMAN (OPSIONAL) */}
-              <div className="p-3.5 bg-white rounded-2xl border border-amber-200 shadow-2xs space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <Camera className="w-4 h-4 text-amber-700" />
-                    <span>Foto Gejala / Tanaman (Opsional)</span>
-                  </label>
-                  <span className="text-[11px] text-slate-500">
-                    Otomatis dikompresi di perangkat
-                  </span>
-                </div>
-
-                {optPhoto ? (
-                  <div className="space-y-3">
-                    <div className="flex flex-col sm:flex-row items-start gap-3 p-3 bg-amber-50/50 rounded-xl border border-amber-200">
-                      <div className="relative rounded-xl overflow-hidden border border-amber-300 shrink-0 bg-slate-900">
-                        <img
-                          src={optPhoto}
-                          alt="Foto Gejala Tanaman"
-                          className="w-32 h-28 object-cover"
-                        />
-                      </div>
-
-                      <div className="flex-1 space-y-2 w-full">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-bold text-slate-800">
-                            Foto Gejala Terlampir
-                          </span>
-                          <button
-                            type="button"
-                            onClick={handleRemovePhoto}
-                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Hapus Foto</span>
-                          </button>
-                        </div>
-
-                        {isAnalyzingPhoto ? (
-                          <div className="p-2.5 bg-white rounded-lg border border-amber-200 flex items-center gap-2 text-xs text-amber-900 font-medium">
-                            <Sparkles className="w-4 h-4 animate-spin text-amber-600" />
-                            <span>Menganalisis petunjuk visual dari foto...</span>
-                          </div>
-                        ) : visualAnalysisResult ? (
-                          <div className="p-2.5 bg-white rounded-xl border border-amber-200 space-y-1.5 text-xs">
-                            <span className="font-bold text-slate-800 flex items-center gap-1">
-                              <Eye className="w-3.5 h-3.5 text-amber-700" />
-                              Petunjuk Visual yang Terlihat:
-                            </span>
-
-                            {visualAnalysisResult.visualClues.length > 0 ? (
-                              <ul className="space-y-1 mt-1">
-                                {visualAnalysisResult.visualClues.map((clue, idx) => (
-                                  <li
-                                    key={idx}
-                                    className="flex items-start gap-1.5 text-[11px] text-slate-700 font-medium leading-relaxed"
-                                  >
-                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-600 mt-1.5 shrink-0" />
-                                    <span>{clue}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <p className="text-[11px] text-slate-600">
-                                {visualAnalysisResult.summaryText}
-                              </p>
-                            )}
-
-                            {visualAnalysisResult.clarityStatus === 'BLURRY_OR_DARK' && (
-                              <div className="mt-1 p-2 bg-amber-50 rounded-lg text-[11px] text-amber-900 border border-amber-200">
-                                {visualAnalysisResult.clarityMessage}
-                              </div>
-                            )}
-
-                            <p className="text-[10px] text-slate-500 italic mt-1">
-                              Analisis foto digunakan sebagai petunjuk tambahan, bukan diagnosis mutlak. Petani tetap menjadi pengambil keputusan.
-                            </p>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {/* Tombol Ambil Foto Kamera */}
-                      <label
-                        htmlFor="opt-camera-input"
-                        className={`py-3 px-3 bg-white hover:bg-amber-50/80 active:bg-amber-100 border border-slate-200 hover:border-amber-400 rounded-xl text-xs font-bold text-slate-800 transition-colors flex items-center justify-center gap-2 cursor-pointer min-h-[44px] shadow-2xs ${
-                          isCompressingPhoto ? 'opacity-60 pointer-events-none' : ''
-                        }`}
-                      >
-                        <Camera className="w-4 h-4 text-amber-700" />
-                        <span>{isCompressingPhoto ? 'Memproses...' : 'Ambil Foto (Kamera)'}</span>
-                      </label>
-                      <input
-                        id="opt-camera-input"
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        className="hidden"
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                          const file = e.target.files?.[0];
-                          if (file) handlePhotoUpload(file);
-                          e.target.value = '';
-                        }}
-                      />
-
-                      {/* Tombol Pilih dari Galeri */}
-                      <label
-                        htmlFor="opt-gallery-input"
-                        className={`py-3 px-3 bg-white hover:bg-amber-50/80 active:bg-amber-100 border border-slate-200 hover:border-amber-400 rounded-xl text-xs font-bold text-slate-800 transition-colors flex items-center justify-center gap-2 cursor-pointer min-h-[44px] shadow-2xs ${
-                          isCompressingPhoto ? 'opacity-60 pointer-events-none' : ''
-                        }`}
-                      >
-                        <ImageIcon className="w-4 h-4 text-amber-700" />
-                        <span>Pilih dari Galeri</span>
-                      </label>
-                      <input
-                        id="opt-gallery-input"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                          const file = e.target.files?.[0];
-                          if (file) handlePhotoUpload(file);
-                          e.target.value = '';
-                        }}
-                      />
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      Foto membantu mendeteksi indikasi perubahan warna, bercak, atau kondisi fisik tanaman.
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
           )}

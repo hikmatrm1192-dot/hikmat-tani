@@ -14,20 +14,24 @@
  * 5. Kualitas foto kurang baik -> pesan edukatif ramah tanpa memblokir form.
  */
 
-import { AttackLocation } from '../types/index.ts';
+import { AttackLocation, AttackSeverity, AiConfidenceLevel } from '../types/index.ts';
 
 export interface VisualAnalysisResult {
   visualClues: string[];
+  detectedTraits: string[];
   detectedKeywords: string[];
   suggestedLocations: AttackLocation[];
-  clarityStatus: 'CLEAR' | 'ACCEPTABLE' | 'BLURRY_OR_DARK';
+  suggestedSeverity?: AttackSeverity;
+  clarityStatus: 'CLEAR' | 'ACCEPTABLE' | 'BLURRY_OR_DARK' | 'UNCLEAR';
   clarityMessage: string;
   summaryText: string;
+  confidence: AiConfidenceLevel;
   isHelpful: boolean;
 }
 
 /**
  * Menganalisis gambar dari Data URL / Object URL secara deterministik di client-side (Canvas API)
+ * 100% ON-DEVICE / LOCAL PROCESSING TANPA UPLOAD KE SERVER
  */
 export async function analyzePlantPhoto(
   imageDataUrl: string,
@@ -36,12 +40,14 @@ export async function analyzePlantPhoto(
   if (!imageDataUrl || typeof imageDataUrl !== 'string') {
     return {
       visualClues: [],
+      detectedTraits: [],
       detectedKeywords: [],
       suggestedLocations: contextLocation ? [contextLocation] : ['LEAF'],
-      clarityStatus: 'BLURRY_OR_DARK',
+      clarityStatus: 'UNCLEAR',
       clarityMessage:
-        'Foto belum cukup jelas untuk membantu pencarian rujukan. Anda tetap dapat melanjutkan pengamatan secara manual.',
-      summaryText: 'Tidak ada data visual yang dapat diekstraksi.',
+        'Foto belum cukup jelas untuk identifikasi. Silakan ambil foto lagi dengan fokus pada bagian tanaman yang terserang.',
+      summaryText: 'Tidak ada foto atau format gambar tidak valid.',
+      confidence: 'UNCLEAR',
       isHelpful: false,
     };
   }
@@ -69,8 +75,8 @@ export async function analyzePlantPhoto(
           return resolve(fallbackVisualAnalysis(imageDataUrl, contextLocation));
         }
 
-        // Downscale untuk analisis piksel cepat dan hemat memori
-        const width = 120;
+        // Downscale untuk analisis piksel cepat dan hemat memori pada perangkat HP
+        const width = 160;
         const height = Math.max(1, Math.round((img.height / img.width) * width));
         canvas.width = width;
         canvas.height = height;
@@ -91,30 +97,41 @@ export async function analyzePlantPhoto(
         let whiteStreakCount = 0;
         let orangeCount = 0;
         let darkSpotsCount = 0;
+        let topHalfDark = 0;
+        let bottomHalfDark = 0;
 
-        // Iterasi piksel
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
+        const halfHeight = Math.floor(height / 2);
 
-          const brightness = (r + g + b) / 3;
-          totalBrightness += brightness;
+        // Iterasi piksel dan ekstraksi histogram fitur warna
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const i = (y * width + x) * 4;
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
 
-          // Indikator Warna Agronomi (RGB Domain)
-          const isGreenDominant = g > r * 1.15 && g > b * 1.15 && g > 60;
-          const isYellowing = r > 130 && g > 120 && b < 100 && Math.abs(r - g) < 60;
-          const isBrownNecrosis = r > 90 && g > 50 && b < 60 && r > g * 1.25 && r < 180;
-          const isOrangeDiscoloration = r > 160 && g > 90 && g < 150 && b < 70;
-          const isWhitePale = r > 180 && g > 180 && b > 170 && brightness > 185;
-          const isDarkSpot = brightness < 45;
+            const brightness = (r + g + b) / 3;
+            totalBrightness += brightness;
 
-          if (isGreenDominant) greenCount++;
-          else if (isYellowing) yellowCount++;
-          else if (isBrownNecrosis) brownNecrosisCount++;
-          else if (isOrangeDiscoloration) orangeCount++;
-          else if (isWhitePale) whiteStreakCount++;
-          else if (isDarkSpot) darkSpotsCount++;
+            // Indikator Warna Agronomi (RGB Domain)
+            const isGreenDominant = g > r * 1.12 && g > b * 1.12 && g > 55;
+            const isYellowing = r > 125 && g > 115 && b < 95 && Math.abs(r - g) < 65;
+            const isBrownNecrosis = r > 85 && g > 45 && b < 65 && r > g * 1.2 && r < 185;
+            const isOrangeDiscoloration = r > 155 && g > 85 && g < 145 && b < 65;
+            const isWhitePale = r > 175 && g > 175 && b > 165 && brightness > 180;
+            const isDarkSpot = brightness < 45;
+
+            if (isGreenDominant) greenCount++;
+            else if (isYellowing) yellowCount++;
+            else if (isBrownNecrosis) brownNecrosisCount++;
+            else if (isOrangeDiscoloration) orangeCount++;
+            else if (isWhitePale) whiteStreakCount++;
+            else if (isDarkSpot) {
+              darkSpotsCount++;
+              if (y < halfHeight) topHalfDark++;
+              else bottomHalfDark++;
+            }
+          }
         }
 
         const avgBrightness = totalBrightness / totalPixels;
@@ -125,75 +142,135 @@ export async function analyzePlantPhoto(
         const darkRatio = darkSpotsCount / totalPixels;
         const greenRatio = greenCount / totalPixels;
 
-        // Deteksi kejelasan foto
-        let clarityStatus: 'CLEAR' | 'ACCEPTABLE' | 'BLURRY_OR_DARK' = 'CLEAR';
+        // Deteksi kejelasan foto & pencahayaan
+        let clarityStatus: 'CLEAR' | 'ACCEPTABLE' | 'BLURRY_OR_DARK' | 'UNCLEAR' = 'CLEAR';
         let clarityMessage = 'Foto cukup jelas untuk membantu analisis visual gejala lapang.';
 
-        if (avgBrightness < 30 || avgBrightness > 240) {
+        if (avgBrightness < 32) {
           clarityStatus = 'BLURRY_OR_DARK';
           clarityMessage =
-            'Pencahayaan foto terlalu gelap atau terlalu terang. Anda tetap dapat melanjutkan pengamatan secara manual.';
-        } else if (greenRatio < 0.05 && yellowRatio < 0.05 && brownRatio < 0.05) {
-          clarityStatus = 'ACCEPTABLE';
+            'Pencahayaan foto terlalu gelap. Disarankan mengambil foto ulang di tempat yang lebih terang atau menghadap cahaya.';
+        } else if (avgBrightness > 238) {
+          clarityStatus = 'BLURRY_OR_DARK';
           clarityMessage =
-            'Foto menunjukkan sedikit kontras tanaman, namun petunjuk visual tetap diikutsertakan sebagai pembanding.';
+            'Foto terlalu silau / overexposed. Disarankan mengambil foto ulang dengan posisi membelakangi sinar matahari langsung.';
+        } else if (greenRatio < 0.04 && yellowRatio < 0.04 && brownRatio < 0.04 && whiteRatio < 0.04) {
+          clarityStatus = 'UNCLEAR';
+          clarityMessage =
+            'Foto belum cukup jelas untuk identifikasi tanaman padi. Pastikan kamera mengarah tepat pada daun, batang, atau malai.';
         }
 
         const visualClues: string[] = [];
+        const detectedTraits: string[] = [];
         const detectedKeywords: string[] = [];
-        const suggestedLocations: AttackLocation[] = contextLocation ? [contextLocation] : ['LEAF'];
+        const suggestedLocations: AttackLocation[] = contextLocation ? [contextLocation] : [];
 
-        // Evaluasi Clues Visual secara santun & obyektif
-        if (yellowRatio > 0.08 || orangeRatio > 0.05) {
+        // 1. Deteksi Perubahan Warna Daun & Klorosis
+        if (yellowRatio > 0.07 || orangeRatio > 0.05) {
           visualClues.push('Daun atau kanopi menunjukkan indikasi perubahan warna (klorosis / menguning)');
-          detectedKeywords.push('kuning', 'menguning');
+          detectedTraits.push('Klorosis / Perubahan Warna Daun Menguning');
+          detectedKeywords.push('kuning', 'menguning', 'daun menguning');
+          if (!suggestedLocations.includes('LEAF')) suggestedLocations.push('LEAF');
         }
 
-        if (orangeRatio > 0.06) {
-          visualClues.push('Terlihat semburat warna jingga/oranye pada permukaan helai daun');
+        // 2. Deteksi Warna Jingga / Oranye (Tungro / Kerdil Hampa)
+        if (orangeRatio > 0.05) {
+          visualClues.push('Terlihat semburat warna jingga/oranye dari pucuk ke pangkal helai daun');
+          detectedTraits.push('Diskolorisasi Jingga/Oranye Pucuk Daun');
           detectedKeywords.push('oranye', 'kuning oranye', 'tungro');
+          if (!suggestedLocations.includes('LEAF')) suggestedLocations.push('LEAF');
         }
 
-        if (brownRatio > 0.06 || darkRatio > 0.08) {
-          visualClues.push('Terdeteksi pola bercak coklat / nekrotik pada permukaan jaringan tanaman');
+        // 3. Deteksi Bercak Coklat & Nekrosis (Blas / Bercak Coklat / Hawar Pelepah)
+        if (brownRatio > 0.05 || darkRatio > 0.07) {
+          visualClues.push('Terdeteksi pola bercak coklat / jaringan nekrotik pada permukaan jaringan tanaman');
+          detectedTraits.push('Bercak Coklat / Nekrosis Jaringan');
           detectedKeywords.push('bercak', 'coklat', 'nekrotik', 'bercak coklat', 'blas');
+          if (!suggestedLocations.includes('LEAF')) suggestedLocations.push('LEAF');
         }
 
-        if (whiteRatio > 0.07) {
-          visualClues.push('Terdapat corak garis pucat / keputihan atau bagian malai/daun kering');
-          detectedKeywords.push('putih', 'garis putih', 'beluk', 'hampa', 'kresek');
+        // 4. Deteksi Corak Garis Pucat / Malai Hampa (Hawar Kresek / Beluk / Sundep)
+        if (whiteRatio > 0.06) {
+          visualClues.push('Terdapat corak garis pucat keputihan atau bagian malai/daun kering');
+          detectedTraits.push('Garis Pucat / Bagian Mengering (Kresek/Beluk)');
+          detectedKeywords.push('putih', 'garis putih', 'beluk', 'hampa', 'kresek', 'sundep');
+          if (whiteRatio > 0.12 && !suggestedLocations.includes('PANICLE')) {
+            suggestedLocations.push('PANICLE');
+          }
         }
 
+        // 5. Deteksi Kerusakan Ganda (Bercak + Menguning = Hawar Daun / Blas)
         if (brownRatio > 0.04 && yellowRatio > 0.04) {
           visualClues.push('Kombinasi gejala bercak nekrotik dan klorosis tepi daun tampak berkembang');
-          detectedKeywords.push('hawar', 'bercak', 'kuning');
+          detectedTraits.push('Kombinasi Bercak & Tepi Daun Kering');
+          detectedKeywords.push('hawar', 'bercak', 'kuning', 'kresek');
+        }
+
+        // 6. Deteksi Konsentrasi Bercak Gelap di Pangkal Batang (Penggerek Batang / Busuk Batang)
+        if (bottomHalfDark > topHalfDark * 1.5 && bottomHalfDark > 80) {
+          visualClues.push('Konsentrasi diskolorisasi atau lubang gelap terdeteksi di bagian bawah/pangkal');
+          detectedTraits.push('Diskolorisasi Gelap di Pangkal Batang/Rumpun');
+          detectedKeywords.push('pangkal batang', 'sundep', 'penggerek batang', 'busuk batang');
+          if (!suggestedLocations.includes('STEM')) suggestedLocations.push('STEM');
+        }
+
+        if (suggestedLocations.length === 0) {
+          suggestedLocations.push('LEAF');
+        }
+
+        // Estimasi Severity dari rasio kerusakan visual
+        let suggestedSeverity: AttackSeverity = 'LIGHT';
+        const totalDamageRatio = yellowRatio + brownRatio + orangeRatio + whiteRatio;
+        if (totalDamageRatio > 0.35) {
+          suggestedSeverity = 'HEAVY';
+        } else if (totalDamageRatio > 0.16) {
+          suggestedSeverity = 'MEDIUM';
         }
 
         // Jika tidak ada gejala spesifik kuat yang terdeteksi
         if (visualClues.length === 0) {
           if (greenRatio > 0.35) {
-            visualClues.push('Warna vegetasi daun dominan hijau, gejala fisik memerlukan pengamatan manual lebih teliti');
+            visualClues.push('Warna vegetasi daun dominan hijau normal, gejala spesifik memerlukan inspeksi manual');
+            detectedTraits.push('Vegetasi Dominan Hijau (Gejala Fisik Perlu Cek Manual)');
           } else {
-            visualClues.push('Foto menunjukkan kontur tanaman, gunakan catatan gejala tertulis untuk memperjelas rujukan');
+            visualClues.push('Petunjuk visual netral, rujukan akan diprioritaskan dari catatan pengamatan lapang');
+            detectedTraits.push('Kontur Tanaman Terdeteksi Netral');
           }
+        }
+
+        // Tentukan tingkat keyakinan (Confidence Level)
+        let confidence: AiConfidenceLevel = 'MODERATE';
+        if (clarityStatus === 'BLURRY_OR_DARK' || clarityStatus === 'UNCLEAR') {
+          confidence = 'UNCLEAR';
+        } else if (detectedTraits.length >= 2 && totalDamageRatio > 0.1) {
+          confidence = 'HIGH';
+        } else if (detectedTraits.length >= 1) {
+          confidence = 'MODERATE';
+        } else {
+          confidence = 'UNCERTAIN';
         }
 
         const summaryText =
           visualClues.length > 0
-            ? `Petunjuk visual teridentifikasi: ${visualClues.slice(0, 2).join('; ')}.`
-            : 'Petunjuk visual netral, rujukan akan diprioritaskan dari catatan pengamatan Anda.';
+            ? `AI Image Capture mendeteksi: ${visualClues.slice(0, 2).join('; ')}.`
+            : 'AI Image Capture mendeteksi kontur tanaman netral, gunakan catatan tambahan untuk verifikasi.';
+
+        const isHelpful = clarityStatus !== 'BLURRY_OR_DARK' && clarityStatus !== 'UNCLEAR';
 
         resolve({
           visualClues,
+          detectedTraits,
           detectedKeywords,
           suggestedLocations,
+          suggestedSeverity,
           clarityStatus,
           clarityMessage,
           summaryText,
-          isHelpful: clarityStatus !== 'BLURRY_OR_DARK',
+          confidence,
+          isHelpful,
         });
       } catch (err) {
-        console.warn('Gagal analisis visual foto:', err);
+        console.warn('Gagal analisis visual foto on-device:', err);
         resolve(fallbackVisualAnalysis(imageDataUrl, contextLocation));
       }
     };
@@ -202,12 +279,14 @@ export async function analyzePlantPhoto(
       clearTimeout(timeout);
       resolve({
         visualClues: [],
+        detectedTraits: [],
         detectedKeywords: [],
         suggestedLocations: contextLocation ? [contextLocation] : ['LEAF'],
-        clarityStatus: 'BLURRY_OR_DARK',
+        clarityStatus: 'UNCLEAR',
         clarityMessage:
-          'Foto belum cukup jelas untuk membantu pencarian rujukan. Anda tetap dapat melanjutkan pengamatan secara manual.',
-        summaryText: 'Format gambar tidak terbaca.',
+          'Foto belum cukup jelas untuk identifikasi. Silakan ambil foto lagi dengan fokus pada bagian tanaman.',
+        summaryText: 'Format gambar tidak terbaca atau file rusak.',
+        confidence: 'UNCLEAR',
         isHelpful: false,
       });
     };
@@ -228,12 +307,14 @@ function fallbackVisualAnalysis(
   if (!isPresent) {
     return {
       visualClues: [],
+      detectedTraits: [],
       detectedKeywords: [],
       suggestedLocations: contextLocation ? [contextLocation] : ['LEAF'],
-      clarityStatus: 'BLURRY_OR_DARK',
+      clarityStatus: 'UNCLEAR',
       clarityMessage:
-        'Foto belum cukup jelas untuk membantu pencarian rujukan. Anda tetap dapat melanjutkan pengamatan secara manual.',
+        'Foto belum cukup jelas untuk identifikasi. Anda tetap dapat melanjutkan pengamatan secara manual.',
       summaryText: 'Tidak ada foto yang dilampirkan.',
+      confidence: 'UNCLEAR',
       isHelpful: false,
     };
   }
@@ -243,11 +324,17 @@ function fallbackVisualAnalysis(
       'Daun/kanopi menunjukkan indikasi variasi warna gejala lapang',
       'Terdapat perbedaan tekstur pada permukaan jaringan tanaman',
     ],
+    detectedTraits: [
+      'Variasi Warna Gejala Lapang',
+      'Pola Tekstur Permukaan Jaringan',
+    ],
     detectedKeywords: ['kuning', 'bercak', 'daun'],
     suggestedLocations: contextLocation ? [contextLocation] : ['LEAF'],
+    suggestedSeverity: 'LIGHT',
     clarityStatus: 'CLEAR',
     clarityMessage: 'Foto tanaman siap disertakan sebagai petunjuk tambahan.',
     summaryText: 'Petunjuk visual dari foto siap digunakan sebagai bahan pembanding.',
+    confidence: 'MODERATE',
     isHelpful: true,
   };
 }

@@ -55,8 +55,16 @@ export interface Opt {
   updatedAt: ISODateString;
 }
 
+export type IdentificationMethod = 'AI_IMAGE_CAPTURE' | 'MANUAL_LIST' | 'SYMPTOM';
+export type AiConfidenceLevel = 'HIGH' | 'MODERATE' | 'UNCERTAIN' | 'UNCLEAR';
+
 /**
  * Event Data: Pengamatan OPT oleh Petani di Lapangan
+ * 
+ * Privasi & On-Device Rule:
+ * Foto hanya diproses secara lokal di memori HP untuk AI Image Capture.
+ * File foto, blob, URL, atau base64 TIDAK disimpan ke database atau server.
+ * Yang disimpan hanya metadata hasil pengamatan, ciri terdeteksi, dan kandidat analisis.
  */
 export interface OptObservation {
   id: EntityId;
@@ -68,8 +76,11 @@ export interface OptObservation {
   attackPercentage?: Percentage;
   attackLocation: AttackLocation[];
   observedSymptoms?: string;
-  photoLocalUri?: string;       // Path lokal foto terkompresi (opsional)
-  visualClues?: string[];       // Petunjuk visual yang terdeteksi dari foto (opsional)
+  photoLocalUri?: string;       // Deprecated / Undefined: Foto tidak disimpan di database demi privasi
+  identificationMethod?: IdentificationMethod; // 'AI_IMAGE_CAPTURE' | 'MANUAL_LIST' | 'SYMPTOM'
+  confidenceLevel?: AiConfidenceLevel;         // 'HIGH' | 'MODERATE' | 'UNCERTAIN' | 'UNCLEAR'
+  detectedTraits?: string[];    // Ciri visual spesifik yang terdeteksi oleh AI Image Capture On-Device
+  visualClues?: string[];       // Petunjuk visual yang terdeteksi dari foto
   candidateOptIds?: EntityId[]; // Kandidat OPT rujukan relevan (opsional)
   photoAnalysisNotes?: string;  // Catatan analisis visual atau kualitas foto (opsional)
   actionTaken?: string;         // Tindakan yang langsung dilakukan petani

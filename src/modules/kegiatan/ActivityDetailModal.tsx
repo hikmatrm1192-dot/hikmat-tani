@@ -107,18 +107,44 @@ function OptObservationDetailCard({
   return (
     <div className="space-y-3 text-xs">
       {/* 1. Ringkasan Pengamatan Aktual */}
-      <div className="p-3 bg-white rounded-xl border border-amber-200/80 space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="font-bold text-slate-900 text-sm">
-            {obs.customOptName || 'Pengamatan Gejala OPT'}
-          </span>
+      <div className="p-3.5 bg-white rounded-2xl border border-amber-200/80 space-y-3 shadow-2xs">
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div>
+            <span className="font-bold text-slate-900 text-sm block">
+              {obs.customOptName || 'Pengamatan Gejala OPT'}
+            </span>
+            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                {obs.identificationMethod === 'AI_IMAGE_CAPTURE'
+                  ? '📷 AI Image Capture (On-Device)'
+                  : obs.identificationMethod === 'MANUAL_LIST'
+                  ? '📋 Master Terdaftar'
+                  : '🔍 Catatan Gejala Lapang'}
+              </span>
+
+              {obs.confidenceLevel && (
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                    obs.confidenceLevel === 'HIGH'
+                      ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                      : obs.confidenceLevel === 'MODERATE'
+                      ? 'bg-amber-100 text-amber-900 border-amber-300'
+                      : 'bg-slate-100 text-slate-800 border-slate-300'
+                  }`}
+                >
+                  Keyakinan: {obs.confidenceLevel === 'HIGH' ? 'Tinggi' : obs.confidenceLevel === 'MODERATE' ? 'Mendekati' : 'Belum Pasti'}
+                </span>
+              )}
+            </div>
+          </div>
+
           <span
-            className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+            className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase shrink-0 ${
               obs.attackSeverity === 'HEAVY'
-                ? 'bg-red-100 text-red-800'
+                ? 'bg-red-100 text-red-800 border border-red-200'
                 : obs.attackSeverity === 'MEDIUM'
-                ? 'bg-amber-100 text-amber-800'
-                : 'bg-emerald-100 text-emerald-800'
+                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
             }`}
           >
             Tingkat: {obs.attackSeverity}
@@ -143,34 +169,61 @@ function OptObservationDetailCard({
         {obs.observedSymptoms && (
           <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
             <span className="text-[10px] text-slate-400 block font-bold">Gejala Diamati:</span>
-            <p className="text-slate-700 mt-0.5">{obs.observedSymptoms}</p>
+            <p className="text-slate-700 mt-0.5 leading-relaxed">{obs.observedSymptoms}</p>
           </div>
         )}
 
-        {obs.photoLocalUri && (
-          <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-            <span className="text-[10px] text-slate-400 block font-bold">Foto Gejala Tanaman:</span>
-            <div className="flex items-start gap-3">
-              <img
-                src={obs.photoLocalUri}
-                alt="Foto Gejala Lapang"
-                className="w-24 h-20 object-cover rounded-lg border border-slate-200 shadow-2xs shrink-0"
-              />
-              <div className="flex-1 space-y-1">
-                {obs.visualClues && obs.visualClues.length > 0 && (
-                  <div>
-                    <span className="text-[10px] font-bold text-amber-900 block">Petunjuk Visual Terdeteksi:</span>
-                    <ul className="list-disc list-inside text-[11px] text-slate-700 space-y-0.5 mt-0.5">
-                      {obs.visualClues.map((clue, idx) => (
-                        <li key={idx}>{clue}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {obs.photoAnalysisNotes && (
-                  <p className="text-[10px] text-slate-500 italic mt-1">{obs.photoAnalysisNotes}</p>
-                )}
+        {/* Hasil Analisis AI Image Capture & Ciri Visual */}
+        {((obs.detectedTraits && obs.detectedTraits.length > 0) ||
+          (obs.visualClues && obs.visualClues.length > 0) ||
+          obs.photoAnalysisNotes) && (
+          <div className="p-3 bg-amber-50/70 rounded-xl border border-amber-200/80 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+                <span>Hasil Analisis Foto (On-Device):</span>
+              </span>
+            </div>
+
+            {obs.detectedTraits && obs.detectedTraits.length > 0 && (
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-amber-900 block">Ciri Visual Terdeteksi:</span>
+                <div className="flex flex-wrap gap-1">
+                  {obs.detectedTraits.map((trait, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2 py-0.5 bg-white text-amber-950 border border-amber-300 rounded-md text-[10px] font-medium shadow-2xs"
+                    >
+                      {trait}
+                    </span>
+                  ))}
+                </div>
               </div>
+            )}
+
+            {obs.visualClues && obs.visualClues.length > 0 && (
+              <ul className="space-y-1 pt-1 border-t border-amber-200/60">
+                {obs.visualClues.map((clue, idx) => (
+                  <li
+                    key={idx}
+                    className="flex items-start gap-1.5 text-[11px] text-slate-700 font-medium leading-relaxed"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-600 mt-1.5 shrink-0" />
+                    <span>{clue}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {obs.photoAnalysisNotes && (
+              <p className="text-[11px] text-amber-900/80 italic pt-1 border-t border-amber-200/60">
+                {obs.photoAnalysisNotes}
+              </p>
+            )}
+
+            <div className="pt-1 text-[10px] text-slate-500 flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+              <span>Privasi Terjaga: Foto hanya dianalisis sementara di HP dan tidak disimpan ke server/database.</span>
             </div>
           </div>
         )}
