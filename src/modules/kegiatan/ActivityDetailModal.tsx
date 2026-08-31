@@ -281,6 +281,34 @@ export function ActivityDetailModal({
                   </div>
                 )}
 
+                {obs.photoLocalUri && (
+                  <div className="p-2.5 bg-white rounded-xl border border-amber-200/80 space-y-2">
+                    <span className="text-[10px] text-slate-400 block font-bold">Foto Gejala Tanaman:</span>
+                    <div className="flex items-start gap-3">
+                      <img
+                        src={obs.photoLocalUri}
+                        alt="Foto Gejala Lapang"
+                        className="w-24 h-20 object-cover rounded-lg border border-slate-200 shadow-2xs shrink-0"
+                      />
+                      <div className="flex-1 space-y-1">
+                        {obs.visualClues && obs.visualClues.length > 0 && (
+                          <div>
+                            <span className="text-[10px] font-bold text-amber-900 block">Petunjuk Visual Terdeteksi:</span>
+                            <ul className="list-disc list-inside text-[11px] text-slate-700 space-y-0.5 mt-0.5">
+                              {obs.visualClues.map((clue, idx) => (
+                                <li key={idx}>{clue}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {obs.photoAnalysisNotes && (
+                          <p className="text-[10px] text-slate-500 italic mt-1">{obs.photoAnalysisNotes}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {onNavigateToKnowledge && (
                   <div className="pt-2 border-t border-amber-200/60 flex justify-end">
                     <button

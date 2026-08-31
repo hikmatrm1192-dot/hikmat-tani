@@ -1,5 +1,5 @@
 /**
- * HIKMAT TANI - Activity Form Modal (Pusat Pencatatan Kegiatan)
+ * HIKMAT TANI - Activity Form Modal (Pusat Pencatatan Kegiatan & Pengamatan OPT Terpadu)
  * 
  * Prinsip:
  * - "Catat sedikit, sistem yang mengolah lebih banyak."
@@ -8,13 +8,15 @@
  *   1. Tanam (PLANTING)
  *   2. Pupuk (FERTILIZER) -> hitung hara via nutrientEngine
  *   3. Pengairan (IRRIGATION)
- *   4. OPT (OPT) -> ramah pemula, opsi "Belum tahu nama OPT"
+ *   4. OPT (OPT) -> terintegrasi analisis foto, petunjuk visual, dan relevansi agronomi
  *   5. Perawatan (MAINTENANCE)
  *   6. Panen (HARVEST)
- * - Terintegrasi dengan Tiga Jalur Keputusan (opsional decisionId untuk mencatat ActualAction).
+ * - Foto bukan alat diagnosis mutlak, melainkan data tambahan pencarian rujukan.
+ * - Petani tetap menjadi pengambil keputusan lapang.
+ * - PHT & musuh alami ditampilkan lebih dulu, bahan aktif kimia sebagai opsi lanjutan.
  */
 
-import { useState, type FormEvent, useEffect, type ChangeEvent } from 'react';
+import { useState, type FormEvent, useEffect, type ChangeEvent, useMemo } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -22,18 +24,26 @@ import {
   Bug,
   Calendar,
   Camera,
+  Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Droplets,
+  Eye,
+  FileText,
   FlaskConical,
   HelpCircle,
   Image as ImageIcon,
+  Info,
   Leaf,
   Plus,
   Scissors,
   Search,
+  ShieldCheck,
   Sparkles,
   Sprout,
   Trash2,
+  UploadCloud,
   Wheat,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal.tsx';
@@ -43,6 +53,14 @@ import { activityRepository } from '../../db/repositories/activityRepository.ts'
 import { cropSeasonRepository } from '../../db/repositories/cropSeasonRepository.ts';
 import { recommendationRepository } from '../../db/repositories/recommendationRepository.ts';
 import { compressImage } from '../../utils/photoUtils.ts';
+import {
+  analyzePlantPhoto,
+  type VisualAnalysisResult,
+} from '../../engine/visualAnalysisEngine.ts';
+import {
+  matchOptRelevance,
+  type OptRelevanceMatch,
+} from '../../engine/optRelevanceEngine.ts';
 import {
   Activity,
   ActivityCategory,
@@ -103,7 +121,7 @@ export function ActivityFormModal({
   const [amountKg, setAmountKg] = useState<string>('50');
   const [method, setMethod] = useState<string>('BROADCAST');
 
-  // --- State Khusus OPT (Ramah Pemula) ---
+  // --- State Khusus OPT (Ramah Pemula & Berbasis Bukti Lapang) ---
   const [isUnknownOpt, setIsUnknownOpt] = useState<boolean>(true);
   const [selectedOptId, setSelectedOptId] = useState<string>('');
   const [customOptName, setCustomOptName] = useState<string>('');
@@ -112,6 +130,13 @@ export function ActivityFormModal({
   const [symptomPreset, setSymptomPreset] = useState<string>('');
   const [optPhoto, setOptPhoto] = useState<string | null>(null);
   const [isCompressingPhoto, setIsCompressingPhoto] = useState<boolean>(false);
+  const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState<boolean>(false);
+  const [visualAnalysisResult, setVisualAnalysisResult] = useState<VisualAnalysisResult | null>(null);
+
+  // --- Accordion & Toggle State untuk Rujukan Relevan ---
+  const [showAllCandidates, setShowAllCandidates] = useState<boolean>(false);
+  const [expandedPhtOptId, setExpandedPhtOptId] = useState<string | null>(null);
+  const [expandedChemicalOptId, setExpandedChemicalOptId] = useState<string | null>(null);
 
   // --- State Sukses Pengamatan OPT ---
   const [submittedOptSummary, setSubmittedOptSummary] = useState<{
@@ -122,6 +147,10 @@ export function ActivityFormModal({
     symptoms: string;
     optId?: string;
     isUnknown: boolean;
+    photo?: string | null;
+    visualClues?: string[];
+    topCandidateName?: string;
+    topCandidateId?: string;
   } | null>(null);
 
   // --- State Khusus Pengairan ---
@@ -147,7 +176,12 @@ export function ActivityFormModal({
       setNotes('');
       setError(null);
       setOptPhoto(null);
+      setVisualAnalysisResult(null);
       setIsCompressingPhoto(false);
+      setIsAnalyzingPhoto(false);
+      setShowAllCandidates(false);
+      setExpandedPhtOptId(null);
+      setExpandedChemicalOptId(null);
       setSubmittedOptSummary(null);
       if (fertilizers.length > 0) {
         setSelectedFertId(fertilizers[0].id);
@@ -158,10 +192,8 @@ export function ActivityFormModal({
     }
   }, [isOpen, initialCategory, fertilizers, opts]);
 
-  if (!isOpen || !land || !activeSeason) return null;
-
   // Hitung snapshot HST berdasarkan tanggal aktivitas
-  const hstResult = activeSeason.plantingDate
+  const hstResult = activeSeason?.plantingDate
     ? calculateHST(activeSeason.plantingDate, activityDate)
     : { isValid: true, hst: 0 };
   const hstSnapshot = hstResult.isValid && hstResult.hst !== null ? hstResult.hst : 0;
@@ -173,7 +205,65 @@ export function ActivityFormModal({
     ? calculateNutrients(currentKg, selectedFert.nutrientComposition)
     : calculateNutrients(currentKg, null);
 
+  // Fungsi kompresi dan analisis foto tanaman
+  const handlePhotoUpload = async (file: File) => {
+    if (!file) return;
+    setIsCompressingPhoto(true);
+    setIsAnalyzingPhoto(true);
+    setError(null);
+    try {
+      const compressed = await compressImage(file, {
+        maxWidth: 800,
+        maxHeight: 800,
+        quality: 0.72,
+      });
+      setOptPhoto(compressed);
+      setIsCompressingPhoto(false);
+
+      // Jalankan visual analysis engine di client-side
+      const analysis = await analyzePlantPhoto(compressed, optLocation);
+      setVisualAnalysisResult(analysis);
+    } catch (err) {
+      console.warn('Gagal memproses foto tanaman:', err);
+      setError('Gagal memproses foto. Anda tetap dapat melanjutkan pencatatan secara manual.');
+    } finally {
+      setIsCompressingPhoto(false);
+      setIsAnalyzingPhoto(false);
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    setOptPhoto(null);
+    setVisualAnalysisResult(null);
+  };
+
+  // Kalkulasi Rujukan Relevan & Kandidat OPT secara real-time
+  const relevanceMatches = useMemo<OptRelevanceMatch[]>(() => {
+    if (category !== 'OPT' || opts.length === 0) return [];
+
+    let query = '';
+    if (isUnknownOpt) {
+      query = [customOptName, symptomPreset, notes].filter(Boolean).join(' ');
+    } else {
+      const target = opts.find((o) => o.id === selectedOptId);
+      query = [target?.commonName, customOptName, symptomPreset, notes].filter(Boolean).join(' ');
+    }
+
+    const visualTokens = visualAnalysisResult?.detectedKeywords || [];
+    const visualClues = visualAnalysisResult?.visualClues || [];
+
+    return matchOptRelevance(opts, query, {
+      attackLocations: [optLocation],
+      visualTokens,
+      visualClues,
+      minScoreThreshold: 6,
+    });
+  }, [category, opts, isUnknownOpt, selectedOptId, customOptName, symptomPreset, notes, optLocation, visualAnalysisResult]);
+
+  if (!isOpen || !land || !activeSeason) return null;
+
   const getTitle = () => {
+    if (submittedOptSummary) return 'Pengamatan Telah Dicatat';
     if (!category) return 'Pilih Jenis Kegiatan Lapang';
     switch (category) {
       case 'PLANTING':
@@ -257,6 +347,8 @@ export function ActivityFormModal({
 
         const finalSymptom = [symptomPreset, notes.trim()].filter(Boolean).join(' - ') || 'Gejala terlihat di petak tanaman';
 
+        const candidateIds = relevanceMatches.slice(0, 3).map((m) => m.opt.id);
+
         const optObs: OptObservation = {
           id: `obs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           activityId,
@@ -267,6 +359,9 @@ export function ActivityFormModal({
           attackLocation: [optLocation],
           observedSymptoms: finalSymptom,
           photoLocalUri: optPhoto || undefined,
+          visualClues: visualAnalysisResult?.visualClues,
+          candidateOptIds: candidateIds,
+          photoAnalysisNotes: visualAnalysisResult?.clarityMessage,
           createdAt: now,
           updatedAt: now,
         };
@@ -288,6 +383,8 @@ export function ActivityFormModal({
           HEAVY: 'Berat (Populasi meluas)',
         };
 
+        const topCandidate = relevanceMatches[0];
+
         setSubmittedOptSummary({
           optName: finalOptName,
           locationLabel: locationLabels[optLocation] || optLocation,
@@ -296,6 +393,10 @@ export function ActivityFormModal({
           symptoms: finalSymptom,
           optId: isUnknownOpt ? undefined : selectedOptId,
           isUnknown: isUnknownOpt,
+          photo: optPhoto,
+          visualClues: visualAnalysisResult?.visualClues,
+          topCandidateName: topCandidate ? topCandidate.opt.commonName : undefined,
+          topCandidateId: topCandidate ? topCandidate.opt.id : undefined,
         });
 
         // Trigger background refresh
@@ -318,36 +419,29 @@ export function ActivityFormModal({
         actionDescription = `Panen padi dengan hasil ${yieldKg} kg`;
         await activityRepository.create(baseActivity);
 
-        // Jika dicentang selesaikan musim tanam
         if (completeSeason) {
           await cropSeasonRepository.update(activeSeason.id, {
             status: 'COMPLETED',
             harvestDate: activityDate,
-            yieldKg: yieldKg > 0 ? yieldKg : undefined,
+            yieldKg,
           });
         }
       } else if (category === 'PLANTING') {
-        const ageNum = parseInt(seedlingAgeDays, 10);
-        if (isNaN(ageNum) || ageNum < 0) {
-          throw new Error('Umur bibit harus berupa angka positif atau nol');
-        }
         baseActivity.notes = `Tanam Padi: Sistem ${plantingSystem} • Umur bibit ${seedlingAgeDays} HSS${notes ? ` • ${notes}` : ''}`;
         actionDescription = `Penanaman padi sistem ${plantingSystem}`;
         await activityRepository.create(baseActivity);
-      } else {
-        await activityRepository.create(baseActivity);
       }
 
-      // Jika kegiatan ini merupakan Tindakan Aktual dari Tiga Jalur Keputusan:
+      // Catat ActualAction jika dipicu dari Keputusan Petani
       if (decisionId) {
         const actualAction: ActualAction = {
           id: `act-action-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           cropSeasonId: activeSeason.id,
-          activityId: baseActivity.id,
           decisionId,
-          actionType: `${category}_ACTION`,
-          description: actionDescription || baseActivity.notes || 'Tindakan aktual lapangan',
-          performedAt: activityDate,
+          activityId,
+          actionType: category as any,
+          description: actionDescription,
+          performedAt: new Date(activityDate).toISOString(),
           createdAt: now,
         };
         await recommendationRepository.recordActualAction(actualAction);
@@ -356,7 +450,8 @@ export function ActivityFormModal({
       onSuccess();
       onClose();
     } catch (err: any) {
-      setError(err?.message || 'Gagal menyimpan catatan kegiatan');
+      console.error('Gagal mencatat kegiatan:', err);
+      setError(err.message || 'Terjadi kesalahan saat menyimpan catatan kegiatan.');
     } finally {
       setIsSubmitting(false);
     }
@@ -366,33 +461,32 @@ export function ActivityFormModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={submittedOptSummary ? 'Pengamatan Dicatat' : getTitle()}
-      subtitle={`Lahan: ${land.name} • Varietas: ${activeSeason.varietyName || 'Padi'} (~${hstSnapshot} HST)`}
+      title={getTitle()}
+      maxWidth="lg"
     >
-      {/* Jika Pengamatan OPT Baru Saja Disimpan: Tampilkan Ringkasan Visual Kontekstual */}
+      {/* TAMPILAN SUKSES PENGAMATAN OPT */}
       {submittedOptSummary ? (
-        <div className="space-y-4 py-1 animate-in fade-in duration-200">
-          {/* Header Sukses Ramah */}
-          <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 mt-0.5">
-              <CheckCircle2 className="w-6 h-6 text-emerald-700" />
+        <div className="space-y-4 py-1">
+          <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-start gap-3 shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-emerald-700 text-white flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-6 h-6" />
             </div>
             <div className="space-y-0.5">
               <h3 className="text-sm sm:text-base font-bold text-emerald-950">
-                Pengamatan Anda Sudah Dicatat
+                Pengamatan Lapang Berhasil Dicatat
               </h3>
               <p className="text-xs text-emerald-800 leading-relaxed">
-                Data pengamatan lapang telah tersimpan aman di perangkat dan terhubung dengan saran budidaya Beranda.
+                Data gejala telah disimpan di perangkat Anda dan siap dihubungkan dengan panduan PHT terpadu.
               </p>
             </div>
           </div>
 
           {/* Ringkasan Visual: Pengamatan Anda */}
-          <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-2.5 shadow-xs">
+          <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-3 shadow-xs">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <span className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
                 <Bug className="w-4 h-4 text-amber-700" />
-                Pengamatan Anda
+                Data Pengamatan Lapang
               </span>
               <span className="text-[11px] text-slate-500 font-medium">
                 {activityDate} • {hstSnapshot} HST
@@ -401,12 +495,12 @@ export function ActivityFormModal({
 
             <div className="space-y-2 text-xs">
               <div className="flex justify-between items-start gap-2">
-                <span className="text-slate-500 shrink-0">OPT / Sasaran:</span>
+                <span className="text-slate-500 shrink-0">Sasaran / Gejala:</span>
                 <span className="font-bold text-slate-900 text-right">
                   {submittedOptSummary.optName}
                   {submittedOptSummary.isUnknown && (
                     <span className="ml-1.5 text-[10px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-normal">
-                      Belum teridentifikasi
+                      Belum Teridentifikasi
                     </span>
                   )}
                 </span>
@@ -434,8 +528,28 @@ export function ActivityFormModal({
                 </span>
               </div>
 
+              {submittedOptSummary.photo && (
+                <div className="pt-2 border-t border-slate-100 flex items-start gap-3">
+                  <img
+                    src={submittedOptSummary.photo}
+                    alt="Foto Pengamatan"
+                    className="w-20 h-16 object-cover rounded-xl border border-slate-200 shrink-0"
+                  />
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-bold text-slate-700 block">
+                      Foto Gejala Lapang Disertakan
+                    </span>
+                    {submittedOptSummary.visualClues && submittedOptSummary.visualClues.length > 0 && (
+                      <p className="text-[10px] text-slate-600">
+                        Petunjuk visual: {submittedOptSummary.visualClues.slice(0, 2).join('; ')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="pt-2 border-t border-slate-100">
-                <span className="text-slate-500 block mb-1">Gejala yang Diamati:</span>
+                <span className="text-slate-500 block mb-1">Catatan Gejala:</span>
                 <p className="text-slate-700 bg-slate-50 p-2.5 rounded-xl text-xs leading-relaxed font-medium">
                   {submittedOptSummary.symptoms}
                 </p>
@@ -443,16 +557,16 @@ export function ActivityFormModal({
             </div>
           </div>
 
-          {/* Jembatan Visual: Berdasarkan Pengamatan Anda */}
-          <div className="p-4 bg-amber-50/70 rounded-2xl border border-amber-200/90 space-y-1.5">
-            <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+          {/* Jembatan Visual ke Pustaka PHT */}
+          <div className="p-4 bg-amber-50/80 rounded-2xl border border-amber-200/90 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-950">
               <Sparkles className="w-4 h-4 text-amber-700" />
-              Berdasarkan pengamatan Anda...
-            </span>
+              <span>Rujukan Agronomi Berdasarkan Pengamatan Ini</span>
+            </div>
             <p className="text-xs text-amber-900 leading-relaxed">
-              {submittedOptSummary.isUnknown
-                ? 'Karena nama OPT belum teridentifikasi pasti, Anda dapat membuka rujukan pembanding gejala lapang dan melihat musuh alami yang relevan untuk membantu pengamatan lebih lanjut.'
-                : `Saran pertimbangan lapang berbasis 4 Pilar PHT telah diperbarui. Anda dapat membuka panduan pengendalian terpadu dan daftar musuh alami untuk ${submittedOptSummary.optName}.`}
+              {submittedOptSummary.topCandidateName
+                ? `Rujukan pembanding terdekat adalah ${submittedOptSummary.topCandidateName}. Buka panduan PHT terpadu untuk melihat langkah teknis, sanitasi, dan musuh alami pendukung.`
+                : 'Sistem telah memperbarui analisis lapang Anda. Buka pustaka PHT untuk mempelajari tindakan kultur teknis dan musuh alami.'}
             </p>
           </div>
 
@@ -461,8 +575,8 @@ export function ActivityFormModal({
             <button
               type="button"
               onClick={() => {
-                const queryOrId = submittedOptSummary.optId;
-                const queryText = submittedOptSummary.isUnknown
+                const queryOrId = submittedOptSummary.optId || submittedOptSummary.topCandidateId;
+                const queryText = submittedOptSummary.isUnknown && !submittedOptSummary.topCandidateId
                   ? submittedOptSummary.symptoms || submittedOptSummary.optName
                   : undefined;
 
@@ -487,6 +601,7 @@ export function ActivityFormModal({
           </div>
         </div>
       ) : !category ? (
+        /* MENU PILIHAN KATEGORI KEGIATAN */
         <div className="space-y-3">
           <p className="text-xs text-slate-500 font-medium">
             Pilih jenis kegiatan yang Anda lakukan di petak sawah:
@@ -549,7 +664,7 @@ export function ActivityFormModal({
               </div>
               <div>
                 <span className="text-xs sm:text-sm font-bold text-slate-900 block">OPT / Hama</span>
-                <span className="text-[11px] text-slate-500">Pengamatan gejala lapangan</span>
+                <span className="text-[11px] text-slate-500">Pengamatan gejala & foto</span>
               </div>
             </button>
 
@@ -564,7 +679,7 @@ export function ActivityFormModal({
               </div>
               <div>
                 <span className="text-xs sm:text-sm font-bold text-slate-900 block">Perawatan</span>
-                <span className="text-[11px] text-slate-500">Penyiangan & penyulaman</span>
+                <span className="text-[11px] text-slate-500">Matun / penyiangan gulma</span>
               </div>
             </button>
 
@@ -574,42 +689,43 @@ export function ActivityFormModal({
               onClick={() => setCategory('HARVEST')}
               className="p-4 bg-white hover:bg-yellow-50/80 active:bg-yellow-100 border border-slate-200 hover:border-yellow-300 rounded-2xl text-left transition-all group flex flex-col justify-between min-h-[96px] shadow-xs"
             >
-              <div className="w-10 h-10 rounded-xl bg-yellow-100 text-yellow-900 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <div className="w-10 h-10 rounded-xl bg-yellow-100 text-yellow-800 flex items-center justify-center group-hover:scale-105 transition-transform">
                 <Wheat className="w-5 h-5" />
               </div>
               <div>
                 <span className="text-xs sm:text-sm font-bold text-slate-900 block">Panen</span>
-                <span className="text-[11px] text-slate-500">Hasil gabah & akhir musim</span>
+                <span className="text-[11px] text-slate-500">Catat hasil & tutup musim</span>
               </div>
             </button>
           </div>
         </div>
       ) : (
-        /* 2. Form Progressive Sesuai Kategori */
+        /* FORM AKTIVITAS UTAMA */
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-medium flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Tombol ganti kategori */}
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          {/* Header Pemilihan Kategori */}
+          <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-200">
             <button
               type="button"
               onClick={() => setCategory(null)}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 min-h-[36px] px-2 py-1 rounded-lg hover:bg-slate-200 transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Ganti Jenis Kegiatan</span>
+              <span>Ganti Kategori</span>
             </button>
-            <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-800 text-[11px] font-bold rounded-full border border-emerald-200">
-              Kategori: {getTitle().replace('Catat ', '')}
+
+            <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full">
+              {category}
             </span>
           </div>
 
-          {/* Tanggal & Estimasi HST */}
+          {error && (
+            <div className="p-3.5 bg-red-50 text-red-800 rounded-xl text-xs flex items-start gap-2 border border-red-200">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
+              <div className="flex-1">{error}</div>
+            </div>
+          )}
+
+          {/* Baris Tanggal & Informasi HST */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -619,62 +735,49 @@ export function ActivityFormModal({
                 type="date"
                 value={activityDate}
                 onChange={(e) => setActivityDate(e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
                 required
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Umur Tanaman (Snapshot)
-              </label>
-              <div className="px-3 py-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-sm font-bold text-emerald-900 min-h-[44px] flex items-center justify-between">
-                <span>{hstSnapshot} Hari Setelah Tanam</span>
-                <span className="text-[10px] font-semibold text-emerald-700 font-mono">HST</span>
+            <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200/80 flex items-center justify-between">
+              <div>
+                <span className="text-[11px] text-emerald-800 block font-medium">Umur Tanaman:</span>
+                <span className="text-sm font-extrabold text-emerald-950">
+                  {hstSnapshot >= 0 ? `${hstSnapshot} HST` : 'Pra-Tanam'}
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-[11px] text-emerald-800 block font-medium">Lahan:</span>
+                <span className="text-xs font-bold text-slate-800">{land.name}</span>
               </div>
             </div>
           </div>
 
           {/* --- FORM 1: PEMUPUKAN (FERTILIZER) --- */}
           {category === 'FERTILIZER' && (
-            <div className="space-y-3 p-3.5 bg-emerald-50/50 rounded-2xl border border-emerald-200/80">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  1. Pilih Jenis Pupuk <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={selectedFertId}
-                  onChange={(e) => setSelectedFertId(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
-                >
-                  {fertilizers.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name} {f.formula ? `(${f.formula})` : ''}
-                    </option>
-                  ))}
-                  <option value="">Lainnya / Pupuk Organik / Racikan Sendiri</option>
-                </select>
-              </div>
-
-              {!selectedFertId && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Nama Pupuk Khusus / Racikan
-                  </label>
-                  <input
-                    type="text"
-                    value={customFertName}
-                    onChange={(e) => setCustomFertName(e.target.value)}
-                    placeholder="Contoh: Kompos Kandang Matang / Pupuk Organik Cair"
-                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
-                  />
-                </div>
-              )}
-
+            <div className="space-y-3 p-3.5 bg-emerald-50/40 rounded-2xl border border-emerald-200/80">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    2. Jumlah Pupuk (Kg) <span className="text-red-500">*</span>
+                    Jenis Pupuk <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={selectedFertId}
+                    onChange={(e) => setSelectedFertId(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                  >
+                    {fertilizers.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name} ({f.formula})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Jumlah Diberikan (Kg) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -682,64 +785,55 @@ export function ActivityFormModal({
                     min="0.1"
                     value={amountKg}
                     onChange={(e) => setAmountKg(e.target.value)}
+                    placeholder="Contoh: 50"
                     className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
                     required
                   />
                 </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    3. Cara Aplikasi
-                  </label>
-                  <select
-                    value={method}
-                    onChange={(e) => setMethod(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
-                  >
-                    <option value="BROADCAST">Tabur Merata (Broadcast)</option>
-                    <option value="BAND">Larik / Alur di Sela Legowo</option>
-                    <option value="DRENCH">Kocor / Larutan</option>
-                    <option value="FOLIAR">Semprot Daun</option>
-                  </select>
-                </div>
               </div>
 
-              {/* Realtime Nutrient Engine Preview */}
-              {selectedFert && (
-                <div className="p-2.5 bg-white rounded-xl border border-emerald-200 text-xs space-y-1">
-                  <span className="text-[11px] font-bold text-emerald-900 block">
-                    Kandungan Hara Terhitung Otomatis (nutrientEngine):
+              {/* Preview Hara Otomatis */}
+              <div className="p-3 bg-white rounded-xl border border-emerald-200 shadow-2xs space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-emerald-900 flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                    Pasokan Hara Bersih Terhitung:
                   </span>
-                  <div className="flex flex-wrap gap-2 text-slate-700 font-medium">
-                    <span className="px-2 py-0.5 bg-emerald-50 rounded border border-emerald-200">
-                      N: <strong>{nutrientPreview.primarySummary.N_kg.toFixed(1)} kg</strong>
-                    </span>
-                    <span className="px-2 py-0.5 bg-emerald-50 rounded border border-emerald-200">
-                      P₂O₅: <strong>{nutrientPreview.primarySummary.P2O5_kg.toFixed(1)} kg</strong>
-                    </span>
-                    <span className="px-2 py-0.5 bg-emerald-50 rounded border border-emerald-200">
-                      K₂O: <strong>{nutrientPreview.primarySummary.K2O_kg.toFixed(1)} kg</strong>
-                    </span>
-                    {nutrientPreview.primarySummary.S_kg > 0 && (
-                      <span className="px-2 py-0.5 bg-emerald-50 rounded border border-emerald-200">
-                        S: <strong>{nutrientPreview.primarySummary.S_kg.toFixed(1)} kg</strong>
-                      </span>
-                    )}
+                  <span className="text-[11px] text-slate-500">Otomatis dihitung mesin hara</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-slate-100">
+                  <div className="p-1.5 bg-emerald-50 rounded-lg">
+                    <span className="text-[10px] text-slate-500 block">Nitrogen (N)</span>
+                    <strong className="text-xs text-emerald-950 font-extrabold">
+                      {nutrientPreview.primarySummary.N_kg.toFixed(1)} kg
+                    </strong>
+                  </div>
+                  <div className="p-1.5 bg-emerald-50 rounded-lg">
+                    <span className="text-[10px] text-slate-500 block">Fosfat (P₂O₅)</span>
+                    <strong className="text-xs text-emerald-950 font-extrabold">
+                      {nutrientPreview.primarySummary.P2O5_kg.toFixed(1)} kg
+                    </strong>
+                  </div>
+                  <div className="p-1.5 bg-emerald-50 rounded-lg">
+                    <span className="text-[10px] text-slate-500 block">Kalium (K₂O)</span>
+                    <strong className="text-xs text-emerald-950 font-extrabold">
+                      {nutrientPreview.primarySummary.K2O_kg.toFixed(1)} kg
+                    </strong>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
-          {/* --- FORM 2: PENGAMATAN OPT (RAMAH PEMULA) --- */}
+          {/* --- FORM 2: PENGAMATAN OPT TERPADU (TERMASUK ANALISIS FOTO & RUJUKAN AGRONOMI) --- */}
           {category === 'OPT' && (
-            <div className="space-y-4 p-4 bg-amber-50/50 rounded-2xl border border-amber-200/80">
-              {/* Mode Identifikasi: Terdaftar vs Belum Tahu */}
+            <div className="space-y-4 p-3.5 bg-amber-50/50 rounded-2xl border border-amber-200/80">
+              {/* Pilihan Metode Input: Terdaftar vs Gejala Bebas */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                  Cara Pencatatan OPT / Hama
+                  Pendekatan Identifikasi Hama / Penyakit
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setIsUnknownOpt(false)}
@@ -788,17 +882,17 @@ export function ActivityFormModal({
               ) : (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Nama Sementara / Deskripsi Singkat (Opsional)
+                    Nama Sementara / Deskripsi Singkat Bebas
                   </label>
                   <input
                     type="text"
                     value={customOptName}
                     onChange={(e) => setCustomOptName(e.target.value)}
-                    placeholder="Contoh: Daun menguning bercak coklat / Ulat penggerek"
+                    placeholder="Contoh: Daun menguning dan rumpun kerdil / Ulat pelipat daun"
                     className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-600 min-h-[44px]"
                   />
-                  <p className="text-[11px] text-amber-800 mt-1">
-                    Anda tidak perlu menebak nama pasti; sistem akan menyelaraskan panduan berdasarkan gejala dan bagian tanaman.
+                  <p className="text-[11px] text-amber-900/80 mt-1">
+                    Masukkan apa yang terlihat di petak. Sistem akan mencari rujukan pembanding yang paling relevan.
                   </p>
                 </div>
               )}
@@ -822,7 +916,7 @@ export function ActivityFormModal({
                       onClick={() => setOptLocation(loc.id)}
                       className={`py-2 px-3 text-xs font-bold rounded-xl border text-center transition-all min-h-[44px] flex items-center justify-center ${
                         optLocation === loc.id
-                          ? 'bg-amber-100 text-amber-950 border-amber-400 font-extrabold shadow-2xs'
+                          ? 'bg-amber-100 text-amber-950 border-amber-400 font-extrabold shadow-2xs ring-1 ring-amber-400'
                           : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50/50'
                       }`}
                     >
@@ -903,10 +997,10 @@ export function ActivityFormModal({
                     <button
                       key={sym}
                       type="button"
-                      onClick={() => setSymptomPreset(sym)}
+                      onClick={() => setSymptomPreset(symptomPreset === sym ? '' : sym)}
                       className={`px-3 py-2 text-xs rounded-xl font-medium transition-colors border min-h-[38px] ${
                         symptomPreset === sym
-                          ? 'bg-amber-700 text-white border-amber-700 font-bold'
+                          ? 'bg-amber-700 text-white border-amber-700 font-bold shadow-xs'
                           : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50'
                       }`}
                     >
@@ -916,72 +1010,431 @@ export function ActivityFormModal({
                 </div>
               </div>
 
-              {/* Foto Lapangan (Opsional) */}
-              <div className="pt-1">
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Camera className="w-3.5 h-3.5 text-amber-700" />
-                    <span>Foto Gejala di Sawah (Opsional)</span>
-                  </span>
-                  <span className="text-[11px] font-normal text-slate-500">
+              {/* FOTO GEJALA / TANAMAN (OPSIONAL) */}
+              <div className="p-3.5 bg-white rounded-2xl border border-amber-200 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-amber-700" />
+                    <span>Foto Gejala / Tanaman (Opsional)</span>
+                  </label>
+                  <span className="text-[11px] text-slate-500">
                     Otomatis dikompresi di perangkat
                   </span>
-                </label>
+                </div>
 
                 {optPhoto ? (
-                  <div className="relative inline-block border-2 border-amber-300 rounded-2xl overflow-hidden shadow-xs bg-slate-900">
-                    <img
-                      src={optPhoto}
-                      alt="Foto Gejala OPT"
-                      className="w-36 h-28 object-cover"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setOptPhoto(null)}
-                      className="absolute top-1.5 right-1.5 p-1 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-xs min-h-[32px] min-w-[32px] flex items-center justify-center"
-                      title="Hapus foto"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                  <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row items-start gap-3 p-3 bg-amber-50/50 rounded-xl border border-amber-200">
+                      <div className="relative rounded-xl overflow-hidden border border-amber-300 shrink-0 bg-slate-900">
+                        <img
+                          src={optPhoto}
+                          alt="Foto Gejala Tanaman"
+                          className="w-32 h-28 object-cover"
+                        />
+                      </div>
+
+                      <div className="flex-1 space-y-2 w-full">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-slate-800">
+                            Foto Gejala Terlampir
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleRemovePhoto}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Hapus Foto</span>
+                          </button>
+                        </div>
+
+                        {isAnalyzingPhoto ? (
+                          <div className="p-2.5 bg-white rounded-lg border border-amber-200 flex items-center gap-2 text-xs text-amber-900 font-medium">
+                            <Sparkles className="w-4 h-4 animate-spin text-amber-600" />
+                            <span>Menganalisis petunjuk visual dari foto...</span>
+                          </div>
+                        ) : visualAnalysisResult ? (
+                          <div className="p-2.5 bg-white rounded-xl border border-amber-200 space-y-1.5 text-xs">
+                            <span className="font-bold text-slate-800 flex items-center gap-1">
+                              <Eye className="w-3.5 h-3.5 text-amber-700" />
+                              Petunjuk Visual yang Terlihat:
+                            </span>
+
+                            {visualAnalysisResult.visualClues.length > 0 ? (
+                              <ul className="space-y-1 mt-1">
+                                {visualAnalysisResult.visualClues.map((clue, idx) => (
+                                  <li
+                                    key={idx}
+                                    className="flex items-start gap-1.5 text-[11px] text-slate-700 font-medium leading-relaxed"
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-600 mt-1.5 shrink-0" />
+                                    <span>{clue}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-[11px] text-slate-600">
+                                {visualAnalysisResult.summaryText}
+                              </p>
+                            )}
+
+                            {visualAnalysisResult.clarityStatus === 'BLURRY_OR_DARK' && (
+                              <div className="mt-1 p-2 bg-amber-50 rounded-lg text-[11px] text-amber-900 border border-amber-200">
+                                {visualAnalysisResult.clarityMessage}
+                              </div>
+                            )}
+
+                            <p className="text-[10px] text-slate-500 italic mt-1">
+                              Analisis foto digunakan sebagai petunjuk tambahan, bukan diagnosis mutlak. Petani tetap menjadi pengambil keputusan.
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 ) : (
-                  <div>
-                    <label
-                      htmlFor="opt-photo-input"
-                      className={`inline-flex items-center gap-2 px-3.5 py-2.5 bg-white border border-dashed border-amber-300 hover:border-amber-500 rounded-xl text-xs font-bold text-slate-700 hover:bg-amber-50/60 cursor-pointer transition-colors min-h-[44px] ${
-                        isCompressingPhoto ? 'opacity-60 pointer-events-none' : ''
-                      }`}
-                    >
-                      <ImageIcon className="w-4 h-4 text-amber-700" />
-                      <span>
-                        {isCompressingPhoto ? 'Mengompres Foto...' : 'Ambil Foto / Pilih Gambar'}
-                      </span>
-                    </label>
-                    <input
-                      id="opt-photo-input"
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={async (e: ChangeEvent<HTMLInputElement>) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        setIsCompressingPhoto(true);
-                        try {
-                          const compressed = await compressImage(file, {
-                            maxWidth: 800,
-                            maxHeight: 800,
-                            quality: 0.7,
-                          });
-                          setOptPhoto(compressed);
-                        } catch (err) {
-                          console.warn('Gagal memproses foto:', err);
-                          setError('Gagal memproses foto. Silakan coba lagi atau lanjutkan tanpa foto.');
-                        } finally {
-                          setIsCompressingPhoto(false);
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {/* Tombol Ambil Foto Kamera */}
+                      <label
+                        htmlFor="opt-camera-input"
+                        className={`py-3 px-3 bg-white hover:bg-amber-50/80 active:bg-amber-100 border border-slate-200 hover:border-amber-400 rounded-xl text-xs font-bold text-slate-800 transition-colors flex items-center justify-center gap-2 cursor-pointer min-h-[44px] shadow-2xs ${
+                          isCompressingPhoto ? 'opacity-60 pointer-events-none' : ''
+                        }`}
+                      >
+                        <Camera className="w-4 h-4 text-amber-700" />
+                        <span>{isCompressingPhoto ? 'Memproses...' : 'Ambil Foto (Kamera)'}</span>
+                      </label>
+                      <input
+                        id="opt-camera-input"
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                          const file = e.target.files?.[0];
+                          if (file) handlePhotoUpload(file);
                           e.target.value = '';
-                        }
-                      }}
-                    />
+                        }}
+                      />
+
+                      {/* Tombol Pilih dari Galeri */}
+                      <label
+                        htmlFor="opt-gallery-input"
+                        className={`py-3 px-3 bg-white hover:bg-amber-50/80 active:bg-amber-100 border border-slate-200 hover:border-amber-400 rounded-xl text-xs font-bold text-slate-800 transition-colors flex items-center justify-center gap-2 cursor-pointer min-h-[44px] shadow-2xs ${
+                          isCompressingPhoto ? 'opacity-60 pointer-events-none' : ''
+                        }`}
+                      >
+                        <ImageIcon className="w-4 h-4 text-amber-700" />
+                        <span>Pilih dari Galeri</span>
+                      </label>
+                      <input
+                        id="opt-gallery-input"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                          const file = e.target.files?.[0];
+                          if (file) handlePhotoUpload(file);
+                          e.target.value = '';
+                        }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Foto membantu mendeteksi indikasi perubahan warna, bercak, atau kondisi fisik tanaman.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* RUJUKAN PALING RELEVAN & KANDIDAT OPT */}
+              <div className="space-y-3 pt-1">
+                {/* Konteks Pengamatan Saat Ini */}
+                <div className="p-3 bg-slate-900 text-white rounded-2xl space-y-1.5 shadow-xs">
+                  <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-1.5">
+                    <span className="font-bold flex items-center gap-1.5 text-amber-400">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Konteks Pengamatan Anda
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {hstSnapshot} HST • {land.name}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-slate-300 pt-0.5">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Bagian Tanaman:</span>
+                      <strong className="text-white">
+                        {optLocation === 'LEAF'
+                          ? 'Daun / Pelepah'
+                          : optLocation === 'STEM'
+                          ? 'Batang / Pangkal'
+                          : optLocation === 'ROOT'
+                          ? 'Akar Tanaman'
+                          : optLocation === 'PANICLE'
+                          ? 'Malai / Gabah'
+                          : 'Seluruh Rumpun'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Tingkat Serangan:</span>
+                      <strong className="text-white">
+                        {severity === 'LIGHT' ? 'Ringan' : severity === 'MEDIUM' ? 'Sedang' : 'Berat'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Bukti Foto:</span>
+                      <strong className="text-white">
+                        {optPhoto ? 'Terlampir' : 'Tidak Ada'}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Hasil Relevansi & Kandidat */}
+                {relevanceMatches.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <BookOpen className="w-3.5 h-3.5 text-amber-700" />
+                        <span>Rujukan Paling Relevan ({relevanceMatches.length} Ditemukan)</span>
+                      </h4>
+                      <span className="text-[10px] text-slate-500">
+                        {relevanceMatches[0]?.isExactMatch ? 'Kecocokan Master' : 'Bahan Pembanding'}
+                      </span>
+                    </div>
+
+                    {/* Kandidat Utama (Top Candidate) */}
+                    {relevanceMatches.slice(0, showAllCandidates ? undefined : 1).map((match, idx) => {
+                      const isExpandedPht = expandedPhtOptId === match.opt.id || (!showAllCandidates && idx === 0);
+                      const isExpandedChem = expandedChemicalOptId === match.opt.id;
+
+                      return (
+                        <div
+                          key={match.opt.id}
+                          className={`p-4 rounded-2xl border transition-all space-y-3 shadow-xs ${
+                            idx === 0
+                              ? 'bg-white border-amber-400 ring-1 ring-amber-300'
+                              : 'bg-white border-slate-200'
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h5 className="text-sm font-bold text-slate-900">
+                                  {match.opt.commonName}
+                                </h5>
+                                <span
+                                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                    match.isExactMatch
+                                      ? 'bg-emerald-100 text-emerald-950'
+                                      : 'bg-amber-100 text-amber-950'
+                                  }`}
+                                >
+                                  {match.relevanceLabel}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-slate-500 italic block mt-0.5">
+                                {match.opt.scientificName}
+                              </span>
+                            </div>
+
+                            {/* Tombol Terapkan Sebagai Pilihan Ini */}
+                            {isUnknownOpt && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedOptId(match.opt.id);
+                                  setIsUnknownOpt(false);
+                                }}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold rounded-xl border border-amber-300 transition-colors self-start sm:self-auto min-h-[36px]"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Pilih OPT Ini</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Alasan Kemiripan & Detail Gejala Cocok */}
+                          <div className="p-2.5 bg-amber-50/60 rounded-xl text-xs space-y-1.5 border border-amber-200/70">
+                            <div className="text-amber-950 font-semibold leading-relaxed">
+                              {match.similarityReason}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              {match.matchedSymptoms.map((sym, i) => (
+                                <span
+                                  key={i}
+                                  className="text-[10px] bg-white text-slate-700 px-2 py-0.5 rounded-md border border-amber-200 font-medium"
+                                >
+                                  Gejala: {sym}
+                                </span>
+                              ))}
+                              {match.matchedLocations.map((loc, i) => (
+                                <span
+                                  key={i}
+                                  className="text-[10px] bg-white text-slate-700 px-2 py-0.5 rounded-md border border-amber-200 font-medium"
+                                >
+                                  Bagian: {loc}
+                                </span>
+                              ))}
+                              {match.matchedVisualClues.map((vClue, i) => (
+                                <span
+                                  key={i}
+                                  className="text-[10px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md border border-amber-300 font-medium"
+                                >
+                                  Visual: {vClue}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* PHT / PENANGANAN NON-KIMIA TERLEBIH DAHULU (7 TAHAPAN) */}
+                          <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-2">
+                            <div
+                              onClick={() => setExpandedPhtOptId(isExpandedPht ? null : match.opt.id)}
+                              className="flex items-center justify-between cursor-pointer"
+                            >
+                              <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                                <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                                <span>Panduan PHT & Penanganan Non-Kimia (4 Pilar PHT)</span>
+                              </span>
+                              <button type="button" className="text-emerald-800 p-1">
+                                {isExpandedPht ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              </button>
+                            </div>
+
+                            {isExpandedPht && (
+                              <div className="space-y-2 pt-2 border-t border-emerald-200 text-xs">
+                                {match.phtSteps.map((step) => (
+                                  <div
+                                    key={step.stepNumber}
+                                    className="p-2 bg-white rounded-lg border border-emerald-100 space-y-0.5"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-4 h-4 rounded-full bg-emerald-700 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                                        {step.stepNumber}
+                                      </span>
+                                      <span className="text-[11px] font-bold text-slate-800">
+                                        {step.actionTitle}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-600 pl-6 leading-relaxed">
+                                      {step.description}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* PILIHAN PENGENDALIAN KIMIA (OPSI LANJUTAN) */}
+                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                            <div
+                              onClick={() => setExpandedChemicalOptId(isExpandedChem ? null : match.opt.id)}
+                              className="flex items-center justify-between cursor-pointer"
+                            >
+                              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                <FlaskConical className="w-4 h-4 text-slate-500" />
+                                <span>Pilihan Pengendalian Kimia (Opsi Lanjutan)</span>
+                              </span>
+                              <button type="button" className="text-slate-600 p-1">
+                                {isExpandedChem ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              </button>
+                            </div>
+
+                            {isExpandedChem && (
+                              <div className="space-y-2 pt-2 border-t border-slate-200 text-xs">
+                                {match.chemicalOptions.hasChemicalData ? (
+                                  <div className="space-y-2">
+                                    <div>
+                                      <span className="text-[11px] font-bold text-slate-700 block mb-1">
+                                        Bahan Aktif Terdaftar di Pustaka:
+                                      </span>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {match.chemicalOptions.activeIngredients.map((ing, i) => (
+                                          <span
+                                            key={i}
+                                            className="px-2 py-0.5 bg-white border border-slate-300 rounded text-[11px] font-semibold text-slate-800"
+                                          >
+                                            {ing}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {match.chemicalOptions.resistanceNotes && (
+                                      <div className="p-2 bg-amber-50 rounded-lg border border-amber-200 text-[11px] text-amber-900">
+                                        <strong>Catatan Resistensi:</strong> {match.chemicalOptions.resistanceNotes}
+                                      </div>
+                                    )}
+
+                                    <p className="text-[10px] text-slate-500 leading-relaxed italic">
+                                      {match.chemicalOptions.cautionaryNotice}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <p className="text-[11px] text-slate-500">
+                                    Belum ada catatan bahan aktif khusus. Utamakan penanganan budidaya non-kimia dan konsultasikan dengan petugas POPT setempat.
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Tombol Lihat Panduan Lengkap PHT */}
+                          {onNavigateToKnowledge && (
+                            <div className="pt-1 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onClose();
+                                  onNavigateToKnowledge('opt', match.opt.id);
+                                }}
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 hover:text-emerald-950 hover:underline min-h-[36px]"
+                              >
+                                <BookOpen className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>Buka Panduan Lengkap di Pustaka PHT</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Tombol Bandingkan dengan Rujukan Lain */}
+                    {relevanceMatches.length > 1 && (
+                      <div className="pt-1 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setShowAllCandidates(!showAllCandidates)}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-amber-900 bg-amber-100/80 hover:bg-amber-200 px-4 py-2 rounded-xl transition-colors min-h-[40px]"
+                        >
+                          <span>
+                            {showAllCandidates
+                              ? 'Tampilkan Rujukan Teratas Saja'
+                              : `Bandingkan dengan ${relevanceMatches.length - 1} Rujukan Lain`}
+                          </span>
+                          {showAllCandidates ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-2 text-xs text-slate-600 shadow-2xs">
+                    <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <HelpCircle className="w-4 h-4 text-slate-500" />
+                      <span>Belum ditemukan rujukan yang cukup dekat</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed">
+                      Saran pengamatan tambahan:
+                    </p>
+                    <ul className="list-disc list-inside text-[11px] space-y-0.5 text-slate-600 pl-1">
+                      <li>Periksa bagian pangkal batang di dekat permukaan air sawah.</li>
+                      <li>Periksa apakah ada kelompok telur atau keberadaan serangga kecil di bawah daun.</li>
+                      <li>Sertakan foto tanaman yang lebih jelas atau perbarui catatan gejala bebas.</li>
+                    </ul>
+                    <p className="text-[11px] text-slate-500 italic pt-1">
+                      Anda tetap dapat menyimpan catatan pengamatan ini untuk memantau perkembangan di hari berikutnya.
+                    </p>
                   </div>
                 )}
               </div>

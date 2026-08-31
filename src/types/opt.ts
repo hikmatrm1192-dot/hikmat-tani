@@ -69,6 +69,9 @@ export interface OptObservation {
   attackLocation: AttackLocation[];
   observedSymptoms?: string;
   photoLocalUri?: string;       // Path lokal foto terkompresi (opsional)
+  visualClues?: string[];       // Petunjuk visual yang terdeteksi dari foto (opsional)
+  candidateOptIds?: EntityId[]; // Kandidat OPT rujukan relevan (opsional)
+  photoAnalysisNotes?: string;  // Catatan analisis visual atau kualitas foto (opsional)
   actionTaken?: string;         // Tindakan yang langsung dilakukan petani
   createdAt: ISODateString;
   updatedAt: ISODateString;

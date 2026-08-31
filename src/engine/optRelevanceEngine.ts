@@ -7,29 +7,54 @@
  *    - nama sementara / catatan bebas
  *    - deskripsi gejala lapang (symptoms)
  *    - bagian tanaman yang terserang (attackLocation)
+ *    - petunjuk visual dari foto tanaman (visual tokens & visual clues)
  *    - sinonim/alias lokal
  *    - literasi gejala & pemicu di pustaka HIKMAT TANI
  * 3. Menghilangkan noise/stopwords non-agronomi (e.g., 'tanaman', 'terlihat', 'petak', 'sawah', 'dan', 'di').
  * 4. Memberi bobot tinggi pada kata/frasa agronomi spesifik (e.g., 'daun menguning', 'rumpun kerdil', 'bercak', 'sundep').
- * 5. Deterministic, offline-first, tanpa ketergantungan jaringan eksternal.
+ * 5. Menyajikan PHT / Penanganan Non-Kimia terlebih dahulu (7 Tahapan / 4 Pilar PHT).
+ * 6. Menyajikan Bahan Aktif Kimia HANYA sebagai opsi rujukan lanjutan dari data resmi terdaftar.
+ * 7. Deterministic, offline-first, tanpa ketergantungan jaringan eksternal.
  */
 
 import { AttackLocation, Opt, OptCategory } from '../types/index.ts';
+
+export interface PhtStepItem {
+  stepNumber: number;
+  categoryTitle: string;
+  actionTitle: string;
+  description: string;
+}
+
+export interface ChemicalControlOption {
+  hasChemicalData: boolean;
+  activeIngredients: string[];
+  resistanceNotes?: string;
+  cautionaryNotice: string;
+}
 
 export interface OptRelevanceMatch {
   opt: Opt;
   score: number;
   matchedKeywords: string[];
+  matchedVisualClues: string[];
+  matchedLocations: string[];
+  matchedSymptoms: string[];
   isExactMatch: boolean;
   relevanceLabel: string;
   similarityReason: string;
   disclaimer: string;
+  phtSteps: PhtStepItem[];
+  chemicalOptions: ChemicalControlOption;
 }
 
 export interface OptSearchOptions {
   attackLocations?: (AttackLocation | string)[];
   category?: OptCategory | 'ALL' | string;
   minScoreThreshold?: number;
+  visualTokens?: string[];
+  visualClues?: string[];
+  growthStage?: string;
 }
 
 // Stopwords umum bahasa Indonesia dan kata pengamatan non-spesifik
@@ -67,12 +92,15 @@ const AGRONOMIC_KEY_PHRASES = [
   'pelipat daun',
   'pucuk mati',
   'mati pucuk',
+  'pucuk kering',
+  'mudah dicabut',
   'sundep',
   'beluk',
   'malai hampa',
   'bulir hampa',
   'malai putih',
   'bercak belah ketupat',
+  'belah ketupat',
   'bercak ketupat',
   'patah leher',
   'blas leher',
@@ -240,6 +268,100 @@ export function extractAgronomicTokens(input: string): {
 }
 
 /**
+ * Menghasilkan 7 langkah penanganan PHT berbasis 4 Pilar PHT resmi dari pustaka OPT
+ */
+export function buildPhtSteps(opt: Opt): PhtStepItem[] {
+  const steps: PhtStepItem[] = [];
+
+  // Langkah 1: Pengamatan & Konfirmasi Lapang
+  steps.push({
+    stepNumber: 1,
+    categoryTitle: 'Pengamatan & Ambang Batas',
+    actionTitle: 'Konfirmasi Lapang & Periksa Ambang Kendali',
+    description:
+      opt.economicThreshold ||
+      opt.monitoringMethod ||
+      'Lakukan pengamatan sampel diagonal pada 20 rumpun untuk mengukur populasi dan intensitas serangan sebelum tindakan korektif.',
+  });
+
+  // Langkah 2: Kultur Teknis
+  steps.push({
+    stepNumber: 2,
+    categoryTitle: 'Kultur Teknis',
+    actionTitle: 'Pengaturan Pola Tanam & Nutrisi Berimbang',
+    description:
+      opt.culturalControl ||
+      'Terapkan tanam serempak dalam satu hamparan, perlebar jarak tanam (Jajar Legowo), dan hindari pemupukan Nitrogen berlebih.',
+  });
+
+  // Langkah 3: Sanitasi Lingkungan
+  steps.push({
+    stepNumber: 3,
+    categoryTitle: 'Sanitasi Lapang',
+    actionTitle: 'Pembersihan Inang Alternatif & Sisa Tanaman',
+    description:
+      'Bersihkan rumput inang dan gulma di pematang, saluran air, serta musnahkan sisa jerami/singgang terinfeksi.',
+  });
+
+  // Langkah 4: Pengaturan Air (Jika Relevan)
+  const isBphOrBlas = opt.id.includes('wereng') || opt.id.includes('blas') || opt.id.includes('bakteri');
+  steps.push({
+    stepNumber: 4,
+    categoryTitle: 'Tata Kelola Air',
+    actionTitle: isBphOrBlas ? 'Pengeringan Berkala (Intermittent / AWD)' : 'Pengaturan Genangan Air Optimal',
+    description: isBphOrBlas
+      ? 'Keringkan petak sawah selama 3-5 hari untuk menurunkan kelembapan mikro di sekitar pangkal rumpun dan memperkuat aerasi akar.'
+      : 'Atur ketinggian air sawah pada kondisi macak-macak (1-2 cm) guna mendukung ketahanan fisiologis tanaman.',
+  });
+
+  // Langkah 5: Pengendalian Mekanis / Fisik
+  steps.push({
+    stepNumber: 5,
+    categoryTitle: 'Fisik & Mekanis',
+    actionTitle: 'Pemasangan Perangkap & Eradikasi Manual',
+    description:
+      opt.mechanicalControl ||
+      'Kumpulkan dan musnahkan kelompok telur/larva secara manual, pasang lampu perangkap atau pelindung fisik bila diperlukan.',
+  });
+
+  // Langkah 6: Pemanfaatan Musuh Alami
+  steps.push({
+    stepNumber: 6,
+    categoryTitle: 'Hayati & Musuh Alami',
+    actionTitle: 'Konservasi Predator & Parasitoid Lapang',
+    description:
+      opt.biologicalControl ||
+      'Lestarikan musuh alami alami seperti laba-laba pemburu, kumbang kubah, kepik pemangsa, dan parasitoid telur dengan membatasi insektisida kimia spektrum luas.',
+  });
+
+  // Langkah 7: Monitoring & Evaluasi
+  steps.push({
+    stepNumber: 7,
+    categoryTitle: 'Monitoring & Evaluasi',
+    actionTitle: 'Evaluasi Perkembangan 3-5 Hari Pasca Tindakan',
+    description:
+      'Lakukan pemantauan ulang secara berkala untuk mengevaluasi apakah populasi OPT menurun dan tanaman membentuk anakan/pucuk baru yang sehat.',
+  });
+
+  return steps;
+}
+
+/**
+ * Menyusun rujukan bahan aktif kimia (Opsi Lanjutan) yang berakar dari master data
+ */
+export function buildChemicalOptions(opt: Opt): ChemicalControlOption {
+  const hasData = Boolean(opt.activeIngredients && opt.activeIngredients.length > 0);
+
+  return {
+    hasChemicalData: hasData,
+    activeIngredients: opt.activeIngredients || [],
+    resistanceNotes: opt.resistanceNotes,
+    cautionaryNotice:
+      'Informasi bahan aktif di bawah merupakan rujukan pilihan pengendalian. Penggunaan perlu disesuaikan dengan label produk yang terdaftar, kondisi lapang, dan ketentuan yang berlaku.',
+  };
+}
+
+/**
  * Evaluasi relevansi satu OPT terhadap query pengamatan
  */
 export function calculateOptScore(
@@ -247,11 +369,21 @@ export function calculateOptScore(
   query: string,
   tokens: { phrases: string[]; words: string[]; stems: string[] },
   options?: OptSearchOptions
-): { score: number; matchedKeywords: string[]; isExactMatch: boolean } {
+): {
+  score: number;
+  matchedKeywords: string[];
+  matchedVisualClues: string[];
+  matchedLocations: string[];
+  matchedSymptoms: string[];
+  isExactMatch: boolean;
+} {
   let score = 0;
   const matchedKeywords = new Set<string>();
-  const normalizedQuery = normalizeText(query);
+  const matchedVisualClues = new Set<string>();
+  const matchedLocations = new Set<string>();
+  const matchedSymptoms = new Set<string>();
 
+  const normalizedQuery = normalizeText(query);
   const normCommon = normalizeText(opt.commonName);
   const normScientific = normalizeText(opt.scientificName || '');
   const normAliases = (opt.aliases || []).map(normalizeText);
@@ -287,17 +419,18 @@ export function calculateOptScore(
     let phraseMatched = false;
 
     if (normSymptoms.includes(phrase)) {
-      score += 45;
+      score += 65;
       matchedKeywords.add(phrase);
+      matchedSymptoms.add(phrase);
       phraseMatched = true;
     }
     if (normCommon.includes(phrase)) {
-      score += 40;
+      score += 45;
       matchedKeywords.add(phrase);
       phraseMatched = true;
     }
     if (normAliases.some((a) => a.includes(phrase))) {
-      score += 45;
+      score += 55;
       matchedKeywords.add(phrase);
       phraseMatched = true;
     }
@@ -331,6 +464,7 @@ export function calculateOptScore(
     if (normSymptoms.includes(stem)) {
       score += 15;
       matchedKeywords.add(stem);
+      matchedSymptoms.add(stem);
       stemHit = true;
     }
 
@@ -357,19 +491,45 @@ export function calculateOptScore(
   for (const loc of targetLocations) {
     const locStr = String(loc).toUpperCase();
     let partKeyword = '';
-    if (locStr.includes('LEAF') || locStr === 'DAUN') partKeyword = 'daun';
-    else if (locStr.includes('STEM') || locStr === 'BATANG') partKeyword = 'batang';
-    else if (locStr.includes('ROOT') || locStr === 'AKAR') partKeyword = 'akar';
-    else if (locStr.includes('PANICLE') || locStr === 'MALAI' || locStr === 'BULIR') partKeyword = 'malai';
-    else if (locStr.includes('SEEDLING') || locStr === 'BIBIT') partKeyword = 'bibit';
+    let labelLoc = '';
+    if (locStr.includes('LEAF') || locStr === 'DAUN') {
+      partKeyword = 'daun';
+      labelLoc = 'Daun / Pelepah';
+    } else if (locStr.includes('STEM') || locStr === 'BATANG') {
+      partKeyword = 'batang';
+      labelLoc = 'Batang / Pangkal';
+    } else if (locStr.includes('ROOT') || locStr === 'AKAR') {
+      partKeyword = 'akar';
+      labelLoc = 'Akar Tanaman';
+    } else if (locStr.includes('PANICLE') || locStr === 'MALAI' || locStr === 'BULIR') {
+      partKeyword = 'malai';
+      labelLoc = 'Malai / Bulir';
+    } else if (locStr.includes('SEEDLING') || locStr === 'BIBIT') {
+      partKeyword = 'bibit';
+      labelLoc = 'Pesemaian / Bibit';
+    }
 
     if (partKeyword && (normSymptoms.includes(partKeyword) || normCommon.includes(partKeyword))) {
-      score += 12;
+      score += 15;
       matchedKeywords.add(`bagian ${partKeyword}`);
+      matchedLocations.add(labelLoc || partKeyword);
     }
   }
 
-  // 5. Cross-Symptom Synergy Bonus (Jika terdapat >= 2 gejala spesifik yang cocok bersamaan)
+  // 5. Visual Tokens & Visual Clues from Photo (Penguat Relevansi Tambahan)
+  const visualTokens = options?.visualTokens || [];
+  for (const vToken of visualTokens) {
+    const normV = normalizeText(vToken);
+    if (!normV) continue;
+
+    if (normSymptoms.includes(normV) || normCommon.includes(normV)) {
+      score += 15;
+      matchedVisualClues.add(vToken);
+      matchedKeywords.add(`visual: ${vToken}`);
+    }
+  }
+
+  // 6. Cross-Symptom Synergy Bonus (Jika terdapat >= 2 gejala spesifik yang cocok bersamaan)
   if (matchedStemCount.size >= 2) {
     score += 25;
   }
@@ -380,6 +540,9 @@ export function calculateOptScore(
   return {
     score,
     matchedKeywords: Array.from(matchedKeywords),
+    matchedVisualClues: Array.from(matchedVisualClues),
+    matchedLocations: Array.from(matchedLocations),
+    matchedSymptoms: Array.from(matchedSymptoms),
     isExactMatch: isExact,
   };
 }
@@ -395,21 +558,34 @@ export function matchOptRelevance(
   const minThreshold = options?.minScoreThreshold ?? 8;
   const categoryFilter = options?.category || 'ALL';
 
-  const tokens = extractAgronomicTokens(query);
+  // Gabungkan query utama dengan visual tokens jika ada
+  const visualTokensStr = (options?.visualTokens || []).join(' ');
+  const combinedQuery = `${query} ${visualTokensStr}`.trim();
+  const tokens = extractAgronomicTokens(combinedQuery);
+
   const rawQuery = query.trim();
 
-  // Jika query kosong dan tidak ada target lokasi khusus
-  if (!rawQuery && (!options?.attackLocations || options.attackLocations.length === 0)) {
+  // Jika query dan visual tokens kosong dan tidak ada target lokasi khusus
+  if (
+    !rawQuery &&
+    (!options?.visualTokens || options.visualTokens.length === 0) &&
+    (!options?.attackLocations || options.attackLocations.length === 0)
+  ) {
     return opts
       .filter((opt) => categoryFilter === 'ALL' || opt.category === categoryFilter)
       .map((opt) => ({
         opt,
         score: 0,
         matchedKeywords: [],
+        matchedVisualClues: [],
+        matchedLocations: [],
+        matchedSymptoms: [],
         isExactMatch: false,
         relevanceLabel: 'Katalog Pustaka',
         similarityReason: 'Daftar rujukan literasi HIKMAT TANI.',
         disclaimer: 'Gunakan sebagai referensi budidaya dan pemantauan lapang.',
+        phtSteps: buildPhtSteps(opt),
+        chemicalOptions: buildChemicalOptions(opt),
       }));
   }
 
@@ -421,12 +597,14 @@ export function matchOptRelevance(
       continue;
     }
 
-    const { score, matchedKeywords, isExactMatch } = calculateOptScore(
-      opt,
-      query,
-      tokens,
-      options
-    );
+    const {
+      score,
+      matchedKeywords,
+      matchedVisualClues,
+      matchedLocations,
+      matchedSymptoms,
+      isExactMatch,
+    } = calculateOptScore(opt, combinedQuery, tokens, options);
 
     if (score >= minThreshold) {
       let relevanceLabel = 'Rujukan Pembanding • Gejala Mirip';
@@ -447,12 +625,17 @@ export function matchOptRelevance(
         opt,
         score,
         matchedKeywords,
+        matchedVisualClues,
+        matchedLocations,
+        matchedSymptoms,
         isExactMatch,
         relevanceLabel,
         similarityReason,
         disclaimer: isExactMatch
           ? 'Panduan PHT resmi Ditlin Kementan RI & BBPadi.'
           : 'Rujukan ini ditampilkan sebagai pembanding karena memiliki gejala yang mirip dengan pengamatan Anda. Ini bukan diagnosis pasti.',
+        phtSteps: buildPhtSteps(opt),
+        chemicalOptions: buildChemicalOptions(opt),
       });
     }
   }
