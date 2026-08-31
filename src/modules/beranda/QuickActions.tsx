@@ -75,14 +75,14 @@ export function QuickActions({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm sm:text-base font-bold text-slate-900">Aksi Cepat</h2>
+        <h2 className="text-base sm:text-lg font-black text-slate-900">Aksi Cepat</h2>
         <button
           type="button"
           onClick={onAddGeneral}
           disabled={disabled}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-emerald-50 active:bg-emerald-100 text-[#0F5132] font-bold rounded-xl text-xs transition-colors border border-[#0F5132]/30 shadow-xs disabled:opacity-50 disabled:pointer-events-none min-h-[36px]"
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-emerald-50 active:bg-emerald-100 text-[#0F5132] font-bold rounded-xl text-xs sm:text-sm transition-colors border border-[#0F5132]/30 shadow-xs disabled:opacity-50 disabled:pointer-events-none min-h-[38px]"
         >
-          <Plus className="w-3.5 h-3.5" />
+          <Plus className="w-4 h-4" />
           <span>+ Catat Kegiatan</span>
         </button>
       </div>
@@ -96,7 +96,7 @@ export function QuickActions({
               type="button"
               onClick={btn.action}
               disabled={disabled}
-              className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5 p-3.5 min-h-[64px] bg-white hover:bg-[#FBF9F2] active:bg-emerald-50/60 border border-slate-200/90 hover:border-[#0F5132]/40 rounded-2xl transition-all shadow-xs text-left group disabled:opacity-50 disabled:pointer-events-none"
+              className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5 p-3.5 min-h-[68px] bg-white hover:bg-[#FBF9F2] active:bg-emerald-50/60 border border-slate-200/90 hover:border-[#0F5132]/40 rounded-2xl transition-all shadow-xs text-left group disabled:opacity-50 disabled:pointer-events-none"
             >
               <div
                 className={`w-10 h-10 rounded-xl ${btn.color} flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs`}
@@ -107,7 +107,7 @@ export function QuickActions({
                 <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate group-hover:text-[#0F5132]">
                   {btn.title}
                 </span>
-                <span className="text-[10px] text-slate-500 block truncate">
+                <span className="text-xs text-slate-600 font-medium block truncate mt-0.5">
                   {btn.subtitle}
                 </span>
               </div>

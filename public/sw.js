@@ -7,13 +7,16 @@
  * - Kebijakan Stale-While-Revalidate untuk aset statis agar pembaruan tetap masuk saat online.
  */
 
-const CACHE_NAME = 'hikmat-tani-shell-v5';
+const CACHE_NAME = 'hikmat-tani-shell-v6';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
+  '/icon-maskable-192.png',
+  '/icon-maskable-512.png',
+  '/apple-touch-icon.png',
   '/logo-hikmat-tani-full.png',
   '/favicon-64.png',
   '/favicon-32.png',

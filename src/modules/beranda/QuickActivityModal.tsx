@@ -204,23 +204,23 @@ export function QuickActivityModal({
         {/* Tanggal & Estimasi HST */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
               Tanggal Kegiatan <span className="text-red-500">*</span>
             </label>
             <input
               type="date"
               value={activityDate}
               onChange={(e) => setActivityDate(e.target.value)}
-              className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
               required
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
               Umur Tanaman (Snapshot)
             </label>
-            <div className="px-3 py-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-sm font-bold text-emerald-900 min-h-[44px] flex items-center">
+            <div className="px-3.5 py-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-sm font-bold text-emerald-900 min-h-[44px] flex items-center">
               {hstSnapshot} Hari Setelah Tanam (HST)
             </div>
           </div>
@@ -228,15 +228,15 @@ export function QuickActivityModal({
 
         {/* Dynamic Fields Berdasarkan Kategori */}
         {category === 'FERTILIZER' && (
-          <div className="space-y-3 p-3.5 bg-emerald-50/50 rounded-xl border border-emerald-200/80">
+          <div className="space-y-3.5 p-4 bg-emerald-50/60 rounded-xl border border-emerald-200/80">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
                 Pilih Jenis Pupuk <span className="text-red-500">*</span>
               </label>
               <select
                 value={selectedFertId}
                 onChange={(e) => setSelectedFertId(e.target.value)}
-                className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
               >
                 {fertilizers.map((f) => (
                   <option key={f.id} value={f.id}>
@@ -249,7 +249,7 @@ export function QuickActivityModal({
 
             {!selectedFertId && (
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
                   Nama Pupuk Khusus
                 </label>
                 <input
@@ -257,14 +257,14 @@ export function QuickActivityModal({
                   value={customFertName}
                   onChange={(e) => setCustomFertName(e.target.value)}
                   placeholder="Contoh: Kompos Kandang Matang"
-                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
                 />
               </div>
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
                   Jumlah (Kg) <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -273,19 +273,19 @@ export function QuickActivityModal({
                   min="0.1"
                   value={amountKg}
                   onChange={(e) => setAmountKg(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
                   Metode Aplikasi
                 </label>
                 <select
                   value={method}
                   onChange={(e) => setMethod(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
                 >
                   <option value="BROADCAST">Tabur Merata (Broadcast)</option>
                   <option value="BAND">Larik / Alur di Sela Legowo</option>
@@ -298,9 +298,9 @@ export function QuickActivityModal({
         )}
 
         {category === 'OPT' && (
-          <div className="space-y-3 p-3.5 bg-amber-50/50 rounded-xl border border-amber-200/80">
+          <div className="space-y-3.5 p-4 bg-amber-50/60 rounded-xl border border-amber-200/80">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
                 Hama / Penyakit yang Diamati <span className="text-red-500">*</span>
               </label>
               <input
@@ -308,20 +308,20 @@ export function QuickActivityModal({
                 value={optName}
                 onChange={(e) => setOptName(e.target.value)}
                 placeholder="Contoh: Wereng Coklat, Penggerek Batang, atau Gejala Daun Kuning"
-                className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
                 required
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
                   Tingkat Serangan
                 </label>
                 <select
                   value={severity}
                   onChange={(e) => setSeverity(e.target.value as AttackSeverity)}
-                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
                 >
                   <option value="LIGHT">Ringan (Terlihat di beberapa rumpun)</option>
                   <option value="MEDIUM">Sedang (Mulai menyebar)</option>
@@ -330,13 +330,13 @@ export function QuickActivityModal({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
                   Bagian Tanaman
                 </label>
                 <select
                   value={optLocation}
                   onChange={(e) => setOptLocation(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
                 >
                   <option value="LEAF">Daun / Pelepah</option>
                   <option value="STEM">Batang / Pangkal Batang</option>
@@ -350,15 +350,15 @@ export function QuickActivityModal({
         )}
 
         {category === 'IRRIGATION' && (
-          <div className="space-y-3 p-3.5 bg-sky-50/50 rounded-xl border border-sky-200/80">
+          <div className="space-y-3.5 p-4 bg-sky-50/60 rounded-xl border border-sky-200/80">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
                 Kondisi Air di Petak Sawah
               </label>
               <select
                 value={waterCondition}
                 onChange={(e) => setWaterCondition(e.target.value)}
-                className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
               >
                 <option value="Macak-macak (1-2 cm)">Macak-macak (1-2 cm - Fase Anakan)</option>
                 <option value="Tergenang Dangkal (3-5 cm)">Tergenang Dangkal (3-5 cm - Bunting/Berbunga)</option>
@@ -372,7 +372,7 @@ export function QuickActivityModal({
 
         {/* Catatan Tambahan */}
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1">
+          <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
             Catatan Tambahan (Opsional)
           </label>
           <textarea
@@ -380,7 +380,7 @@ export function QuickActivityModal({
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
             placeholder="Catatan kondisi lapangan atau tindakan yang dilakukan..."
-            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
           />
         </div>
 
@@ -390,14 +390,14 @@ export function QuickActivityModal({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="px-4 py-2.5 min-h-[44px] text-slate-600 hover:text-slate-800 font-semibold text-xs rounded-xl hover:bg-slate-100 transition-colors"
+            className="px-4 py-2.5 min-h-[44px] text-slate-600 hover:text-slate-800 font-bold text-xs sm:text-sm rounded-xl hover:bg-slate-100 transition-colors"
           >
             Batal
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="px-6 py-2.5 min-h-[48px] bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-xs rounded-xl transition-colors shadow-xs disabled:opacity-50"
+            className="px-6 py-2.5 min-h-[48px] bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-xs sm:text-sm rounded-xl transition-colors shadow-xs disabled:opacity-50"
           >
             {isSubmitting ? 'Menyimpan...' : 'Simpan Catatan'}
           </button>

@@ -61,29 +61,29 @@ export function RecentActivities({
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm sm:text-base font-bold text-slate-900">Aktivitas Terakhir</h2>
+        <h2 className="text-base sm:text-lg font-black text-slate-900">Aktivitas Terakhir</h2>
         {recentEvents.length > 0 && onViewAll && (
           <button
             type="button"
             onClick={onViewAll}
-            className="text-xs font-semibold text-emerald-800 hover:text-emerald-950 flex items-center gap-0.5"
+            className="text-xs sm:text-sm font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-0.5 min-h-[36px]"
           >
             <span>Lihat Semua</span>
-            <ChevronRight className="w-3.5 h-3.5" />
+            <ChevronRight className="w-4 h-4" />
           </button>
         )}
       </div>
 
       {recentEvents.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-5 text-center space-y-2 shadow-xs">
-          <p className="text-xs sm:text-sm text-slate-500">
+          <p className="text-xs sm:text-sm text-slate-600 font-medium">
             Belum ada catatan aktivitas pada musim tanam ini.
           </p>
           {hasActiveSeason && onAddFirstActivity && (
             <button
               type="button"
               onClick={onAddFirstActivity}
-              className="text-xs font-bold text-emerald-800 hover:text-emerald-950 underline underline-offset-4"
+              className="text-xs sm:text-sm font-bold text-emerald-800 hover:text-emerald-950 underline underline-offset-4"
             >
               + Catat Kegiatan Pertama
             </button>
@@ -105,27 +105,27 @@ export function RecentActivities({
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${getCategoryBg(
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${getCategoryBg(
                       evt.category
                     )}`}
                   >
                     {getCategoryIcon(evt.category)}
                   </div>
                   <div className="min-w-0">
-                    <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate">
+                    <span className="text-sm sm:text-base font-bold text-slate-900 block truncate">
                       {evt.title}
                     </span>
-                    <span className="text-[11px] text-slate-500 block truncate">
+                    <span className="text-xs text-slate-600 font-medium block truncate mt-0.5">
                       {evt.notes || formattedDate}
                     </span>
                   </div>
                 </div>
 
                 <div className="text-right shrink-0">
-                  <span className="inline-block px-2.5 py-0.5 bg-emerald-50 text-[#0F5132] text-[10px] font-black rounded-full border border-[#0F5132]/30">
+                  <span className="inline-block px-2.5 py-0.5 bg-emerald-50 text-[#0F5132] text-xs font-black rounded-full border border-[#0F5132]/30">
                     {evt.hst} HST
                   </span>
-                  <span className="block text-[10px] text-slate-400 mt-0.5">
+                  <span className="block text-xs text-slate-500 mt-0.5">
                     {formattedDate}
                   </span>
                 </div>

@@ -52,17 +52,21 @@ export function Modal({
         className={`w-full ${maxWidthClasses[maxWidth]} bg-white rounded-t-2xl sm:rounded-2xl shadow-xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/50">
-          <div>
-            <h2 id="modal-title" className="text-base sm:text-lg font-bold text-slate-800 tracking-tight">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/70">
+          <div className="pr-3">
+            <h2 id="modal-title" className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
               {title}
             </h2>
-            {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+            {subtitle && (
+              <p className="text-xs sm:text-sm text-slate-600 font-medium mt-1 leading-relaxed">
+                {subtitle}
+              </p>
+            )}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-10 h-10 min-h-[40px] rounded-full hover:bg-slate-200/80 active:bg-slate-300 flex items-center justify-center text-slate-500 hover:text-slate-700 transition-colors"
+            className="w-10 h-10 min-h-[44px] min-w-[44px] rounded-full hover:bg-slate-200 active:bg-slate-300 flex items-center justify-center text-slate-500 hover:text-slate-700 transition-colors shrink-0"
             aria-label="Tutup dialog"
           >
             <X className="w-5 h-5" />

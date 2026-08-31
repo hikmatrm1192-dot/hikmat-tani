@@ -285,7 +285,7 @@ export function RecommendationCard({
           {/* Judul & Isi Saran Utama */}
           <div className="flex items-start gap-3">
             <div
-              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
                 isHighPriority
                   ? 'bg-amber-100 text-amber-800'
                   : 'bg-emerald-50 text-emerald-700'
@@ -294,50 +294,50 @@ export function RecommendationCard({
               <Lightbulb className="w-5 h-5" />
             </div>
 
-            <div className="flex-1 space-y-1.5">
-              <h3 className="text-sm sm:text-base font-bold tracking-tight text-slate-900 leading-snug">
+            <div className="flex-1 space-y-1.5 min-w-0">
+              <h3 className="text-base sm:text-lg font-black tracking-tight text-slate-900 leading-snug">
                 {currentRec.title}
               </h3>
-              <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-normal">
+              <p className="text-sm sm:text-base text-slate-800 leading-relaxed font-normal">
                 {currentRec.message}
               </p>
             </div>
           </div>
 
           {/* Ringkasan Kontekstual Berbasis Temuan Lapang */}
-          <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200/70 text-xs space-y-2">
+          <div className="p-3.5 bg-slate-50/90 rounded-xl border border-slate-200/80 text-xs sm:text-sm space-y-2.5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-700">
               <div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
                   Sumber Kegiatan
                 </span>
-                <span className="font-semibold text-slate-900 text-xs">
+                <span className="font-bold text-slate-900 text-xs sm:text-sm mt-0.5 block">
                   {meta.sourceActivity || 'Catatan Lapangan'}
                 </span>
               </div>
 
               <div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
                   Temuan Utama
                 </span>
-                <span className="font-semibold text-slate-900 text-xs">
+                <span className="font-bold text-slate-900 text-xs sm:text-sm mt-0.5 block">
                   {meta.mainFinding || currentRec.title}
                 </span>
               </div>
             </div>
 
-            <div className="pt-2 border-t border-slate-200/50">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+            <div className="pt-2 border-t border-slate-200/60">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
                 Alasan Menjadi Perhatian
               </span>
-              <p className="text-slate-700 text-xs mt-0.5 leading-relaxed">
+              <p className="text-slate-800 text-xs sm:text-sm mt-1 leading-relaxed">
                 {meta.attentionReason || currentRec.basis}
               </p>
             </div>
 
             {meta.supportingReference && (
-              <div className="pt-1.5 flex items-center gap-1.5 text-[11px] text-emerald-800 font-medium">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <div className="pt-2 flex items-center gap-1.5 text-xs sm:text-sm text-emerald-900 font-semibold border-t border-emerald-100/60">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>Rujukan: {meta.supportingReference}</span>
               </div>
             )}
@@ -345,13 +345,13 @@ export function RecommendationCard({
 
           {/* Status Keputusan Petani jika sudah pernah disimpan */}
           {decision && (
-            <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5 text-emerald-950 font-bold">
+            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
+              <div className="flex items-center gap-2 text-emerald-950 font-bold">
                 <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
                 <span>Keputusan Anda: {getDecisionLabel(decision.decision)}</span>
               </div>
               {decision.notes && (
-                <span className="text-[11px] text-emerald-800 truncate max-w-[150px] sm:max-w-xs">
+                <span className="text-xs sm:text-sm text-emerald-800 italic max-w-full sm:max-w-xs truncate">
                   "{decision.notes}"
                 </span>
               )}
@@ -359,21 +359,21 @@ export function RecommendationCard({
           )}
 
           {/* Action Bar: Lihat Rujukan & Tombol Keputusan */}
-          <div className="pt-2.5 border-t border-slate-100/80 flex flex-wrap items-center justify-between gap-2">
+          <div className="pt-3 border-t border-slate-100/80 flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 id={`btn-toggle-ref-${currentRec.id}`}
                 onClick={() => toggleExpand(currentRec.id)}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0F5132] hover:text-[#0B3D26] min-h-[36px] py-1 px-2.5 rounded-lg hover:bg-emerald-50 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-[#0F5132] hover:text-[#0B3D26] min-h-[40px] py-1.5 px-3 rounded-xl hover:bg-emerald-50 active:bg-emerald-100 transition-colors cursor-pointer border border-[#0F5132]/20"
                 aria-expanded={isExpanded}
               >
-                <BookOpen className="w-3.5 h-3.5 text-[#D4AF37]" />
+                <BookOpen className="w-4 h-4 text-[#D4AF37]" />
                 <span>{isExpanded ? 'Sembunyikan Rujukan' : 'Lihat Alasan & Rujukan'}</span>
                 {isExpanded ? (
-                  <ChevronUp className="w-3.5 h-3.5" />
+                  <ChevronUp className="w-4 h-4" />
                 ) : (
-                  <ChevronDown className="w-3.5 h-3.5" />
+                  <ChevronDown className="w-4 h-4" />
                 )}
               </button>
 
@@ -390,9 +390,9 @@ export function RecommendationCard({
                       onNavigateToKnowledge('opt');
                     }
                   }}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900 bg-amber-100/80 hover:bg-amber-200 px-2.5 py-1 rounded-lg border border-amber-300/80 transition-colors min-h-[36px] cursor-pointer"
+                  className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 px-3 py-1.5 rounded-xl border border-amber-300 transition-colors min-h-[40px] cursor-pointer"
                 >
-                  <BookOpen className="w-3 h-3 text-amber-700" />
+                  <BookOpen className="w-3.5 h-3.5 text-amber-700" />
                   <span>Panduan PHT & Musuh Alami</span>
                 </button>
               )}
@@ -403,9 +403,9 @@ export function RecommendationCard({
                 type="button"
                 id={`btn-decision-${currentRec.id}`}
                 onClick={() => onOpenDecisionModal(currentRec)}
-                className="inline-flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 min-h-[38px] bg-[#0F5132] hover:bg-[#0B3D26] active:bg-[#072417] text-white rounded-xl transition-colors shadow-xs cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold px-4 py-2 min-h-[42px] bg-[#0F5132] hover:bg-[#0B3D26] active:bg-[#072417] text-white rounded-xl transition-colors shadow-xs cursor-pointer"
               >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-[#D4AF37]" />
+                <SlidersHorizontal className="w-4 h-4 text-[#D4AF37]" />
                 <span>{decision ? 'Ubah Keputusan' : 'Tentukan Keputusan'}</span>
               </button>
             )}
@@ -413,22 +413,22 @@ export function RecommendationCard({
 
           {/* Expanded Details: Progressive Disclosure Content */}
           {isExpanded && (
-            <div className="mt-2 p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 text-xs space-y-2.5 animate-in fade-in slide-in-from-top-1">
+            <div className="mt-2.5 p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs sm:text-sm space-y-3 animate-in fade-in slide-in-from-top-1">
               <div>
-                <span className="font-bold text-slate-800 block mb-0.5">
+                <span className="font-bold text-slate-900 block mb-1">
                   Dasar Agronomi Lengkap:
                 </span>
-                <p className="text-slate-600 leading-relaxed">{currentRec.basis}</p>
+                <p className="text-slate-700 leading-relaxed">{currentRec.basis}</p>
               </div>
 
               {/* Catatan Cuaca Kontekstual jika ada (Terpisah & Non-Pengganti) */}
               {meta.weatherContext && (
-                <div className="p-2.5 bg-sky-50 rounded-lg border border-sky-200 text-sky-900 space-y-0.5">
-                  <span className="font-bold text-[11px] flex items-center gap-1">
-                    <CloudSun className="w-3.5 h-3.5 text-sky-700" />
+                <div className="p-3 bg-sky-50 rounded-xl border border-sky-200 text-sky-950 space-y-1">
+                  <span className="font-bold text-xs sm:text-sm flex items-center gap-1.5">
+                    <CloudSun className="w-4 h-4 text-sky-700" />
                     Pertimbangan Cuaca Kontekstual:
                   </span>
-                  <p className="text-[11px] leading-relaxed text-sky-800">
+                  <p className="text-xs sm:text-sm leading-relaxed text-sky-900">
                     {meta.weatherContext}
                   </p>
                 </div>
@@ -436,16 +436,16 @@ export function RecommendationCard({
 
               {/* Daftar Rujukan Ilmiah Terverifikasi */}
               {currentRec.referenceIds && currentRec.referenceIds.length > 0 && (
-                <div className="pt-2 border-t border-slate-200/60">
-                  <span className="font-bold text-emerald-800 block mb-1 flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <div className="pt-2.5 border-t border-slate-200">
+                  <span className="font-bold text-emerald-900 block mb-1.5 flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
                     Rujukan Ilmiah Terdaftar:
                   </span>
                   <div className="flex flex-wrap gap-1.5">
                     {currentRec.referenceIds.map((refId) => (
                       <span
                         key={refId}
-                        className="font-mono text-[10px] bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-700"
+                        className="text-xs bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-slate-800 font-medium"
                       >
                         {refId === 'ref-litbang-padi-2020'
                           ? 'Balitpa Kementan (2020) — Petunjuk Lapang Budidaya Padi'
