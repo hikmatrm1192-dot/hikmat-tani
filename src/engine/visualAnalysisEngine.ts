@@ -42,7 +42,7 @@ export async function analyzePlantPhoto(
       visualClues: [],
       detectedTraits: [],
       detectedKeywords: [],
-      suggestedLocations: contextLocation ? [contextLocation] : ['LEAF'],
+      suggestedLocations: contextLocation ? [contextLocation] : [],
       clarityStatus: 'UNCLEAR',
       clarityMessage:
         'Foto belum cukup jelas untuk identifikasi. Silakan ambil foto lagi dengan fokus pada bagian tanaman yang terserang.',
@@ -214,8 +214,8 @@ export async function analyzePlantPhoto(
           if (!suggestedLocations.includes('STEM')) suggestedLocations.push('STEM');
         }
 
-        if (suggestedLocations.length === 0) {
-          suggestedLocations.push('LEAF');
+        if (suggestedLocations.length === 0 && contextLocation) {
+          suggestedLocations.push(contextLocation);
         }
 
         // Estimasi Severity dari rasio kerusakan visual
@@ -281,7 +281,7 @@ export async function analyzePlantPhoto(
         visualClues: [],
         detectedTraits: [],
         detectedKeywords: [],
-        suggestedLocations: contextLocation ? [contextLocation] : ['LEAF'],
+        suggestedLocations: contextLocation ? [contextLocation] : [],
         clarityStatus: 'UNCLEAR',
         clarityMessage:
           'Foto belum cukup jelas untuk identifikasi. Silakan ambil foto lagi dengan fokus pada bagian tanaman.',
@@ -309,7 +309,7 @@ function fallbackVisualAnalysis(
       visualClues: [],
       detectedTraits: [],
       detectedKeywords: [],
-      suggestedLocations: contextLocation ? [contextLocation] : ['LEAF'],
+      suggestedLocations: contextLocation ? [contextLocation] : [],
       clarityStatus: 'UNCLEAR',
       clarityMessage:
         'Foto belum cukup jelas untuk identifikasi. Anda tetap dapat melanjutkan pengamatan secara manual.',
@@ -329,7 +329,7 @@ function fallbackVisualAnalysis(
       'Pola Tekstur Permukaan Jaringan',
     ],
     detectedKeywords: ['kuning', 'bercak', 'daun'],
-    suggestedLocations: contextLocation ? [contextLocation] : ['LEAF'],
+    suggestedLocations: contextLocation ? [contextLocation] : [],
     suggestedSeverity: 'LIGHT',
     clarityStatus: 'CLEAR',
     clarityMessage: 'Foto tanaman siap disertakan sebagai petunjuk tambahan.',

@@ -125,7 +125,7 @@ export function ActivityFormModal({
   const [selectedCandidateOptId, setSelectedCandidateOptId] = useState<string | null>(null);
   const [customOptName, setCustomOptName] = useState<string>('');
   const [severity, setSeverity] = useState<AttackSeverity>('LIGHT');
-  const [optLocation, setOptLocation] = useState<AttackLocation>('LEAF');
+  const [optLocation, setOptLocation] = useState<AttackLocation | ''>('');
   const [symptomPreset, setSymptomPreset] = useState<string>('');
   const [optPhoto, setOptPhoto] = useState<string | null>(null);
   const [isCompressingPhoto, setIsCompressingPhoto] = useState<boolean>(false);
@@ -134,15 +134,21 @@ export function ActivityFormModal({
 
   // Fungsi reset total seluruh data sementara pengamatan
   const resetAllTemporaryOptState = () => {
-    setOptPhoto(null);
-    setVisualAnalysisResult(null);
+    setSelectedOptId('');
     setSelectedCandidateOptId(null);
     setCustomOptName('');
     setSymptomPreset('');
+    setOptLocation('');
+    setSeverity('LIGHT');
+    setOptPhoto(null);
+    setVisualAnalysisResult(null);
     setIsCompressingPhoto(false);
     setIsAnalyzingPhoto(false);
-    setSeverity('LIGHT');
-    setOptLocation('LEAF');
+  };
+
+  const handleModalClose = () => {
+    resetAllTemporaryOptState();
+    onClose();
   };
 
   useEffect(() => {
@@ -156,13 +162,10 @@ export function ActivityFormModal({
       if (fertilizers.length > 0) {
         setSelectedFertId(fertilizers[0].id);
       }
-      if (opts.length > 0) {
-        setSelectedOptId(opts[0].id);
-      }
     } else {
       resetAllTemporaryOptState();
     }
-  }, [isOpen, initialCategory, fertilizers, opts]);
+  }, [isOpen, initialCategory, fertilizers]);
 
   // Hitung snapshot HST berdasarkan tanggal aktivitas
   const hstResult = activeSeason?.plantingDate
@@ -182,7 +185,7 @@ export function ActivityFormModal({
     if (category !== 'OPT') return [];
     const query = [customOptName, symptomPreset, notes].filter(Boolean).join(' ');
     return matchOptRelevance(opts, query, {
-      attackLocations: [optLocation],
+      attackLocations: optLocation ? [optLocation] : [],
       visualTokens: visualAnalysisResult?.detectedKeywords,
       visualClues: visualAnalysisResult?.visualClues,
       minScoreThreshold: 5,
@@ -190,7 +193,10 @@ export function ActivityFormModal({
   }, [category, customOptName, symptomPreset, notes, optLocation, visualAnalysisResult, opts]);
 
   const inspectionPoints = useMemo(() => {
-    return getFieldInspectionPoints([optLocation], visualAnalysisResult?.detectedKeywords || []);
+    return getFieldInspectionPoints(
+      optLocation ? [optLocation] : [],
+      visualAnalysisResult?.detectedKeywords || []
+    );
   }, [optLocation, visualAnalysisResult]);
 
   // Fungsi kompresi dan analisis foto tanaman On-Device (HP Local Processing)
@@ -209,13 +215,10 @@ export function ActivityFormModal({
       setIsCompressingPhoto(false);
 
       // Jalankan visual analysis engine 100% on-device (Canvas API)
-      const analysis = await analyzePlantPhoto(compressed, optLocation);
+      const analysis = await analyzePlantPhoto(compressed, optLocation || undefined);
       setVisualAnalysisResult(analysis);
 
-      // Berikan auto-saran bagian tanaman & keparahan jika AI mendeteksi petunjuk kuat
-      if (analysis.suggestedLocations.length > 0 && analysis.suggestedLocations[0]) {
-        setOptLocation(analysis.suggestedLocations[0]);
-      }
+      // Berikan auto-saran keparahan jika AI mendeteksi petunjuk kuat (tanpa memaksa bagian tanaman)
       if (analysis.suggestedSeverity) {
         setSeverity(analysis.suggestedSeverity);
       }
@@ -367,8 +370,10 @@ export function ActivityFormModal({
         } else {
           queryForCandidates = [targetOpt?.commonName, finalOptName, finalSymptom].filter(Boolean).join(' ');
         }
+        const attackLocArray: AttackLocation[] = optLocation ? [optLocation] : [];
+
         const matches = matchOptRelevance(opts, queryForCandidates, {
-          attackLocations: [optLocation],
+          attackLocations: attackLocArray,
           visualTokens: visualAnalysisResult?.detectedKeywords,
           visualClues: visualAnalysisResult?.visualClues,
           minScoreThreshold: 6,
@@ -382,7 +387,7 @@ export function ActivityFormModal({
           isUnknown,
           customOptName: finalOptName,
           attackSeverity: severity,
-          attackLocation: [optLocation],
+          attackLocation: attackLocArray,
           observedSymptoms: finalSymptom,
           identificationMethod:
             optApproach === 'PHOTO'
@@ -404,7 +409,9 @@ export function ActivityFormModal({
 
         createdOptObsRecord = optObs;
         baseActivity.notes = baseActivity.notes || `Pengamatan ${finalOptName} (Tingkat: ${severity})`;
-        actionDescription = `Pengamatan OPT ${finalOptName} pada bagian ${optLocation}`;
+        actionDescription = optLocation
+          ? `Pengamatan OPT ${finalOptName} pada bagian ${optLocation}`
+          : `Pengamatan OPT ${finalOptName}`;
         await activityRepository.createOptActivity(baseActivity, optObs);
       } else if (category === 'IRRIGATION') {
         baseActivity.notes = `Pengairan: ${waterCondition}${notes ? ` • ${notes}` : ''}`;
@@ -452,6 +459,7 @@ export function ActivityFormModal({
       }
 
       await onSuccess(baseActivity, createdOptObsRecord);
+      resetAllTemporaryOptState();
       onClose();
     } catch (err: any) {
       console.error('Gagal mencatat kegiatan:', err);
@@ -464,7 +472,7 @@ export function ActivityFormModal({
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleModalClose}
       title={getTitle()}
       maxWidth="lg"
     >
@@ -1176,6 +1184,7 @@ export function ActivityFormModal({
                       onChange={(e) => setSelectedOptId(e.target.value)}
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-600 min-h-[44px]"
                     >
+                      <option value="">-- Pilih Hama / Penyakit Terdaftar --</option>
                       {opts.map((o) => (
                         <option key={o.id} value={o.id}>
                           {o.commonName} ({o.scientificName})
@@ -1351,7 +1360,7 @@ export function ActivityFormModal({
               {/* Pilihan Bagian Tanaman */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                  Bagian Tanaman yang Terkena Serangan
+                  Bagian Tanaman yang Terkena Serangan <span className="text-slate-500 font-normal">(Opsional • Klik lagi untuk membatalkan)</span>
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {[
@@ -1360,20 +1369,23 @@ export function ActivityFormModal({
                     { id: 'PANICLE' as AttackLocation, label: 'Malai / Gabah' },
                     { id: 'ROOT' as AttackLocation, label: 'Akar Tanaman' },
                     { id: 'WHOLE_PLANT' as AttackLocation, label: 'Seluruh Rumpun' },
-                  ].map((loc) => (
-                    <button
-                      key={loc.id}
-                      type="button"
-                      onClick={() => setOptLocation(loc.id)}
-                      className={`py-2 px-3 text-xs font-bold rounded-xl border text-center transition-all min-h-[44px] flex items-center justify-center ${
-                        optLocation === loc.id
-                          ? 'bg-amber-100 text-amber-950 border-amber-400 font-extrabold shadow-2xs ring-1 ring-amber-400'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50/50'
-                      }`}
-                    >
-                      {loc.label}
-                    </button>
-                  ))}
+                  ].map((loc) => {
+                    const isSelected = optLocation === loc.id;
+                    return (
+                      <button
+                        key={loc.id}
+                        type="button"
+                        onClick={() => setOptLocation((prev) => (prev === loc.id ? '' : loc.id))}
+                        className={`py-2 px-3 text-xs font-bold rounded-xl border text-center transition-all min-h-[44px] flex items-center justify-center ${
+                          isSelected
+                            ? 'bg-amber-100 text-amber-950 border-amber-400 font-extrabold shadow-2xs ring-1 ring-amber-400'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50/50'
+                        }`}
+                      >
+                        {loc.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1643,7 +1655,7 @@ export function ActivityFormModal({
           <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleModalClose}
               disabled={isSubmitting}
               className="px-4 py-2.5 min-h-[44px] text-slate-600 hover:text-slate-800 font-semibold text-xs rounded-xl hover:bg-slate-100 transition-colors"
             >

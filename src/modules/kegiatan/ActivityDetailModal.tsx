@@ -155,7 +155,9 @@ function OptObservationDetailCard({
           <div>
             Bagian Terkena:{' '}
             <strong className="text-slate-800">
-              {obs.attackLocation?.join(', ') || 'Daun'}
+              {obs.attackLocation && obs.attackLocation.length > 0
+                ? obs.attackLocation.join(', ')
+                : 'Tidak Ditentukan'}
             </strong>
           </div>
           {obs.attackPercentage && (

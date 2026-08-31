@@ -59,19 +59,33 @@ export function QuickActivityModal({
   // OPT specific state
   const [optName, setOptName] = useState<string>('');
   const [severity, setSeverity] = useState<AttackSeverity>('LIGHT');
-  const [optLocation, setOptLocation] = useState<string>('LEAF');
+  const [optLocation, setOptLocation] = useState<string>('');
 
   // Irrigation specific state
   const [waterCondition, setWaterCondition] = useState<string>('Macak-macak (1-2 cm)');
 
+  const resetForm = () => {
+    setOptName('');
+    setOptLocation('');
+    setSeverity('LIGHT');
+    setNotes('');
+    setError(null);
+  };
+
+  const handleModalClose = () => {
+    resetForm();
+    onClose();
+  };
+
   useEffect(() => {
     if (isOpen) {
       setActivityDate(new Date().toISOString().split('T')[0]);
-      setNotes('');
-      setError(null);
+      resetForm();
       if (fertilizers.length > 0) {
         setSelectedFertId(fertilizers[0].id);
       }
+    } else {
+      resetForm();
     }
   }, [isOpen, fertilizers]);
 
@@ -163,7 +177,7 @@ export function QuickActivityModal({
           isUnknown: true,
           customOptName: targetOptName,
           attackSeverity: severity,
-          attackLocation: [optLocation as any],
+          attackLocation: optLocation ? [optLocation as any] : [],
           observedSymptoms: notes.trim() || 'Terlihat gejala di petak tanaman',
           createdAt: now,
           updatedAt: now,
@@ -178,6 +192,7 @@ export function QuickActivityModal({
         await activityRepository.create(baseActivity);
       }
 
+      resetForm();
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -190,7 +205,7 @@ export function QuickActivityModal({
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleModalClose}
       title={getTitle()}
       subtitle={`Lahan: ${land.name} • Musim: ${activeSeason.varietyName || 'Padi'} (~${hstSnapshot} HST)`}
     >
@@ -331,13 +346,14 @@ export function QuickActivityModal({
 
               <div>
                 <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
-                  Bagian Tanaman
+                  Bagian Tanaman <span className="text-slate-500 font-normal">(Opsional)</span>
                 </label>
                 <select
                   value={optLocation}
                   onChange={(e) => setOptLocation(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
                 >
+                  <option value="">-- Tidak Dipilih / Seluruh Petak (Opsional) --</option>
                   <option value="LEAF">Daun / Pelepah</option>
                   <option value="STEM">Batang / Pangkal Batang</option>
                   <option value="ROOT">Akar</option>
@@ -388,7 +404,7 @@ export function QuickActivityModal({
         <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleModalClose}
             disabled={isSubmitting}
             className="px-4 py-2.5 min-h-[44px] text-slate-600 hover:text-slate-800 font-bold text-xs sm:text-sm rounded-xl hover:bg-slate-100 transition-colors"
           >
