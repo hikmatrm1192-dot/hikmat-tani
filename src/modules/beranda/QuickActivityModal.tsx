@@ -136,13 +136,14 @@ export function QuickActivityModal({
       };
 
       if (category === 'FERTILIZER') {
-        const kg = parseFloat(amountKg) || 0;
-        if (kg <= 0) {
-          throw new Error('Jumlah pupuk harus lebih dari 0 kg');
+        const normalizedStr = amountKg.replace(',', '.').trim();
+        const kg = parseFloat(normalizedStr);
+        if (isNaN(kg) || kg <= 0) {
+          throw new Error('Jumlah pupuk harus berupa angka positif (lebih dari 0 kg)');
         }
 
         const selectedFert = fertilizers.find((f) => f.id === selectedFertId);
-        const fertName = selectedFert ? selectedFert.name : customFertName || 'Pupuk Campuran';
+        const fertName = selectedFert ? selectedFert.name : customFertName.trim() || 'Pupuk Khusus';
 
         // Hitung kandungan hara
         const nutrientCalc = selectedFert
@@ -156,6 +157,11 @@ export function QuickActivityModal({
           fertilizerName: fertName,
           amountKg: kg,
           applicationMethod: method as any,
+          isSubsidized: selectedFert?.isSubsidized ?? false,
+          formula: selectedFert?.formula,
+          brand: selectedFert?.brand,
+          category: selectedFert?.category,
+          manufacturer: selectedFert?.manufacturer,
           calculatedNutrients: {
             N_kg: nutrientCalc.primarySummary.N_kg,
             P2O5_kg: nutrientCalc.primarySummary.P2O5_kg,

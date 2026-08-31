@@ -68,6 +68,7 @@ import {
   CropSeason,
   Fertilizer,
   FertilizerApplication,
+  NutrientComposition,
   Land,
   Opt,
   OptObservation,
@@ -116,6 +117,10 @@ export function ActivityFormModal({
   // --- State Khusus Pupuk ---
   const [selectedFertId, setSelectedFertId] = useState<string>('');
   const [customFertName, setCustomFertName] = useState<string>('');
+  const [customCategory, setCustomCategory] = useState<string>('Anorganik Tunggal');
+  const [customFormula, setCustomFormula] = useState<string>('');
+  const [customBrand, setCustomBrand] = useState<string>('');
+  const [customIsSubsidized, setCustomIsSubsidized] = useState<boolean>(false);
   const [amountKg, setAmountKg] = useState<string>('50');
   const [method, setMethod] = useState<string>('BROADCAST');
 
@@ -131,6 +136,19 @@ export function ActivityFormModal({
   const [isCompressingPhoto, setIsCompressingPhoto] = useState<boolean>(false);
   const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState<boolean>(false);
   const [visualAnalysisResult, setVisualAnalysisResult] = useState<VisualAnalysisResult | null>(null);
+
+  // Helper parsing formula hara untuk pupuk kustom
+  const parseFormulaNutrients = (formulaStr: string): NutrientComposition | null => {
+    if (!formulaStr) return null;
+    const match = formulaStr.trim().match(/^(\d+(?:\.\d+)?)\s*[-/]\s*(\d+(?:\.\d+)?)\s*[-/]\s*(\d+(?:\.\d+)?)/);
+    if (match) {
+      const N = parseFloat(match[1]) || 0;
+      const P2O5 = parseFloat(match[2]) || 0;
+      const K2O = parseFloat(match[3]) || 0;
+      return { N, P2O5, K2O };
+    }
+    return null;
+  };
 
   // Fungsi reset total seluruh data sementara pengamatan
   const resetAllTemporaryOptState = () => {
@@ -173,12 +191,51 @@ export function ActivityFormModal({
     : { isValid: true, hst: 0 };
   const hstSnapshot = hstResult.isValid && hstResult.hst !== null ? hstResult.hst : 0;
 
+  // Grup Pupuk Berdasarkan Kategori & Status Subsidi
+  const subsidizedFertilizers = useMemo(
+    () => fertilizers.filter((f) => f.isSubsidized),
+    [fertilizers]
+  );
+  const nonSubsidizedInorganic = useMemo(
+    () =>
+      fertilizers.filter(
+        (f) =>
+          !f.isSubsidized &&
+          (f.type === 'INORGANIC_SINGLE' || f.type === 'INORGANIC_COMPOUND')
+      ),
+    [fertilizers]
+  );
+  const organicFertilizers = useMemo(
+    () => fertilizers.filter((f) => !f.isSubsidized && f.type === 'ORGANIC'),
+    [fertilizers]
+  );
+  const biologicalFertilizers = useMemo(
+    () =>
+      fertilizers.filter(
+        (f) =>
+          !f.isSubsidized &&
+          (f.type === 'BIOLOGICAL' || (f.type as string) === 'BIOFERTILIZER')
+      ),
+    [fertilizers]
+  );
+
   // Kalkulasi Preview Hara Pupuk (Realtime)
-  const selectedFert = fertilizers.find((f) => f.id === selectedFertId);
-  const currentKg = parseFloat(amountKg) || 0;
+  const isCustomFert = selectedFertId === '__CUSTOM__';
+  const selectedFert = isCustomFert
+    ? null
+    : fertilizers.find((f) => f.id === selectedFertId);
+
+  const cleanAmountNum = parseFloat(amountKg.replace(',', '.')) || 0;
+  const customParsedComp = useMemo(() => {
+    if (!isCustomFert) return null;
+    return parseFormulaNutrients(customFormula);
+  }, [isCustomFert, customFormula]);
+
   const nutrientPreview = selectedFert
-    ? calculateNutrients(currentKg, selectedFert.nutrientComposition)
-    : calculateNutrients(currentKg, null);
+    ? calculateNutrients(cleanAmountNum, selectedFert.nutrientComposition)
+    : customParsedComp
+    ? calculateNutrients(cleanAmountNum, customParsedComp)
+    : calculateNutrients(cleanAmountNum, null);
 
   // Kalkulasi Realtime Kandidat OPT berdasarkan foto/gejala untuk mode PHOTO dan SYMPTOM
   const realtimeCandidates = useMemo(() => {
@@ -305,12 +362,24 @@ export function ActivityFormModal({
       let createdOptObsRecord: OptObservation | undefined = undefined;
 
       if (category === 'FERTILIZER') {
-        const kg = parseFloat(amountKg) || 0;
-        if (kg <= 0) {
-          throw new Error('Jumlah pupuk harus lebih dari 0 kg');
+        const normalizedStr = amountKg.replace(',', '.').trim();
+        const kg = parseFloat(normalizedStr);
+        if (isNaN(kg) || kg <= 0) {
+          throw new Error('Jumlah pupuk harus berupa angka positif yang valid (lebih dari 0 kg).');
         }
 
-        const fertName = selectedFert ? selectedFert.name : customFertName || 'Pupuk Khusus';
+        if (isCustomFert && !customFertName.trim()) {
+          throw new Error('Silakan masukkan nama pupuk manual yang diberikan.');
+        }
+
+        const fertName = selectedFert ? selectedFert.name : customFertName.trim();
+        const fertIsSubsidized = selectedFert
+          ? (selectedFert.isSubsidized ?? false)
+          : customIsSubsidized;
+        const fertFormula = selectedFert ? selectedFert.formula : (customFormula.trim() || undefined);
+        const fertBrand = selectedFert ? selectedFert.brand : (customBrand.trim() || undefined);
+        const fertCategory = selectedFert ? selectedFert.category : (customCategory || undefined);
+
         const fertApp: FertilizerApplication = {
           id: `fa-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           activityId,
@@ -318,6 +387,11 @@ export function ActivityFormModal({
           fertilizerName: fertName,
           amountKg: kg,
           applicationMethod: method as any,
+          isSubsidized: fertIsSubsidized,
+          formula: fertFormula,
+          brand: fertBrand,
+          category: fertCategory,
+          manufacturer: selectedFert?.manufacturer,
           calculatedNutrients: {
             N_kg: nutrientPreview.primarySummary.N_kg,
             P2O5_kg: nutrientPreview.primarySummary.P2O5_kg,
@@ -329,7 +403,7 @@ export function ActivityFormModal({
           updatedAt: now,
         };
 
-        baseActivity.notes = baseActivity.notes || `Aplikasi ${fertName} ${kg} kg (${method})`;
+        baseActivity.notes = baseActivity.notes || `Aplikasi ${fertName} ${kg} kg (${method})${fertIsSubsidized ? ' • Subsidi' : ''}`;
         actionDescription = `Aplikasi pupuk ${fertName} sebanyak ${kg} kg`;
         await activityRepository.createFertilizerActivity(baseActivity, fertApp);
       } else if (category === 'OPT') {
@@ -632,68 +706,230 @@ export function ActivityFormModal({
 
           {/* --- FORM 1: PEMUPUKAN (FERTILIZER) --- */}
           {category === 'FERTILIZER' && (
-            <div className="space-y-3 p-3.5 bg-emerald-50/40 rounded-2xl border border-emerald-200/80">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-4 p-4 bg-emerald-50/50 rounded-2xl border border-emerald-200/80">
+              {/* Baris 1: Pilihan Jenis Pupuk & Jumlah Kg */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Jenis Pupuk <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+                    <span>Jenis Pupuk <span className="text-red-500">*</span></span>
+                    {selectedFert?.isSubsidized && (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-900 px-1.5 py-0.5 rounded font-bold border border-emerald-300">
+                        Subsidi Pemerintah
+                      </span>
+                    )}
                   </label>
                   <select
                     value={selectedFertId}
                     onChange={(e) => setSelectedFertId(e.target.value)}
                     className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
                   >
-                    {fertilizers.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name} ({f.formula})
-                      </option>
-                    ))}
+                    {subsidizedFertilizers.length > 0 && (
+                      <optgroup label="🌱 Pupuk Bersubsidi (Program Pemerintah)">
+                        {subsidizedFertilizers.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.name} {f.formula ? `(${f.formula})` : ''} - Subsidi
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+
+                    {nonSubsidizedInorganic.length > 0 && (
+                      <optgroup label="💼 Pupuk Non-Subsidi / Komersial">
+                        {nonSubsidizedInorganic.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.name} {f.formula ? `(${f.formula})` : ''} {f.brand ? `• ${f.brand}` : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+
+                    {organicFertilizers.length > 0 && (
+                      <optgroup label="🍂 Pupuk Organik & Lokal">
+                        {organicFertilizers.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.name} {f.formula ? `(${f.formula})` : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+
+                    {biologicalFertilizers.length > 0 && (
+                      <optgroup label="🔬 Pupuk Hayati & Biofertilizer">
+                        {biologicalFertilizers.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.name} {f.formula ? `(${f.formula})` : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+
+                    <optgroup label="➕ Opsi Tambahan">
+                      <option value="__CUSTOM__">+ Pupuk Lainnya / Isi Manual...</option>
+                    </optgroup>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-800 mb-1.5">
                     Jumlah Diberikan (Kg) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
-                    step="0.5"
-                    min="0.1"
+                    step="any"
+                    min="0.0001"
                     value={amountKg}
                     onChange={(e) => setAmountKg(e.target.value)}
-                    placeholder="Contoh: 50"
+                    placeholder="Contoh: 52 atau 52.5"
                     className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
                     required
                   />
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    Menerima angka bulat & desimal (e.g. 52, 52.5, 52.75, 137.5 kg)
+                  </span>
                 </div>
               </div>
 
-              {/* Preview Hara Otomatis */}
+              {/* Form Input Manual Jika Memilih Pupuk Kustom */}
+              {isCustomFert && (
+                <div className="p-3.5 bg-white rounded-xl border border-emerald-300 shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-700" />
+                      Detail Pupuk Manual / Lainnya
+                    </span>
+                    <span className="text-[11px] text-slate-500">Pencatatan fleksibel</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Nama Produk / Pupuk <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={customFertName}
+                        onChange={(e) => setCustomFertName(e.target.value)}
+                        placeholder="Contoh: Meroke MAP / Pupuk Racikan"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Kategori Pupuk
+                      </label>
+                      <select
+                        value={customCategory}
+                        onChange={(e) => setCustomCategory(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
+                      >
+                        <option value="Anorganik Tunggal">Anorganik Tunggal</option>
+                        <option value="Majemuk NPK">Majemuk NPK / Kompleks</option>
+                        <option value="Organik Padat">Organik Padat / Kompos / Kandang</option>
+                        <option value="Organik Cair">Organik Cair (POC)</option>
+                        <option value="Pupuk Hayati">Pupuk Hayati / Biofertilizer</option>
+                        <option value="Pembenah Tanah">Pembenah Tanah / Kapur / Dolomit</option>
+                        <option value="Lainnya">Lainnya</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Rumus / Formula Hara (Opsional)
+                      </label>
+                      <input
+                        type="text"
+                        value={customFormula}
+                        onChange={(e) => setCustomFormula(e.target.value)}
+                        placeholder="Contoh: 16-16-16 atau 46-0-0"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Merek / Produsen (Opsional)
+                      </label>
+                      <input
+                        type="text"
+                        value={customBrand}
+                        onChange={(e) => setCustomBrand(e.target.value)}
+                        placeholder="Contoh: Meroke, Yara, Swadaya"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Status Subsidi Checkbox */}
+                  <label className="flex items-center gap-2 pt-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={customIsSubsidized}
+                      onChange={(e) => setCustomIsSubsidized(e.target.checked)}
+                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+                    />
+                    <span className="text-xs font-medium text-slate-700">
+                      Pupuk Subsidi Pemerintah (Alokasi RDKK / e-Alokasi)
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {/* Baris Metode Aplikasi */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Metode Aplikasi
+                </label>
+                <select
+                  value={method}
+                  onChange={(e) => setMethod(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
+                >
+                  <option value="BROADCAST">Tabur Merata di Permukaan (Broadcast)</option>
+                  <option value="SIDE_DRESS">Larikan / Samping Tanaman (Side-dress)</option>
+                  <option value="DRENCH">Kocor / Larutan Air (Drenching)</option>
+                  <option value="POINT_PLACEMENT">Tugal / Dibenamkan ke Tanah (Point Placement)</option>
+                  <option value="FOLIAR">Semprot Daun / Pupuk Cair (Foliar Spray)</option>
+                </select>
+              </div>
+
+              {/* Preview Pasokan Hara Otomatis */}
               <div className="p-3 bg-white rounded-xl border border-emerald-200 shadow-2xs space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-emerald-900 flex items-center gap-1">
                     <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
                     Pasokan Hara Bersih Terhitung:
                   </span>
-                  <span className="text-[11px] text-slate-500">Otomatis dihitung mesin hara</span>
+                  <span className="text-[11px] text-slate-500">
+                    {nutrientPreview.primarySummary.N_kg + nutrientPreview.primarySummary.P2O5_kg + nutrientPreview.primarySummary.K2O_kg > 0
+                      ? 'Dihitung otomatis mesin hara'
+                      : 'Non-NPK / Kandungan Organik/Hayati'}
+                  </span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-slate-100">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center pt-1 border-t border-slate-100">
                   <div className="p-1.5 bg-emerald-50 rounded-lg">
                     <span className="text-[10px] text-slate-500 block">Nitrogen (N)</span>
                     <strong className="text-xs text-emerald-950 font-extrabold">
-                      {nutrientPreview.primarySummary.N_kg.toFixed(1)} kg
+                      {nutrientPreview.primarySummary.N_kg.toFixed(2)} kg
                     </strong>
                   </div>
                   <div className="p-1.5 bg-emerald-50 rounded-lg">
                     <span className="text-[10px] text-slate-500 block">Fosfat (P₂O₅)</span>
                     <strong className="text-xs text-emerald-950 font-extrabold">
-                      {nutrientPreview.primarySummary.P2O5_kg.toFixed(1)} kg
+                      {nutrientPreview.primarySummary.P2O5_kg.toFixed(2)} kg
                     </strong>
                   </div>
                   <div className="p-1.5 bg-emerald-50 rounded-lg">
                     <span className="text-[10px] text-slate-500 block">Kalium (K₂O)</span>
                     <strong className="text-xs text-emerald-950 font-extrabold">
-                      {nutrientPreview.primarySummary.K2O_kg.toFixed(1)} kg
+                      {nutrientPreview.primarySummary.K2O_kg.toFixed(2)} kg
+                    </strong>
+                  </div>
+                  <div className="p-1.5 bg-emerald-50 rounded-lg">
+                    <span className="text-[10px] text-slate-500 block">Sulfur (S)</span>
+                    <strong className="text-xs text-emerald-950 font-extrabold">
+                      {nutrientPreview.primarySummary.S_kg.toFixed(2)} kg
                     </strong>
                   </div>
                 </div>

@@ -55,11 +55,19 @@ export function FertilizerDetailModal({
 
   const comp = fertilizer.nutrientComposition;
 
+  const nPct = comp.N ?? (comp as any).N_pct ?? 0;
+  const pPct = comp.P2O5 ?? (comp as any).P2O5_pct ?? 0;
+  const kPct = comp.K2O ?? (comp as any).K2O_pct ?? 0;
+  const sPct = comp.S ?? (comp as any).S_pct ?? 0;
+  const caPct = comp.Ca ?? 0;
+  const mgPct = comp.Mg ?? 0;
+  const znPct = comp.Zn ?? 0;
+
   // Hitung simulasi hara terpasok
-  const calculatedN = comp.N_pct ? (simulatedKg * comp.N_pct) / 100 : 0;
-  const calculatedP = comp.P2O5_pct ? (simulatedKg * comp.P2O5_pct) / 100 : 0;
-  const calculatedK = comp.K2O_pct ? (simulatedKg * comp.K2O_pct) / 100 : 0;
-  const calculatedS = comp.S_pct ? (simulatedKg * comp.S_pct) / 100 : 0;
+  const calculatedN = (simulatedKg * nPct) / 100;
+  const calculatedP = (simulatedKg * pPct) / 100;
+  const calculatedK = (simulatedKg * kPct) / 100;
+  const calculatedS = (simulatedKg * sPct) / 100;
 
   const getTypeBadge = (type: string) => {
     switch (type) {
@@ -69,6 +77,7 @@ export function FertilizerDetailModal({
         return { label: 'Majemuk (NPK)', color: 'bg-blue-50 text-blue-800 border-blue-200' };
       case 'ORGANIC':
         return { label: 'Organik Alami', color: 'bg-amber-50 text-amber-900 border-amber-200' };
+      case 'BIOLOGICAL':
       case 'BIOFERTILIZER':
         return { label: 'Hayati / Mikroba', color: 'bg-teal-50 text-teal-800 border-teal-200' };
       default:
@@ -81,28 +90,28 @@ export function FertilizerDetailModal({
   // Penjelasan peran hara berdasarkan komposisi
   const getNutrientRoleText = () => {
     const roles: string[] = [];
-    if (comp.N_pct && comp.N_pct > 0) {
+    if (nPct > 0) {
       roles.push(
         'Nitrogen (N): Merangsang pertumbuhan vegetatif, pembentukan anakan baru, dan menghijaukan daun untuk fotosintesis optimal.'
       );
     }
-    if (comp.P2O5_pct && comp.P2O5_pct > 0) {
+    if (pPct > 0) {
       roles.push(
         'Fosfat (P₂O₅): Mempercepat perkembangan perakaran awal yang kuat dan mempercepat inisiasi pembungaan/malai.'
       );
     }
-    if (comp.K2O_pct && comp.K2O_pct > 0) {
+    if (kPct > 0) {
       roles.push(
         'Kalium (K₂O): Memperkokoh dinding batang agar tidak mudah rebah, meningkatkan ketahanan terhadap hama/penyakit, dan memaksimalkan pengisian gabah bernas.'
       );
     }
-    if (comp.S_pct && comp.S_pct > 0) {
+    if (sPct > 0) {
       roles.push(
         'Sulfur (S): Pembentukan protein, klorofil, dan enzim tanaman padi.'
       );
     }
     if (roles.length === 0) {
-      roles.push('Menyediakan bahan organik dan memperbaiki struktur aerasi serta biologi tanah sawah.');
+      roles.push('Menyediakan bahan organik / biologi tanah untuk memperbaiki struktur aerasi, C-Organik, dan mikroorganisme tanah sawah.');
     }
     return roles;
   };
@@ -112,18 +121,27 @@ export function FertilizerDetailModal({
       isOpen={isOpen}
       onClose={onClose}
       title={fertilizer.name}
-      subtitle={fertilizer.formula ? `Rumus Kimia: ${fertilizer.formula}` : undefined}
+      subtitle={fertilizer.formula ? `Rumus: ${fertilizer.formula}` : undefined}
     >
       <div className="space-y-4">
-        {/* Badge Tipe & Rumus */}
+        {/* Badge Tipe & Rumus & Status Subsidi */}
         <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <span
-              className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-full border ${badge.color}`}
-            >
-              <FlaskConical className="w-3.5 h-3.5" />
-              {badge.label}
-            </span>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span
+                className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-full border ${badge.color}`}
+              >
+                <FlaskConical className="w-3.5 h-3.5" />
+                {badge.label}
+              </span>
+
+              {fertilizer.isSubsidized && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                  <Sparkles className="w-3 h-3" />
+                  Subsidi Pemerintah
+                </span>
+              )}
+            </div>
 
             {fertilizer.formula && (
               <span className="font-mono text-xs font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
@@ -131,6 +149,18 @@ export function FertilizerDetailModal({
               </span>
             )}
           </div>
+
+          {fertilizer.subsidyNote && (
+            <p className="text-[11px] text-amber-900 bg-amber-50 p-2 rounded-xl border border-amber-200">
+              {fertilizer.subsidyNote}
+            </p>
+          )}
+
+          {fertilizer.manufacturer && (
+            <div className="text-xs text-slate-600">
+              <span className="font-semibold text-slate-700">Produsen / Merek:</span> {fertilizer.manufacturer} {fertilizer.brand ? `(${fertilizer.brand})` : ''}
+            </div>
+          )}
 
           {fertilizer.aliases && fertilizer.aliases.length > 0 && (
             <div className="flex items-center gap-1.5 text-xs text-slate-600">
@@ -160,7 +190,7 @@ export function FertilizerDetailModal({
                 Nitrogen (N)
               </span>
               <span className="text-lg font-black text-emerald-950">
-                {comp.N_pct ?? 0}%
+                {nPct}%
               </span>
             </div>
 
@@ -169,7 +199,7 @@ export function FertilizerDetailModal({
                 Fosfat (P₂O₅)
               </span>
               <span className="text-lg font-black text-blue-950">
-                {comp.P2O5_pct ?? 0}%
+                {pPct}%
               </span>
             </div>
 
@@ -178,7 +208,7 @@ export function FertilizerDetailModal({
                 Kalium (K₂O)
               </span>
               <span className="text-lg font-black text-amber-950">
-                {comp.K2O_pct ?? 0}%
+                {kPct}%
               </span>
             </div>
 
@@ -187,7 +217,7 @@ export function FertilizerDetailModal({
                 Sulfur (S)
               </span>
               <span className="text-lg font-black text-teal-950">
-                {comp.S_pct ?? 0}%
+                {sPct}%
               </span>
             </div>
           </div>

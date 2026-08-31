@@ -67,6 +67,12 @@ export interface Fertilizer {
   formula?: string; // Contoh: "46-0-0", "15-15-15", "16-16-16"
   nutrientComposition: NutrientComposition;
   aliases: string[];
+  isSubsidized?: boolean;
+  manufacturer?: string;
+  brand?: string;
+  category?: string;
+  subsidyNote?: string;
+  description?: string;
   referenceId?: EntityId;
   createdAt: ISODateString;
   updatedAt: ISODateString;
@@ -83,6 +89,11 @@ export interface FertilizerApplication {
   amountKg: WeightKg;
   applicationMethod: ApplicationMethod;
   calculatedNutrients: CalculatedNutrients;
+  isSubsidized?: boolean;
+  formula?: string;
+  brand?: string;
+  category?: string;
+  manufacturer?: string;
   notes?: string;
   createdAt: ISODateString;
   updatedAt: ISODateString;

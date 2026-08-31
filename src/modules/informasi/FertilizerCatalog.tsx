@@ -51,7 +51,13 @@ export function FertilizerCatalog({
   const filteredFertilizers = useMemo(() => {
     return fertilizers.filter((fert) => {
       // 1. Filter Tipe Pupuk
-      if (selectedType !== 'ALL' && fert.type !== selectedType) {
+      if (selectedType === 'SUBSIDIZED') {
+        if (!fert.isSubsidized) return false;
+      } else if (selectedType === 'NON_SUBSIDIZED') {
+        if (fert.isSubsidized) return false;
+      } else if (selectedType === 'BIOLOGICAL') {
+        if (fert.type !== 'BIOLOGICAL') return false;
+      } else if (selectedType !== 'ALL' && fert.type !== selectedType) {
         return false;
       }
 
@@ -61,13 +67,25 @@ export function FertilizerCatalog({
       const matchName = fert.name.toLowerCase().includes(query);
       const matchFormula = fert.formula?.toLowerCase().includes(query);
       const matchAliases = fert.aliases?.some((a) => a.toLowerCase().includes(query));
+      const matchBrand = fert.brand?.toLowerCase().includes(query);
+      const matchManufacturer = fert.manufacturer?.toLowerCase().includes(query);
 
-      return matchName || matchFormula || matchAliases;
+      return matchName || matchFormula || matchAliases || matchBrand || matchManufacturer;
     });
   }, [fertilizers, selectedType, query]);
 
   const types = [
     { id: 'ALL', label: 'Semua Pupuk', count: fertilizers.length },
+    {
+      id: 'SUBSIDIZED',
+      label: 'Subsidi Pemerintah',
+      count: fertilizers.filter((f) => f.isSubsidized).length,
+    },
+    {
+      id: 'NON_SUBSIDIZED',
+      label: 'Non-Subsidi / Komersial',
+      count: fertilizers.filter((f) => !f.isSubsidized).length,
+    },
     {
       id: 'INORGANIC_SINGLE',
       label: 'Anorganik Tunggal',
@@ -82,6 +100,11 @@ export function FertilizerCatalog({
       id: 'ORGANIC',
       label: 'Pupuk Organik',
       count: fertilizers.filter((f) => f.type === 'ORGANIC').length,
+    },
+    {
+      id: 'BIOLOGICAL',
+      label: 'Hayati & Dekomposer',
+      count: fertilizers.filter((f) => f.type === 'BIOLOGICAL').length,
     },
   ];
 
@@ -170,26 +193,46 @@ export function FertilizerCatalog({
                 {/* Header Card */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="space-y-0.5">
-                    <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-emerald-900 transition-colors">
-                      {fert.name}
-                    </h3>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-emerald-900 transition-colors">
+                        {fert.name}
+                      </h3>
+                      {fert.isSubsidized && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300">
+                          Subsidi Pemerintah
+                        </span>
+                      )}
+                    </div>
                     {fert.formula && (
-                      <span className="font-mono text-[11px] text-slate-500 font-semibold">
-                        {fert.formula}
+                      <span className="font-mono text-[11px] text-slate-600 font-semibold block">
+                        Rumus: {fert.formula}
+                      </span>
+                    )}
+                    {fert.manufacturer && (
+                      <span className="text-[10px] text-slate-500 block">
+                        Produsen: {fert.manufacturer}
                       </span>
                     )}
                   </div>
 
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-md border shrink-0 ${
-                      isCompound
+                      fert.type === 'BIOLOGICAL'
+                        ? 'bg-teal-50 text-teal-800 border-teal-200'
+                        : isCompound
                         ? 'bg-blue-50 text-blue-800 border-blue-200'
                         : isOrganic
                         ? 'bg-amber-50 text-amber-900 border-amber-200'
                         : 'bg-emerald-50 text-emerald-800 border-emerald-200'
                     }`}
                   >
-                    {isCompound ? 'Majemuk NPK' : isOrganic ? 'Organik' : 'Tunggal'}
+                    {fert.type === 'BIOLOGICAL'
+                      ? 'Hayati'
+                      : isCompound
+                      ? 'Majemuk NPK'
+                      : isOrganic
+                      ? 'Organik'
+                      : 'Tunggal'}
                   </span>
                 </div>
 
@@ -210,28 +253,34 @@ export function FertilizerCatalog({
 
                 {/* Nutrient Chips Grid */}
                 <div className="flex flex-wrap gap-1.5 pt-1">
-                  {comp.N_pct !== undefined && comp.N_pct > 0 && (
+                  {(comp.N ?? (comp as any).N_pct) !== undefined && (comp.N ?? (comp as any).N_pct) > 0 && (
                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-900 border border-emerald-200 text-xs font-bold">
                       <span>N:</span>
-                      <strong className="font-black">{comp.N_pct}%</strong>
+                      <strong className="font-black">{comp.N ?? (comp as any).N_pct}%</strong>
                     </span>
                   )}
-                  {comp.P2O5_pct !== undefined && comp.P2O5_pct > 0 && (
+                  {(comp.P2O5 ?? (comp as any).P2O5_pct) !== undefined && (comp.P2O5 ?? (comp as any).P2O5_pct) > 0 && (
                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 text-blue-900 border border-blue-200 text-xs font-bold">
                       <span>P₂O₅:</span>
-                      <strong className="font-black">{comp.P2O5_pct}%</strong>
+                      <strong className="font-black">{comp.P2O5 ?? (comp as any).P2O5_pct}%</strong>
                     </span>
                   )}
-                  {comp.K2O_pct !== undefined && comp.K2O_pct > 0 && (
+                  {(comp.K2O ?? (comp as any).K2O_pct) !== undefined && (comp.K2O ?? (comp as any).K2O_pct) > 0 && (
                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 text-amber-950 border border-amber-200 text-xs font-bold">
                       <span>K₂O:</span>
-                      <strong className="font-black">{comp.K2O_pct}%</strong>
+                      <strong className="font-black">{comp.K2O ?? (comp as any).K2O_pct}%</strong>
                     </span>
                   )}
-                  {comp.S_pct !== undefined && comp.S_pct > 0 && (
+                  {(comp.S ?? (comp as any).S_pct) !== undefined && (comp.S ?? (comp as any).S_pct) > 0 && (
                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-teal-50 text-teal-900 border border-teal-200 text-xs font-bold">
                       <span>S:</span>
-                      <strong className="font-black">{comp.S_pct}%</strong>
+                      <strong className="font-black">{comp.S ?? (comp as any).S_pct}%</strong>
+                    </span>
+                  )}
+                  {comp.Zn !== undefined && comp.Zn > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-50 text-purple-900 border border-purple-200 text-xs font-bold">
+                      <span>Zn:</span>
+                      <strong className="font-black">{comp.Zn}%</strong>
                     </span>
                   )}
                 </div>

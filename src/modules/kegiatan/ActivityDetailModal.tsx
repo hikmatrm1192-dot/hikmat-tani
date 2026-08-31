@@ -611,10 +611,34 @@ export function ActivityDetailModal({
             </h4>
             {fertilizerApps.map((fa) => (
               <div key={fa.id} className="space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800 text-sm">{fa.fertilizerName}</span>
-                  <span className="font-black text-emerald-800 text-sm">{fa.amountKg} kg</span>
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div>
+                    <span className="font-bold text-slate-900 text-sm block">
+                      {fa.fertilizerName} {fa.formula ? `(${fa.formula})` : ''}
+                    </span>
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      {fa.isSubsidized && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                          Subsidi Pemerintah
+                        </span>
+                      )}
+                      {fa.brand && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                          Merek: {fa.brand}
+                        </span>
+                      )}
+                      {fa.category && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          {fa.category}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="font-black text-emerald-900 text-base bg-emerald-100/70 px-2.5 py-1 rounded-xl border border-emerald-300">
+                    {fa.amountKg} kg
+                  </span>
                 </div>
+
                 <div className="text-slate-600">
                   Metode: <strong className="text-slate-800">{fa.applicationMethod || 'Tabur Merata'}</strong>
                 </div>
@@ -627,25 +651,25 @@ export function ActivityDetailModal({
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <div className="p-2 bg-white rounded-lg border border-emerald-200 text-center">
                         <span className="text-[10px] text-slate-500 block">Nitrogen (N)</span>
-                        <span className="font-bold text-slate-900">{fa.calculatedNutrients.N_kg?.toFixed(1) || 0} kg</span>
+                        <span className="font-bold text-slate-900">{fa.calculatedNutrients.N_kg?.toFixed(2) || 0} kg</span>
                       </div>
                       <div className="p-2 bg-white rounded-lg border border-emerald-200 text-center">
                         <span className="text-[10px] text-slate-500 block">Fosfat (P₂O₅)</span>
-                        <span className="font-bold text-slate-900">{fa.calculatedNutrients.P2O5_kg?.toFixed(1) || 0} kg</span>
+                        <span className="font-bold text-slate-900">{fa.calculatedNutrients.P2O5_kg?.toFixed(2) || 0} kg</span>
                       </div>
                       <div className="p-2 bg-white rounded-lg border border-emerald-200 text-center">
                         <span className="text-[10px] text-slate-500 block">Kalium (K₂O)</span>
-                        <span className="font-bold text-slate-900">{fa.calculatedNutrients.K2O_kg?.toFixed(1) || 0} kg</span>
+                        <span className="font-bold text-slate-900">{fa.calculatedNutrients.K2O_kg?.toFixed(2) || 0} kg</span>
                       </div>
                       <div className="p-2 bg-white rounded-lg border border-emerald-200 text-center">
                         <span className="text-[10px] text-slate-500 block">Sulfur (S)</span>
-                        <span className="font-bold text-slate-900">{fa.calculatedNutrients.S_kg?.toFixed(1) || 0} kg</span>
+                        <span className="font-bold text-slate-900">{fa.calculatedNutrients.S_kg?.toFixed(2) || 0} kg</span>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {onNavigateToKnowledge && (
+                {onNavigateToKnowledge && fa.fertilizerId && (
                   <div className="pt-2 border-t border-emerald-200/60 flex justify-end">
                     <button
                       type="button"
