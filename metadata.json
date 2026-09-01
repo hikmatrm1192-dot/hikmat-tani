@@ -1,6 +1,6 @@
 {
   "name": "HIKMAT TANI",
-  "description": "Aplikasi pendamping petani padi multi-platform dengan pendekatan offline-first.",
-  "requestFramePermissions": [],
+  "description": "Aplikasi pendamping petani padi multi-platform berbasis peta satelit 2D, GPS, petak sawah m², cuaca, dan manajemen agroklimat offline-first.",
+  "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

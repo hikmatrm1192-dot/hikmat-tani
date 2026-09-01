@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react';
-import { Archive, Layers, Plus } from 'lucide-react';
+import { Archive, Layers, Map as MapIcon, Plus } from 'lucide-react';
 import { EmptyState } from '../../components/common/EmptyState.tsx';
 import { PageHeader } from '../../components/common/PageHeader.tsx';
 import { CropSeason, Land, RiceVariety } from '../../types/index.ts';
@@ -22,7 +22,7 @@ interface LahanViewProps {
   varieties: RiceVariety[];
   selectedLandId?: string;
   onSelectLandId?: (landId: string) => void;
-  onNavigateToTab?: (tab: 'beranda' | 'lahan' | 'kegiatan' | 'informasi' | 'saya') => void;
+  onNavigateToTab?: (tab: 'beranda' | 'peta' | 'lahan' | 'kegiatan' | 'informasi' | 'saya' | 'cuaca') => void;
   onOpenAddLand: () => void;
   onOpenStartSeason: (land: Land) => void;
   onRefreshData?: () => Promise<void>;

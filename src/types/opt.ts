@@ -75,6 +75,8 @@ export interface OptObservation {
   attackSeverity?: AttackSeverity;
   attackPercentage?: Percentage;
   attackAreaM2?: number;        // Luas area serangan OPT dalam satuan m² (opsional)
+  latitude?: number;            // Titik koordinat GPS pengamatan hama/penyakit di sawah
+  longitude?: number;
   attackLocation: AttackLocation[];
   observedSymptoms?: string;
   photoLocalUri?: string;       // Deprecated / Undefined: Foto tidak disimpan di database demi privasi

@@ -7,9 +7,9 @@
  * - Kontras tinggi & label jelas
  */
 
-import { BookOpen, CalendarDays, Home, Layers, User } from 'lucide-react';
+import { BookOpen, CalendarDays, Home, Layers, Map as MapIcon, User } from 'lucide-react';
 
-export type MainNavTab = 'beranda' | 'lahan' | 'kegiatan' | 'informasi' | 'saya' | 'cuaca';
+export type MainNavTab = 'beranda' | 'peta' | 'lahan' | 'kegiatan' | 'informasi' | 'saya' | 'cuaca';
 
 interface BottomNavProps {
   activeTab: MainNavTab;
@@ -19,9 +19,9 @@ interface BottomNavProps {
 export function BottomNav({ activeTab, onSelectTab }: BottomNavProps) {
   const navItems: { id: MainNavTab; label: string; icon: typeof Home }[] = [
     { id: 'beranda', label: 'Beranda', icon: Home },
+    { id: 'peta', label: 'Peta', icon: MapIcon },
     { id: 'lahan', label: 'Lahan', icon: Layers },
     { id: 'kegiatan', label: 'Kegiatan', icon: CalendarDays },
-    { id: 'informasi', label: 'Informasi', icon: BookOpen },
     { id: 'saya', label: 'Saya', icon: User },
   ];
 

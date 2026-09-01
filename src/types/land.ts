@@ -22,17 +22,29 @@ export type LandType =
 
 export type LandStatus = 'ACTIVE' | 'ARCHIVED';
 
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+}
+
 export interface Land {
   id: EntityId;
   farmerId: EntityId;
   name: string;
   areaHa: AreaHa;
+  areaM2?: number; // Luas primer petak sawah dalam m²
+  perimeterM?: number; // Keliling batas petak dalam meter
+  coordinates?: GeoPoint[]; // Titik-titik batas polygon sawah
+  center?: GeoPoint; // Titik tengah (centroid) petak sawah
   location?: string;
   waterSource?: WaterSource;
   landType?: LandType;
   status?: LandStatus; // 'ACTIVE' (default) | 'ARCHIVED'
   latitude?: Latitude;
   longitude?: Longitude;
+  droughtCategory?: 'TERANCAM' | 'RINGAN' | 'SEDANG' | 'BERAT' | 'PUSO';
+  droughtTrend?: 'WORSENING' | 'IMPROVING' | 'STABLE';
+  droughtLastUpdated?: string;
   notes?: string;
   createdAt: ISODateString;
   updatedAt: ISODateString;

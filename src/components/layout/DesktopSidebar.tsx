@@ -4,7 +4,7 @@
  * Sederhana, elegan, kontras tinggi, brand identity konsisten.
  */
 
-import { BookOpen, CalendarDays, CloudSun, Home, Layers, User } from 'lucide-react';
+import { BookOpen, CalendarDays, CloudSun, Home, Layers, Map as MapIcon, User } from 'lucide-react';
 import { BrandLogo } from '../common/BrandLogo.tsx';
 import { ConnectionStatus } from '../common/ConnectionStatus.tsx';
 import { useBrandConfig } from '../../services/publicConfigService.ts';
@@ -19,6 +19,7 @@ export function DesktopSidebar({ activeTab, onSelectTab }: DesktopSidebarProps) 
   const brandConfig = useBrandConfig();
   const navItems: { id: MainNavTab; label: string; icon: typeof Home; description: string }[] = [
     { id: 'beranda', label: 'Beranda', icon: Home, description: 'Kondisi lapang & saran' },
+    { id: 'peta', label: 'Peta Pertanian', icon: MapIcon, description: 'Satelit 2D, GPS & petak' },
     { id: 'cuaca', label: 'Prakiraan Cuaca', icon: CloudSun, description: 'Cuaca 10 hari & saran tani' },
     { id: 'lahan', label: 'Lahan Saya', icon: Layers, description: 'Petak & musim tanam' },
     { id: 'kegiatan', label: 'Kegiatan', icon: CalendarDays, description: 'Catatan & linimasa' },

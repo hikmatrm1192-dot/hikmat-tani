@@ -54,7 +54,7 @@ interface BerandaViewProps {
   opts?: Opt[];
   selectedLandId: string | null;
   onSelectLandId: (landId: string) => void;
-  onNavigateToTab: (tab: 'beranda' | 'lahan' | 'kegiatan' | 'informasi' | 'saya' | 'cuaca') => void;
+  onNavigateToTab: (tab: 'beranda' | 'peta' | 'lahan' | 'kegiatan' | 'informasi' | 'saya' | 'cuaca') => void;
   onNavigateToKnowledge?: (
     category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan',
     itemId?: string,
@@ -272,6 +272,10 @@ export function BerandaView({
         onStartSeason={(landId) => onOpenStartSeason(landId)}
         allLands={lands}
         onSelectLand={onSelectLandId}
+        onOpenMap={(landId) => {
+          onSelectLandId(landId);
+          onNavigateToTab('peta');
+        }}
       />
 
       {/* 2. Yang Perlu Diperhatikan (Saran Ilmiah Santun & Jalur Keputusan Petani) */}

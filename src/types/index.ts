@@ -19,3 +19,4 @@ export * from './backup.ts';
 export * from './weather.ts';
 export * from './seedbed.ts';
 export * from './expense.ts';
+export * from './drought.ts';

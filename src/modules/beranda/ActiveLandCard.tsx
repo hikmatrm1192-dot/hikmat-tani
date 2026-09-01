@@ -9,10 +9,11 @@
  * - Tanggal tanam
  */
 
-import { Calendar, ChevronRight, Layers, Sparkles, Sprout } from 'lucide-react';
+import { Calendar, ChevronRight, Layers, Map as MapIcon, Sparkles, Sprout } from 'lucide-react';
 import { determineGrowthPhase } from '../../engine/growthPhase.ts';
 import { calculateHST } from '../../engine/hstCalculator.ts';
 import { CropSeason, Land } from '../../types/index.ts';
+import { formatAreaM2 } from '../../utils/geoUtils.ts';
 
 interface ActiveLandCardProps {
   land: Land;
@@ -22,6 +23,7 @@ interface ActiveLandCardProps {
   onStartSeason?: (landId: string) => void;
   allLands?: Land[];
   onSelectLand?: (landId: string) => void;
+  onOpenMap?: (landId: string) => void;
 }
 
 export function ActiveLandCard({
@@ -32,6 +34,7 @@ export function ActiveLandCard({
   onStartSeason,
   allLands,
   onSelectLand,
+  onOpenMap,
 }: ActiveLandCardProps) {
   // Hitung HST secara dinamis via Engine
   const hstResult = activeSeason?.plantingDate
@@ -78,7 +81,7 @@ export function ActiveLandCard({
                 >
                   {allLands.map((l) => (
                     <option key={l.id} value={l.id} className="bg-[#072417] text-white">
-                      {l.name} ({Math.round(l.areaHa * 10000).toLocaleString('id-ID')} m²)
+                      {l.name} ({formatAreaM2(l.areaM2, l.areaHa)})
                     </option>
                   ))}
                 </select>
@@ -89,21 +92,35 @@ export function ActiveLandCard({
               </h2>
             )}
             <p className="text-xs text-emerald-200/90 font-medium">
-              Luas: <span className="text-white font-bold">{Math.round(land.areaHa * 10000).toLocaleString('id-ID')} m²</span>
+              Luas: <span className="text-white font-bold">{formatAreaM2(land.areaM2, land.areaHa)}</span>
             </p>
           </div>
 
-          {onOpenLandDetail && (
-            <button
-              type="button"
-              onClick={() => onOpenLandDetail(land.id)}
-              className="px-3.5 py-2 min-h-[44px] bg-white/10 hover:bg-white/20 active:bg-white/30 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1 shrink-0 border border-white/20 shadow-xs"
-              aria-label={`Buka rincian lahan ${land.name}`}
-            >
-              <span>Rincian</span>
-              <ChevronRight className="w-4 h-4 text-[#D4AF37]" />
-            </button>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {onOpenMap && (
+              <button
+                type="button"
+                onClick={() => onOpenMap(land.id)}
+                className="px-3 py-2 min-h-[44px] bg-emerald-500/20 hover:bg-emerald-500/30 active:bg-emerald-500/40 text-emerald-100 rounded-xl text-xs font-bold transition-colors flex items-center gap-1 border border-emerald-400/30 shadow-xs"
+                title="Buka Peta Satelit Petak Ini"
+              >
+                <MapIcon className="w-4 h-4 text-[#D4AF37]" />
+                <span className="hidden sm:inline">Peta</span>
+              </button>
+            )}
+
+            {onOpenLandDetail && (
+              <button
+                type="button"
+                onClick={() => onOpenLandDetail(land.id)}
+                className="px-3.5 py-2 min-h-[44px] bg-white/10 hover:bg-white/20 active:bg-white/30 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1 border border-white/20 shadow-xs"
+                aria-label={`Buka rincian lahan ${land.name}`}
+              >
+                <span>Rincian</span>
+                <ChevronRight className="w-4 h-4 text-[#D4AF37]" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Status Musim Tanam Aktif */}

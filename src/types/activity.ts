@@ -24,6 +24,8 @@ export interface Activity {
   category: ActivityCategory;
   activityDate: ISODateString;
   hst: number; // Snapshot Hari Setelah Tanam saat kegiatan dilakukan
+  latitude?: number; // Koordinat GPS lapang saat pencatatan
+  longitude?: number;
   notes?: string;
   createdAt: ISODateString;
   updatedAt: ISODateString;

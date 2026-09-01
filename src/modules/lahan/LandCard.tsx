@@ -5,10 +5,11 @@
  * varietas, luas, dan HST.
  */
 
-import { Archive, Calendar, CheckCircle2, ChevronRight, Droplets, Home, Layers, MoreVertical, Settings2, Sparkles, Sprout } from 'lucide-react';
+import { Archive, Calendar, CheckCircle2, ChevronRight, Droplets, Home, Layers, Map as MapIcon, MoreVertical, Settings2, Sparkles, Sprout } from 'lucide-react';
 import { determineGrowthPhase } from '../../engine/growthPhase.ts';
 import { calculateHST } from '../../engine/hstCalculator.ts';
 import { CropSeason, Land } from '../../types/index.ts';
+import { formatAreaM2 } from '../../utils/geoUtils.ts';
 
 interface LandCardProps {
   key?: string | number;
@@ -20,7 +21,7 @@ interface LandCardProps {
   onViewSeason: (land: Land, season: CropSeason) => void;
   onStartSeason: (land: Land) => void;
   onManageLand?: (land: Land) => void;
-  onNavigateToTab?: (tab: 'beranda' | 'lahan' | 'kegiatan' | 'informasi' | 'saya') => void;
+  onNavigateToTab?: (tab: 'beranda' | 'peta' | 'lahan' | 'kegiatan' | 'informasi' | 'saya') => void;
 }
 
 export function LandCard({
@@ -114,7 +115,7 @@ export function LandCard({
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Luas: <span className="font-bold text-slate-800">{Math.round(land.areaHa * 10000).toLocaleString('id-ID')} m²</span> •{' '}
+            Luas: <span className="font-bold text-slate-800">{formatAreaM2(land.areaM2, land.areaHa)}</span> •{' '}
             {getWaterSourceLabel(land.waterSource)}
           </p>
         </div>
@@ -165,6 +166,18 @@ export function LandCard({
           </div>
 
           <div className="pt-2 flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (onSelectLand) onSelectLand(land.id);
+                if (onNavigateToTab) onNavigateToTab('peta');
+              }}
+              className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 hover:text-emerald-950 min-h-[40px] py-1.5 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors shadow-2xs"
+            >
+              <MapIcon className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Lihat di Peta</span>
+            </button>
+
             <button
               type="button"
               onClick={handleOpenInBeranda}

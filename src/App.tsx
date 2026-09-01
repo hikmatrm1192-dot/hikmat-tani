@@ -35,6 +35,7 @@ import {
   InformasiView,
   KegiatanView,
   LahanView,
+  PetaPertanianView,
   SayaView,
   StartSeasonModal,
 } from './modules/index.ts';
@@ -442,6 +443,27 @@ export default function App() {
           onOpenAddLand={() => setIsAddLandModalOpen(true)}
           onOpenStartSeason={handleOpenStartSeasonModal}
           onRefreshData={loadData}
+        />
+      )}
+
+      {/* 🗺️ Modul Peta Pertanian (Peta Satelit 2D, GPS, Petak m², OPT & Kekeringan) */}
+      {activeTab === 'peta' && (
+        <PetaPertanianView
+          lands={lands}
+          activeSeasons={activeSeasons}
+          allActivities={allActivities}
+          allOptObs={allOptObs}
+          varieties={varieties}
+          opts={opts}
+          selectedLandId={selectedLandId}
+          onSelectLandId={setSelectedLandId}
+          onOpenAddActivity={(cat, landId) => {
+            if (landId) setSelectedLandId(landId);
+            setActiveTab('kegiatan');
+          }}
+          onOpenStartSeason={handleOpenStartSeasonModal}
+          onRefreshData={loadData}
+          onNavigateToTab={setActiveTab}
         />
       )}
 
