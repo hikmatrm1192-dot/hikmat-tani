@@ -20,3 +20,4 @@ export * from './weather.ts';
 export * from './seedbed.ts';
 export * from './expense.ts';
 export * from './drought.ts';
+export * from './villageBoundary.ts';

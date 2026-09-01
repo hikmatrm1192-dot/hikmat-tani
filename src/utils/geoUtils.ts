@@ -192,3 +192,79 @@ export function getLandAreaM2(land: { areaM2?: number; areaHa?: number }): numbe
   }
   return 0;
 }
+
+/**
+ * Uji apakah sebuah titik koordinat berada di dalam poligon (Ray-Casting Algorithm)
+ */
+export function isPointInPolygon(point: LatLngPoint, polygon: LatLngPoint[]): boolean {
+  if (!polygon || polygon.length < 3) return false;
+
+  let inside = false;
+  const x = point.lng;
+  const y = point.lat;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lng;
+    const yi = polygon[i].lat;
+    const xj = polygon[j].lng;
+    const yj = polygon[j].lat;
+
+    const intersect =
+      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
+}
+
+/**
+ * Jarak terpendek dari titik ke segmen garis (dalam meter)
+ */
+function distancePointToSegmentM(p: LatLngPoint, v: LatLngPoint, w: LatLngPoint): number {
+  const l2 = (w.lng - v.lng) * (w.lng - v.lng) + (w.lat - v.lat) * (w.lat - v.lat);
+  if (l2 === 0) return calculateHaversineDistanceM(p, v);
+
+  let t = ((p.lng - v.lng) * (w.lng - v.lng) + (p.lat - v.lat) * (w.lat - v.lat)) / l2;
+  t = Math.max(0, Math.min(1, t));
+
+  const projection: LatLngPoint = {
+    lat: v.lat + t * (w.lat - v.lat),
+    lng: v.lng + t * (w.lng - v.lng),
+  };
+
+  return calculateHaversineDistanceM(p, projection);
+}
+
+/**
+ * Hitung jarak minimum dari suatu titik ke batas terluar poligon (dalam meter)
+ */
+export function minDistanceToPolygonBorderM(point: LatLngPoint, polygon: LatLngPoint[]): number {
+  if (!polygon || polygon.length < 2) return Infinity;
+
+  let minDistance = Infinity;
+  for (let i = 0; i < polygon.length; i++) {
+    const nextIdx = (i + 1) % polygon.length;
+    const dist = distancePointToSegmentM(point, polygon[i], polygon[nextIdx]);
+    if (dist < minDistance) {
+      minDistance = dist;
+    }
+  }
+
+  return minDistance;
+}
+
+/**
+ * Uji perpotongan dua Bounding Box
+ */
+export function isBBoxIntersecting(
+  b1: { minLat: number; maxLat: number; minLng: number; maxLng: number },
+  b2: { minLat: number; maxLat: number; minLng: number; maxLng: number }
+): boolean {
+  return !(
+    b1.maxLat < b2.minLat ||
+    b1.minLat > b2.maxLat ||
+    b1.maxLng < b2.minLng ||
+    b1.minLng > b2.maxLng
+  );
+}
+

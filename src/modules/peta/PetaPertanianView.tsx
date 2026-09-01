@@ -35,15 +35,18 @@ import {
   Opt,
   OptObservation,
   RiceVariety,
+  VillageBoundaryFeature,
   WeatherData,
 } from '../../types/index.ts';
 import { authClientService } from '../../services/authClientService.ts';
+import { bigGeospatialService } from '../../services/bigGeospatialService.ts';
 import { AgriculturalMap, BaseMapType, MapLayerVisibility } from './AgriculturalMap.tsx';
 import { MapLayerControl } from './MapLayerControl.tsx';
 import { PolygonDrawerControls } from './PolygonDrawerControls.tsx';
 import { ParcelDetailDrawer } from './ParcelDetailDrawer.tsx';
 import { DroughtLegendModal } from './DroughtLegendModal.tsx';
 import { SaveDrawnParcelModal } from './SaveDrawnParcelModal.tsx';
+import { VillageDetailModal } from './VillageDetailModal.tsx';
 import { SAMPLE_DROUGHT_ZONES } from '../../engine/droughtEngine.ts';
 import { LatLngPoint } from '../../utils/geoUtils.ts';
 import { landRepository } from '../../db/repositories/landRepository.ts';
@@ -93,7 +96,19 @@ export function PetaPertanianView({
     showHarvestMarkers: true,
     showDroughtOverlay: false,
     showWeatherLayer: true,
+    showVillageBoundaries: true,
   });
+
+  // BIG Village Boundaries State
+  const [villageBoundaries, setVillageBoundaries] = useState<VillageBoundaryFeature[]>([]);
+  const [selectedVillage, setSelectedVillage] = useState<VillageBoundaryFeature | null>(null);
+  const [isVillageModalOpen, setIsVillageModalOpen] = useState<boolean>(false);
+
+  // Inisialisasi batas desa resmi BIG
+  useEffect(() => {
+    const boundaries = bigGeospatialService.getAllVillageBoundaries();
+    setVillageBoundaries(boundaries);
+  }, []);
 
   // GPS State
   const [userGps, setUserGps] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
@@ -348,6 +363,7 @@ export function PetaPertanianView({
         activities={allActivities}
         optObservations={allOptObs}
         droughtZones={SAMPLE_DROUGHT_ZONES}
+        villageBoundaries={villageBoundaries}
         selectedLandId={selectedParcel?.id || selectedLandId}
         baseMapType={baseMapType}
         layerVisibility={layerVisibility}
@@ -364,6 +380,10 @@ export function PetaPertanianView({
         }}
         onSelectDroughtZone={(zone) => {
           setIsDroughtLegendOpen(true);
+        }}
+        onSelectVillage={(village) => {
+          setSelectedVillage(village);
+          setIsVillageModalOpen(true);
         }}
         userGps={userGps}
         onGpsRequested={requestGpsLocation}
@@ -395,6 +415,13 @@ export function PetaPertanianView({
       <DroughtLegendModal
         isOpen={isDroughtLegendOpen}
         onClose={() => setIsDroughtLegendOpen(false)}
+      />
+
+      {/* Village Boundary Detail Modal (BIG Official) */}
+      <VillageDetailModal
+        isOpen={isVillageModalOpen}
+        onClose={() => setIsVillageModalOpen(false)}
+        village={selectedVillage}
       />
 
       {/* Save Drawn Parcel Modal */}

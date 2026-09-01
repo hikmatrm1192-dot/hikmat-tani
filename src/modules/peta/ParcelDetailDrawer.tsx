@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Bug,
+  Building2,
   Calendar,
   CheckCircle2,
   ChevronRight,
@@ -31,6 +32,7 @@ import {
   MapPin,
   Plus,
   Scissors,
+  Shield,
   ShieldAlert,
   Sparkles,
   Sprout,
@@ -131,6 +133,17 @@ export function ParcelDetailDrawer({
               <p className="text-xs text-slate-500 font-semibold">
                 Luas: <span className="text-slate-900 font-black">{formatAreaM2(land.areaM2, land.areaHa)}</span> • {land.location || 'Petak Aktif'}
               </p>
+              {(land.village || land.administrative?.village) && (
+                <div className="flex items-center gap-1.5 mt-1 text-[11px] text-emerald-800 font-bold">
+                  <Building2 className="w-3 h-3 text-emerald-700 shrink-0" />
+                  <span>
+                    Desa {land.village || land.administrative?.village}, {land.district || land.administrative?.district}
+                  </span>
+                  <span className="px-1 py-0.2 bg-emerald-100 text-emerald-900 text-[9px] rounded font-black">
+                    BIG
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 

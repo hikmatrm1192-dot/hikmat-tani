@@ -2,14 +2,17 @@
  * HIKMAT TANI - Save Drawn Parcel Modal
  * 
  * Menyimpan petak sawah baru dari hasil gambar polygon pada peta satelit 2D.
- * Standar: Semua luasan menggunakan m².
+ * Standar:
+ * - Semua luasan menggunakan m².
+ * - Integrasi Spatial Check Batas Desa Resmi BIG secara otomatis terhadap titik centroid petak sawah.
  */
 
-import { useState, type FormEvent } from 'react';
-import { Layers, MapPin, Sparkles } from 'lucide-react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { AlertCircle, Building2, CheckCircle2, Layers, MapPin, Shield, Sparkles } from 'lucide-react';
 import { Modal } from '../../components/common/Modal.tsx';
-import { Land, LandType, WaterSource } from '../../types/index.ts';
+import { Land, LandType, WaterSource, VillageSpatialLookupResult } from '../../types/index.ts';
 import { calculatePolygonCentroid, formatAreaM2, LatLngPoint } from '../../utils/geoUtils.ts';
+import { bigGeospatialService } from '../../services/bigGeospatialService.ts';
 
 interface SaveDrawnParcelModalProps {
   isOpen: boolean;
@@ -32,10 +35,42 @@ export function SaveDrawnParcelModal({
   const [waterSource, setWaterSource] = useState<WaterSource>('IRRIGATION_TECHNICAL');
   const [landType, setLandType] = useState<LandType>('LOWLAND_PADDY');
   const [location, setLocation] = useState<string>('');
+  const [spatialResult, setSpatialResult] = useState<VillageSpatialLookupResult | null>(null);
+  const [isCheckingSpatial, setIsCheckingSpatial] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const centroid = calculatePolygonCentroid(points);
+
+  // Jalankan Spatial Check otomatis saat modal terbuka & titik tersedia
+  useEffect(() => {
+    if (!isOpen || points.length < 3) return;
+
+    let isMounted = true;
+    setIsCheckingSpatial(true);
+
+    bigGeospatialService
+      .findVillageByPoint(centroid)
+      .then((res) => {
+        if (isMounted) {
+          setSpatialResult(res);
+          // Set default lokasi deskriptif jika teridentifikasi resmi
+          if (res.matched && res.feature && !location) {
+            setLocation(`${res.feature.villageName}, ${res.feature.districtName}`);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Gagal melakukan spatial lookup batas desa:', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsCheckingSpatial(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, points]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -55,6 +90,33 @@ export function SaveDrawnParcelModal({
       // Konversi aman ke areaHa untuk backward-compat
       const areaHa = areaM2 / 10000;
 
+      // Metadata administrasi resmi jika terdeteksi dari BIG
+      let administrativeData = undefined;
+      let villageShortcut = undefined;
+      let districtShortcut = undefined;
+      let regencyShortcut = undefined;
+      let provinceShortcut = undefined;
+      let admCodeShortcut = undefined;
+
+      if (spatialResult && spatialResult.matched && spatialResult.feature) {
+        administrativeData = {
+          village: spatialResult.feature.villageName,
+          district: spatialResult.feature.districtName,
+          regency: spatialResult.feature.regencyName,
+          province: spatialResult.feature.provinceName,
+          code: spatialResult.feature.adminCode,
+          source: spatialResult.sourceMetadata.source,
+          edition: spatialResult.sourceMetadata.edition,
+          status: spatialResult.status,
+          verifiedAt: spatialResult.sourceMetadata.verifiedAt,
+        };
+        villageShortcut = spatialResult.feature.villageName;
+        districtShortcut = spatialResult.feature.districtName;
+        regencyShortcut = spatialResult.feature.regencyName;
+        provinceShortcut = spatialResult.feature.provinceName;
+        admCodeShortcut = spatialResult.feature.adminCode;
+      }
+
       await onSave({
         name: name.trim(),
         areaM2: Number(areaM2.toFixed(2)),
@@ -67,11 +129,18 @@ export function SaveDrawnParcelModal({
         waterSource,
         landType,
         location: location.trim() || undefined,
+        administrative: administrativeData,
+        village: villageShortcut,
+        district: districtShortcut,
+        regency: regencyShortcut,
+        province: provinceShortcut,
+        admCode: admCodeShortcut,
         status: 'ACTIVE',
       });
 
       setName('');
       setLocation('');
+      setSpatialResult(null);
       onClose();
     } catch (err: any) {
       setError(err?.message || 'Gagal menyimpan petak sawah');
@@ -110,6 +179,55 @@ export function SaveDrawnParcelModal({
           </div>
         </div>
 
+        {/* Kotak Deteksi Spasial Batas Administrasi Desa Resmi (BIG) */}
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5 text-emerald-700" />
+              Deteksi Batas Administrasi Desa (BIG)
+            </span>
+            {spatialResult?.status === 'VERIFIED' && (
+              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full flex items-center gap-1 border border-emerald-300">
+                <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                Terverifikasi Resmi
+              </span>
+            )}
+            {spatialResult?.status === 'NEEDS_VERIFICATION' && (
+              <span className="px-2 py-0.5 bg-amber-100 text-amber-900 text-[10px] font-bold rounded-full flex items-center gap-1 border border-amber-300">
+                <AlertCircle className="w-3 h-3 text-amber-700" />
+                Perlu Verifikasi
+              </span>
+            )}
+          </div>
+
+          {isCheckingSpatial ? (
+            <div className="text-xs text-slate-500 italic py-1">
+              Memeriksa letak spasial titik centroid terhadap batas wilayah BIG...
+            </div>
+          ) : spatialResult?.matched && spatialResult.feature ? (
+            <div className="space-y-1 text-xs">
+              <div className="flex items-center justify-between font-bold text-slate-900">
+                <span>{spatialResult.feature.villageName}</span>
+                <span className="font-mono text-[11px] text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                  {spatialResult.feature.adminCode}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-600">
+                {spatialResult.feature.districtName}, {spatialResult.feature.regencyName}, {spatialResult.feature.provinceName}
+              </div>
+              {spatialResult.status === 'NEEDS_VERIFICATION' && (
+                <div className="p-2 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-800 mt-1">
+                  ⚠️ {spatialResult.message}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-[11px] text-slate-500">
+              Lokasi petak di luar batas desa terindeks. Anda dapat melengkapi informasi lokasi secara manual.
+            </div>
+          )}
+        </div>
+
         {/* Nama Lahan */}
         <div>
           <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -120,7 +238,7 @@ export function SaveDrawnParcelModal({
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Contoh: Sawah Blok Tengah / Petak 02"
+            placeholder="Contoh: Sawah Blok Krajan / Petak 02"
             className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
           />
         </div>

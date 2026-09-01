@@ -23,6 +23,7 @@ import {
   DROUGHT_STANDARDS,
   Land,
   OptObservation,
+  VillageBoundaryFeature,
 } from '../../types/index.ts';
 import {
   calculateGeodesicPerimeterM,
@@ -49,6 +50,7 @@ export interface MapLayerVisibility {
   showHarvestMarkers: boolean;
   showDroughtOverlay: boolean;
   showWeatherLayer: boolean;
+  showVillageBoundaries: boolean;
 }
 
 interface AgriculturalMapProps {
@@ -57,6 +59,7 @@ interface AgriculturalMapProps {
   activities?: Activity[];
   optObservations?: OptObservation[];
   droughtZones?: DroughtZoneFeature[];
+  villageBoundaries?: VillageBoundaryFeature[];
   selectedLandId?: string | null;
   baseMapType: BaseMapType;
   layerVisibility: MapLayerVisibility;
@@ -67,6 +70,7 @@ interface AgriculturalMapProps {
   onSelectActivity?: (activity: Activity) => void;
   onSelectOptObs?: (optObs: OptObservation, activity?: Activity) => void;
   onSelectDroughtZone?: (zone: DroughtZoneFeature) => void;
+  onSelectVillage?: (village: VillageBoundaryFeature) => void;
   userGps?: { lat: number; lng: number; accuracy?: number } | null;
   onGpsRequested?: () => void;
 }
@@ -77,6 +81,7 @@ export function AgriculturalMap({
   activities = [],
   optObservations = [],
   droughtZones = [],
+  villageBoundaries = [],
   selectedLandId,
   baseMapType,
   layerVisibility,
@@ -87,6 +92,7 @@ export function AgriculturalMap({
   onSelectActivity,
   onSelectOptObs,
   onSelectDroughtZone,
+  onSelectVillage,
   userGps,
   onGpsRequested,
 }: AgriculturalMapProps) {
@@ -95,10 +101,11 @@ export function AgriculturalMap({
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const hybridOverlayRef = useRef<L.TileLayer | null>(null);
 
-  // Layer groups untuk manajemen render
+  // Layer groups untuk manajemen render (urutan: batas desa di bawah petak sawah & marker)
+  const villageLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const parcelsLayerGroupRef = useRef<L.LayerGroup | null>(null);
-  const markersLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const droughtLayerGroupRef = useRef<L.LayerGroup | null>(null);
+  const markersLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const drawingLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const gpsLayerGroupRef = useRef<L.LayerGroup | null>(null);
 
@@ -107,6 +114,8 @@ export function AgriculturalMap({
   isDrawingModeRef.current = isDrawingMode;
   const onAddDrawingPointRef = useRef(onAddDrawingPoint);
   onAddDrawingPointRef.current = onAddDrawingPoint;
+  const onSelectVillageRef = useRef(onSelectVillage);
+  onSelectVillageRef.current = onSelectVillage;
 
   // Inisialisasi Peta Leaflet
   useEffect(() => {
@@ -125,9 +134,10 @@ export function AgriculturalMap({
       // Tambahkan zoom control di pojok kanan atas
       L.control.zoom({ position: 'topright' }).addTo(map);
 
-      // Inisialisasi layer groups
-      parcelsLayerGroupRef.current = L.layerGroup().addTo(map);
+      // Inisialisasi layer groups (urutan layer dari bawah ke atas)
+      villageLayerGroupRef.current = L.layerGroup().addTo(map);
       droughtLayerGroupRef.current = L.layerGroup().addTo(map);
+      parcelsLayerGroupRef.current = L.layerGroup().addTo(map);
       markersLayerGroupRef.current = L.layerGroup().addTo(map);
       drawingLayerGroupRef.current = L.layerGroup().addTo(map);
       gpsLayerGroupRef.current = L.layerGroup().addTo(map);
@@ -211,6 +221,95 @@ export function AgriculturalMap({
       ).addTo(map);
     }
   }, [baseMapType]);
+
+  // Render Batas Wilayah Desa / Kelurahan Resmi (BIG)
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const group = villageLayerGroupRef.current;
+    if (!map || !group) return;
+
+    group.clearLayers();
+    if (!layerVisibility.showVillageBoundaries) return;
+
+    villageBoundaries.forEach((village) => {
+      if (!village.coordinates || village.coordinates.length < 3) return;
+
+      const coords: [number, number][] = village.coordinates.map((pt) => [pt.lat, pt.lng]);
+
+      // Garis batas administrasi desa: garis tegas putus-putus emerald/slate, tidak mengganggu satelit
+      const polygon = L.polygon(coords, {
+        color: '#047857',
+        weight: 2,
+        dashArray: '8, 6',
+        opacity: 0.85,
+        fillColor: '#10B981',
+        fillOpacity: 0.04, // Sangat transparan agar citra satelit tetap jernih
+      });
+
+      // Label Nama Desa/Kelurahan dengan badge bersih di centroid
+      const center = village.center || calculatePolygonCentroid(village.coordinates);
+      const labelIcon = L.divIcon({
+        className: 'hikmat-village-label-wrapper',
+        html: `
+          <div style="
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(4px);
+            border: 1px solid #10b981;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 800;
+            color: #064e3b;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+            pointer-events: none;
+            white-space: nowrap;
+            transform: translate(-50%, -50%);
+          ">
+            <span style="font-size: 10px;">🏛️</span>
+            <span>${village.villageName}</span>
+          </div>
+        `,
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      });
+
+      const labelMarker = L.marker([center.lat, center.lng], {
+        icon: labelIcon,
+        interactive: false,
+      });
+
+      // Tooltip Resmi BIG
+      polygon.bindTooltip(
+        `
+        <div class="px-2 py-1 text-center font-sans">
+          <div class="font-bold text-xs text-emerald-950">${village.villageName}</div>
+          <div class="text-[11px] text-slate-700">${village.districtName}, ${village.regencyName}</div>
+          <div class="text-[9px] font-bold text-emerald-800 mt-0.5">Sumber: BIG (Ina-Geoportal)</div>
+        </div>
+        `,
+        { permanent: false, direction: 'top' }
+      );
+
+      // Event Listener Tap / Klik
+      polygon.on('click', (e: L.LeafletMouseEvent) => {
+        if (isDrawingModeRef.current) {
+          if (onAddDrawingPointRef.current) {
+            onAddDrawingPointRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
+          }
+          return;
+        }
+        if (onSelectVillageRef.current) {
+          onSelectVillageRef.current(village);
+        }
+      });
+
+      group.addLayer(polygon);
+      group.addLayer(labelMarker);
+    });
+  }, [villageBoundaries, layerVisibility.showVillageBoundaries]);
 
   // Render Poligon Petak Sawah Lahan
   useEffect(() => {

@@ -15,6 +15,7 @@
 import { useState } from 'react';
 import {
   Bug,
+  Building2,
   Check,
   ChevronDown,
   CloudSun,
@@ -23,6 +24,7 @@ import {
   Layers,
   MapPin,
   Scissors,
+  Shield,
   ShieldAlert,
   Sparkles,
   Wheat,
@@ -212,6 +214,25 @@ export function MapLayerControl({
                   checked={layerVisibility.showHarvestMarkers}
                   onChange={() => onToggleLayer('showHarvestMarkers')}
                   className="rounded text-amber-700 focus:ring-amber-500 w-4 h-4"
+                />
+              </label>
+
+              {/* Batas Wilayah Desa / Kelurahan (Resmi BIG) */}
+              <label className="flex items-center justify-between text-xs font-bold text-slate-800 cursor-pointer select-none pt-1 border-t border-slate-100">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-3.5 h-3.5 text-emerald-700" />
+                  <div className="flex items-center gap-1.5">
+                    <span>Batas Desa/Kelurahan</span>
+                    <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 text-[9px] font-black rounded">
+                      BIG
+                    </span>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={layerVisibility.showVillageBoundaries}
+                  onChange={() => onToggleLayer('showVillageBoundaries')}
+                  className="rounded text-emerald-700 focus:ring-emerald-500 w-4 h-4"
                 />
               </label>
             </div>
