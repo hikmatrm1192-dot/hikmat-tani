@@ -1,0 +1,61 @@
+name: Fix polygon tap capture
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-polygon-tap.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    if: github.event.head_commit.message != 'fix(peta): make polygon tap capture robust'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Patch polygon tap capture
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('src/modules/peta/AgriculturalMap.tsx')
+          s = p.read_text()
+          anchor = "import L from 'leaflet';\n"
+          imp = "import { attachDrawingMapClickCapture } from './drawingMapInteraction.ts';\n"
+          if imp not in s:
+              s = s.replace(anchor, anchor + imp, 1)
+          old = """      // Event listener tap/klik pada canvas peta\n      map.on('click', (e: L.LeafletMouseEvent) => {\n        if (isDrawingModeRef.current && onAddDrawingPointRef.current) {\n          onAddDrawingPointRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });\n        }\n      });"""
+          new = """      // Native capture menangkap tap sebelum child layer Leaflet, sehingga\n      // klik pada peta, polygon, marker, dan overlay selalu menjadi vertex tunggal.\n      const detachDrawingMapClickCapture = attachDrawingMapClickCapture(\n        map,\n        isDrawingModeRef,\n        onAddDrawingPointRef\n      );"""
+          if old not in s:
+              raise SystemExit('Expected map click handler not found')
+          s = s.replace(old, new, 1)
+          oldc = """      if (mapInstanceRef.current) {\n        mapInstanceRef.current.remove();\n        mapInstanceRef.current = null;\n      }"""
+          newc = """      detachDrawingMapClickCapture();\n      if (mapInstanceRef.current) {\n        mapInstanceRef.current.remove();\n        mapInstanceRef.current = null;\n      }"""
+          if oldc not in s:
+              raise SystemExit('Expected cleanup block not found')
+          s = s.replace(oldc, newc, 1)
+          p.write_text(s)
+
+          Path('src/modules/peta/drawingMapInteraction.ts').write_text("""import L from 'leaflet';\n\nexport function attachDrawingMapClickCapture(\n  map: L.Map,\n  isDrawingModeRef: { current: boolean },\n  onAddDrawingPointRef: { current?: (pt: { lat: number; lng: number }) => void }\n): () => void {\n  const container = map.getContainer();\n\n  const handleNativeMapClick = (event: MouseEvent) => {\n    if (!isDrawingModeRef.current || !onAddDrawingPointRef.current) return;\n\n    const rect = container.getBoundingClientRect();\n    const point = L.point(event.clientX - rect.left, event.clientY - rect.top);\n    const latlng = map.containerPointToLatLng(point);\n    onAddDrawingPointRef.current({ lat: latlng.lat, lng: latlng.lng });\n\n    event.stopPropagation();\n    event.stopImmediatePropagation();\n  };\n\n  container.addEventListener('click', handleNativeMapClick, true);\n  return () => container.removeEventListener('click', handleNativeMapClick, true);\n}\n""")
+          Path('tests/polygon-tap-capture.test.ts').write_text("""import { readFileSync } from 'node:fs';\n\nconst mapSource = readFileSync('src/modules/peta/AgriculturalMap.tsx', 'utf8');\nconst helperSource = readFileSync('src/modules/peta/drawingMapInteraction.ts', 'utf8');\n\nfunction assert(condition: boolean, message: string) {\n  if (!condition) throw new Error(`[FAIL] ${message}`);\n  console.log(`[PASS] ${message}`);\n}\n\nassert(mapSource.includes('attachDrawingMapClickCapture('), 'AgriculturalMap memakai native capture untuk polygon tap');\nassert(helperSource.includes(\"addEventListener('click', handleNativeMapClick, true)\"), 'Tap ditangkap pada capture phase');\nassert(helperSource.includes('stopImmediatePropagation()'), 'Satu tap tidak digandakan oleh child layer Leaflet');\nassert(helperSource.includes('containerPointToLatLng'), 'Koordinat tap dikonversi ke LatLng');\nconsole.log('Polygon tap capture regression: PASS');\n""")
+          PY
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Regression test
+        run: npx tsx tests/polygon-tap-capture.test.ts
+      - name: Full tests
+        run: npm test
+      - name: Type check
+        run: npm run lint
+      - name: Production build
+        run: npm run build
+      - name: Commit verified fix and remove temporary workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/fix-polygon-tap.yml
+          git add src/modules/peta/AgriculturalMap.tsx src/modules/peta/drawingMapInteraction.ts tests/polygon-tap-capture.test.ts
+          git commit -m 'fix(peta): make polygon tap capture robust'
+          git push
