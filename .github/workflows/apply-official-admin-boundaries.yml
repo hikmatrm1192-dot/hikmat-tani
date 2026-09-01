@@ -10,8 +10,8 @@ permissions:
 
 jobs:
   integrate-and-verify:
-    if: ${{ !startsWith(github.event.head_commit.message, 'chore(auto): apply official Jawa Barat boundaries') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
