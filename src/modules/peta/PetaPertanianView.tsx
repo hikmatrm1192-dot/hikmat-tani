@@ -200,7 +200,24 @@ export function PetaPertanianView({
     if (userGps) {
       handleAddDrawingPoint({ lat: userGps.lat, lng: userGps.lng });
     } else {
-      requestGpsLocation();
+      if (typeof window !== 'undefined' && navigator.geolocation) {
+        setIsLocating(true);
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            setIsLocating(false);
+            const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            setUserGps({ ...pt, accuracy: pos.coords.accuracy });
+            handleAddDrawingPoint(pt);
+          },
+          (err) => {
+            setIsLocating(false);
+            setGpsError('Gagal mendeteksi koordinat GPS saat ini. Pastikan izin lokasi aktif.');
+          },
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      } else {
+        requestGpsLocation();
+      }
     }
   };
 

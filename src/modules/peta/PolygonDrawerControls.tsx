@@ -60,8 +60,11 @@ export function PolygonDrawerControls({
       </div>
 
       {/* Instruction */}
-      <p className="text-xs text-slate-600 leading-snug">
-        Ketuk pada peta satelit untuk menandai sudut batas petak sawah Anda.
+      <p className="text-xs text-slate-700 leading-snug">
+        {points.length === 0 && 'Ketuk pada peta satelit atau klik "+ GPS" untuk menandai sudut ke-1 petak sawah.'}
+        {points.length === 1 && 'Ketuk peta untuk menandai titik sudut ke-2.'}
+        {points.length === 2 && 'Ketuk peta untuk titik ke-3 agar bidang poligon mulai terbentuk.'}
+        {points.length >= 3 && 'Batas petak terbentuk! Anda dapat menambah titik lagi atau klik "Selesai & Simpan".'}
       </p>
 
       {/* Real-time Metrics (m²) */}

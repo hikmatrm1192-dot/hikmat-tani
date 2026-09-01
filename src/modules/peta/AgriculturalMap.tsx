@@ -102,6 +102,12 @@ export function AgriculturalMap({
   const drawingLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const gpsLayerGroupRef = useRef<L.LayerGroup | null>(null);
 
+  // Mutable refs untuk callback & mode menggambar agar listener Leaflet selalu membaca nilai terkini (anti stale closure)
+  const isDrawingModeRef = useRef<boolean>(isDrawingMode);
+  isDrawingModeRef.current = isDrawingMode;
+  const onAddDrawingPointRef = useRef(onAddDrawingPoint);
+  onAddDrawingPointRef.current = onAddDrawingPoint;
+
   // Inisialisasi Peta Leaflet
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -128,10 +134,10 @@ export function AgriculturalMap({
 
       mapInstanceRef.current = map;
 
-      // Event listener klik pada peta untuk drawing mode
+      // Event listener tap/klik pada canvas peta
       map.on('click', (e: L.LeafletMouseEvent) => {
-        if (isDrawingMode && onAddDrawingPoint) {
-          onAddDrawingPoint({ lat: e.latlng.lat, lng: e.latlng.lng });
+        if (isDrawingModeRef.current && onAddDrawingPointRef.current) {
+          onAddDrawingPointRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
         }
       });
     }
@@ -143,6 +149,18 @@ export function AgriculturalMap({
       }
     };
   }, []);
+
+  // Update cursor saat mode gambar aktif
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    const container = map.getContainer();
+    if (isDrawingMode) {
+      container.style.cursor = 'crosshair';
+    } else {
+      container.style.cursor = '';
+    }
+  }, [isDrawingMode]);
 
   // Update Base Map Tiles (Satelit vs Hybrid vs Roadmap)
   useEffect(() => {
@@ -274,7 +292,13 @@ export function AgriculturalMap({
         className: 'hikmat-parcel-tooltip',
       });
 
-      polygon.on('click', () => {
+      polygon.on('click', (e: L.LeafletMouseEvent) => {
+        if (isDrawingModeRef.current) {
+          if (onAddDrawingPointRef.current) {
+            onAddDrawingPointRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
+          }
+          return;
+        }
         if (onSelectLand) {
           onSelectLand(land);
         }
@@ -313,7 +337,13 @@ export function AgriculturalMap({
         { permanent: false, direction: 'top' }
       );
 
-      polygon.on('click', () => {
+      polygon.on('click', (e: L.LeafletMouseEvent) => {
+        if (isDrawingModeRef.current) {
+          if (onAddDrawingPointRef.current) {
+            onAddDrawingPointRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
+          }
+          return;
+        }
         if (onSelectDroughtZone) {
           onSelectDroughtZone(zone);
         }
@@ -430,7 +460,13 @@ export function AgriculturalMap({
         { direction: 'top' }
       );
 
-      marker.on('click', () => {
+      marker.on('click', (e: L.LeafletMouseEvent) => {
+        if (isDrawingModeRef.current) {
+          if (onAddDrawingPointRef.current) {
+            onAddDrawingPointRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
+          }
+          return;
+        }
         if (onSelectActivity) {
           onSelectActivity(act);
         }
@@ -503,7 +539,13 @@ export function AgriculturalMap({
           { direction: 'top' }
         );
 
-        marker.on('click', () => {
+        marker.on('click', (e: L.LeafletMouseEvent) => {
+          if (isDrawingModeRef.current) {
+            if (onAddDrawingPointRef.current) {
+              onAddDrawingPointRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
+            }
+            return;
+          }
           if (onSelectOptObs) {
             onSelectOptObs(optObs, parentActivity);
           }
@@ -561,6 +603,11 @@ export function AgriculturalMap({
       });
 
       const m = L.marker([pt.lat, pt.lng], { icon: vertexIcon });
+      m.on('click', (e: L.LeafletMouseEvent) => {
+        if (isDrawingModeRef.current && onAddDrawingPointRef.current) {
+          onAddDrawingPointRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
+        }
+      });
       group.addLayer(m);
     });
 
@@ -573,12 +620,22 @@ export function AgriculturalMap({
         fillOpacity: 0.35,
         dashArray: '4, 4',
       });
+      drawPoly.on('click', (e: L.LeafletMouseEvent) => {
+        if (isDrawingModeRef.current && onAddDrawingPointRef.current) {
+          onAddDrawingPointRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
+        }
+      });
       group.addLayer(drawPoly);
     } else if (drawingPoints.length === 2) {
       const line = L.polyline(latLngs, {
         color: '#D4AF37',
         weight: 3,
         dashArray: '4, 4',
+      });
+      line.on('click', (e: L.LeafletMouseEvent) => {
+        if (isDrawingModeRef.current && onAddDrawingPointRef.current) {
+          onAddDrawingPointRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
+        }
       });
       group.addLayer(line);
     }
