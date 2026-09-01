@@ -6,6 +6,10 @@ const root = process.cwd();
 function replaceOnce(file, pattern, replacement, description) {
   const full = path.join(root, file);
   const source = fs.readFileSync(full, 'utf8');
+  if (typeof replacement === 'string' && source.includes(replacement)) {
+    console.log(`already patched ${file}: ${description}`);
+    return;
+  }
   const next = source.replace(pattern, replacement);
   if (next === source) throw new Error(`Patch target not found: ${file} :: ${description}`);
   fs.writeFileSync(full, next);
