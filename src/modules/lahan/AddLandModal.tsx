@@ -18,8 +18,7 @@ interface AddLandModalProps {
 
 export function AddLandModal({ isOpen, onClose, onSave }: AddLandModalProps) {
   const [name, setName] = useState<string>('');
-  const [areaInput, setAreaInput] = useState<string>('');
-  const [unit, setUnit] = useState<'HA' | 'M2'>('HA');
+  const [areaM2Input, setAreaM2Input] = useState<string>('');
   const [waterSource, setWaterSource] = useState<WaterSource>('IRRIGATION_TECHNICAL');
   const [landType, setLandType] = useState<LandType>('LOWLAND_PADDY');
   const [location, setLocation] = useState<string>('');
@@ -32,14 +31,14 @@ export function AddLandModal({ isOpen, onClose, onSave }: AddLandModalProps) {
       setError('Nama lahan wajib diisi');
       return;
     }
-    const numericArea = parseFloat(areaInput.replace(',', '.'));
-    if (isNaN(numericArea) || numericArea <= 0) {
-      setError('Luas lahan harus berupa angka positif yang valid');
+    const numericM2 = parseFloat(areaM2Input.replace(',', '.'));
+    if (isNaN(numericM2) || numericM2 <= 0) {
+      setError('Luas lahan harus berupa angka positif yang valid dalam satuan m²');
       return;
     }
 
-    // Konversi ke satuan Hektar jika diinput dalam m2
-    const areaHa = unit === 'M2' ? numericArea / 10000 : numericArea;
+    // Konversi ke satuan Hektar untuk kompatibilitas penyimpanan database
+    const areaHa = numericM2 / 10000;
 
     setIsSubmitting(true);
     setError(null);
@@ -53,7 +52,7 @@ export function AddLandModal({ isOpen, onClose, onSave }: AddLandModalProps) {
       });
       // Reset form
       setName('');
-      setAreaInput('');
+      setAreaM2Input('');
       setLocation('');
       onClose();
     } catch (err: any) {
@@ -88,48 +87,37 @@ export function AddLandModal({ isOpen, onClose, onSave }: AddLandModalProps) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Contoh: Sawah Blok Timur / Petak Bawah"
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
           />
         </div>
 
-        {/* Luas Lahan + Satuan */}
+        {/* Luas Lahan (m²) */}
         <div>
           <label className="block text-xs font-bold text-slate-700 mb-1">
             Luas Lahan <span className="text-rose-600">*</span>
           </label>
-          <div className="flex gap-2">
+          <div className="relative">
             <input
-              type="number"
-              step="any"
-              min="0.001"
+              type="text"
               inputMode="decimal"
               required
-              value={areaInput}
-              onChange={(e) => setAreaInput(e.target.value)}
-              placeholder={unit === 'HA' ? '0.75' : '7500'}
-              className="flex-1 px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+              value={areaM2Input}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (/^[0-9]*[.,]?[0-9]*$/.test(val)) {
+                  setAreaM2Input(val);
+                }
+              }}
+              placeholder="Contoh: 5000 atau 2500"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px] pr-12 font-semibold text-slate-900"
             />
-            <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200">
-              <button
-                type="button"
-                onClick={() => setUnit('HA')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                  unit === 'HA' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600'
-                }`}
-              >
-                Hektar (ha)
-              </button>
-              <button
-                type="button"
-                onClick={() => setUnit('M2')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                  unit === 'M2' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600'
-                }`}
-              >
-                m²
-              </button>
+            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500 pointer-events-none">
+              m²
             </div>
           </div>
+          <p className="text-[11px] text-slate-500 mt-1">
+            Masukkan luas lahan dalam satuan meter persegi (m²).
+          </p>
         </div>
 
         {/* Sumber Air */}

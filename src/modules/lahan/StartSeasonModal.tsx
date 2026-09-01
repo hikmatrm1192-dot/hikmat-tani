@@ -54,7 +54,9 @@ export function StartSeasonModal({
   const [plantingDate, setPlantingDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
-  const [plantedAreaHa, setPlantedAreaHa] = useState<number>(land?.areaHa || 1.0);
+  const [plantedAreaM2Str, setPlantedAreaM2Str] = useState<string>(
+    land ? String(Math.round(land.areaHa * 10000)) : '10000'
+  );
   const [plantingSystem, setPlantingSystem] = useState<PlantingSystem>('JAJAR_LEGOWO_2_1');
   const [customPlantingSystem, setCustomPlantingSystem] = useState<string>('');
 
@@ -77,11 +79,13 @@ export function StartSeasonModal({
       setError('Tanggal tanam wajib diisi dengan benar');
       return;
     }
-    const numArea = Number(plantedAreaHa);
-    if (isNaN(numArea) || numArea <= 0) {
-      setError('Luas tanam harus berupa angka positif yang valid');
+    const numM2 = parseFloat(plantedAreaM2Str.replace(',', '.'));
+    if (isNaN(numM2) || numM2 <= 0) {
+      setError('Luas tanam harus berupa angka positif yang valid dalam satuan m²');
       return;
     }
+
+    const calculatedAreaHa = Number((numM2 / 10000).toFixed(4));
 
     let finalVarietyName = selectedVarietyOption;
     let finalVarietyId: string | undefined = undefined;
@@ -116,7 +120,7 @@ export function StartSeasonModal({
         varietyId: finalVarietyId,
         varietyName: finalVarietyName || 'Padi Sawah',
         plantingDate: new Date(plantingDate).toISOString(),
-        plantedAreaHa: numArea || activeLand?.areaHa || 1.0,
+        plantedAreaHa: calculatedAreaHa || activeLand?.areaHa || 1.0,
         plantingSystem,
         notes: isCustomPlantingSystemSelected && customPlantingSystem.trim()
           ? `Sistem Tanam Kustom: ${customPlantingSystem.trim()}`
@@ -156,13 +160,13 @@ export function StartSeasonModal({
               onChange={(e) => {
                 setSelectedLandId(e.target.value);
                 const found = allLands.find((l) => l.id === e.target.value);
-                if (found) setPlantedAreaHa(found.areaHa);
+                if (found) setPlantedAreaM2Str(String(Math.round(found.areaHa * 10000)));
               }}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-[13px] focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
             >
               {allLands.map((l) => (
                 <option key={l.id} value={l.id}>
-                  {l.name} ({l.areaHa} ha)
+                  {l.name} ({Math.round(l.areaHa * 10000).toLocaleString('id-ID')} m²)
                 </option>
               ))}
             </select>
@@ -253,17 +257,27 @@ export function StartSeasonModal({
 
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              Luas Tanam (Hektar) <span className="text-rose-600">*</span>
+              Luas Tanam <span className="text-rose-600">*</span>
             </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              required
-              value={plantedAreaHa || ''}
-              onChange={(e) => setPlantedAreaHa(parseFloat(e.target.value) || 0)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-[13px] focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px]"
-            />
+            <div className="relative">
+              <input
+                type="text"
+                inputMode="decimal"
+                required
+                value={plantedAreaM2Str}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (/^[0-9]*[.,]?[0-9]*$/.test(val)) {
+                    setPlantedAreaM2Str(val);
+                  }
+                }}
+                placeholder="Contoh: 5000"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-[13px] font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[40px] pr-12"
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500 pointer-events-none">
+                m²
+              </div>
+            </div>
           </div>
         </div>
 

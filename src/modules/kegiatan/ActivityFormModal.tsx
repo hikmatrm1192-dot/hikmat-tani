@@ -135,6 +135,7 @@ export function ActivityFormModal({
   const [selectedCandidateOptId, setSelectedCandidateOptId] = useState<string | null>(null);
   const [customOptName, setCustomOptName] = useState<string>('');
   const [severity, setSeverity] = useState<AttackSeverity>('LIGHT');
+  const [attackAreaM2Str, setAttackAreaM2Str] = useState<string>('');
   const [optLocation, setOptLocation] = useState<AttackLocation | ''>('');
   const [symptomPreset, setSymptomPreset] = useState<string>('');
   const [optPhoto, setOptPhoto] = useState<string | null>(null);
@@ -163,6 +164,7 @@ export function ActivityFormModal({
     setSymptomPreset('');
     setOptLocation('');
     setSeverity('LIGHT');
+    setAttackAreaM2Str('');
     setOptPhoto(null);
     setVisualAnalysisResult(null);
     setIsCompressingPhoto(false);
@@ -459,6 +461,15 @@ export function ActivityFormModal({
         });
         const candidateIds = matches.slice(0, 3).map((m) => m.opt.id);
 
+        let parsedAttackAreaM2: number | undefined = undefined;
+        if (attackAreaM2Str.trim()) {
+          const rawArea = parseFloat(attackAreaM2Str.replace(',', '.').trim());
+          if (isNaN(rawArea) || rawArea <= 0) {
+            throw new Error('Luas serangan harus berupa angka positif lebih dari 0 m² (contoh: 5, 12.5, 52.75). Dikosongkan jika belum diketahui.');
+          }
+          parsedAttackAreaM2 = Number(rawArea.toFixed(2));
+        }
+
         const optObs: OptObservation = {
           id: `obs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           activityId,
@@ -466,6 +477,7 @@ export function ActivityFormModal({
           isUnknown,
           customOptName: finalOptName,
           attackSeverity: severity,
+          attackAreaM2: parsedAttackAreaM2,
           attackLocation: attackLocArray,
           observedSymptoms: finalSymptom,
           identificationMethod:
@@ -1682,6 +1694,35 @@ export function ActivityFormModal({
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Field Luas Serangan (m²) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Luas Serangan <span className="text-slate-500 font-normal">(Opsional)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={attackAreaM2Str}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      // Validasi input angka positif bulat maupun desimal (dengan koma atau titik)
+                      if (/^[0-9]*[.,]?[0-9]*$/.test(val)) {
+                        setAttackAreaM2Str(val);
+                      }
+                    }}
+                    placeholder="Contoh: 125 atau 52,75"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-600 min-h-[44px] pr-12"
+                  />
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500 pointer-events-none">
+                    m²
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Masukkan perkiraan luas area yang terserang dalam satuan m² (contoh: 5, 12,5, 52,75). Boleh dikosongkan jika belum diketahui.
+                </p>
               </div>
 
               {/* Opsi Cepat Gejala */}

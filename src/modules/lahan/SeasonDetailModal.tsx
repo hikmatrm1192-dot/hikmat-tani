@@ -131,7 +131,7 @@ export function SeasonDetailModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Rincian Musim Tanam"
-      subtitle={`Lahan: ${land.name} (${land.areaHa} ha)`}
+      subtitle={`Lahan: ${land.name} (${Math.round(land.areaHa * 10000).toLocaleString('id-ID')} m²)`}
     >
       <div className="space-y-4 text-xs sm:text-sm max-h-[75vh] overflow-y-auto pr-1">
         {/* Status Box */}
@@ -171,7 +171,7 @@ export function SeasonDetailModal({
           <div className="py-2 flex justify-between items-center">
             <span className="text-slate-500">Luas Tanam:</span>
             <span className="font-bold text-slate-800">
-              {season.plantedAreaHa} ha ({(season.plantedAreaHa * 10000).toLocaleString('id-ID')} m²)
+              {Math.round(season.plantedAreaHa * 10000).toLocaleString('id-ID')} m²
             </span>
           </div>
           <div className="py-2 flex justify-between items-center">

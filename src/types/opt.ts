@@ -74,6 +74,7 @@ export interface OptObservation {
   customOptName?: string;       // Sebutan lokal atau deskripsi bebas dari petani
   attackSeverity?: AttackSeverity;
   attackPercentage?: Percentage;
+  attackAreaM2?: number;        // Luas area serangan OPT dalam satuan m² (opsional)
   attackLocation: AttackLocation[];
   observedSymptoms?: string;
   photoLocalUri?: string;       // Deprecated / Undefined: Foto tidak disimpan di database demi privasi

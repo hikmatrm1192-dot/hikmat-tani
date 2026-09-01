@@ -255,7 +255,7 @@ export function ExpenseFormModal({
                 {editExpense ? 'Edit Catatan Biaya Usaha Tani' : 'Catat Biaya Usaha Tani'}
               </h3>
               <p className="text-xs text-emerald-200 font-medium">
-                {land.name} • {activeSeason.varietyName || 'Padi Sawah'} ({land.areaHa} ha)
+                {land.name} • {activeSeason.varietyName || 'Padi Sawah'} ({Math.round(land.areaHa * 10000).toLocaleString('id-ID')} m²)
               </p>
             </div>
           </div>
@@ -376,7 +376,7 @@ export function ExpenseFormModal({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Jumlah Satuan (kg / ha / HOK)
+                    Jumlah Satuan (kg / sak / HOK / unit)
                   </label>
                   <input
                     type="number"

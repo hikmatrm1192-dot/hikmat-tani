@@ -36,7 +36,9 @@ export function ManageLandModal({
 }: ManageLandModalProps) {
   const [activeTab, setActiveTab] = useState<'EDIT' | 'ARCHIVE' | 'DELETE'>('EDIT');
   const [name, setName] = useState<string>(land?.name || '');
-  const [areaHa, setAreaHa] = useState<number>(land?.areaHa || 0.5);
+  const [areaM2Str, setAreaM2Str] = useState<string>(
+    land ? String(Math.round(land.areaHa * 10000)) : '5000'
+  );
   const [landType, setLandType] = useState<LandType>(land?.landType || 'LOWLAND_PADDY');
   const [waterSource, setWaterSource] = useState<WaterSource>(
     land?.waterSource || 'IRRIGATION_TECHNICAL'
@@ -51,7 +53,7 @@ export function ManageLandModal({
   React.useEffect(() => {
     if (land) {
       setName(land.name || '');
-      setAreaHa(land.areaHa || 0.5);
+      setAreaM2Str(String(Math.round(land.areaHa * 10000)));
       setLandType(land.landType || 'LOWLAND_PADDY');
       setWaterSource(land.waterSource || 'IRRIGATION_TECHNICAL');
       setLocation(land.location || '');
@@ -72,17 +74,20 @@ export function ManageLandModal({
       setErrorMsg('Nama petak sawah wajib diisi.');
       return;
     }
-    if (areaHa <= 0) {
-      setErrorMsg('Luas lahan harus lebih besar dari 0.');
+    const numM2 = parseFloat(areaM2Str.replace(',', '.'));
+    if (isNaN(numM2) || numM2 <= 0) {
+      setErrorMsg('Luas lahan harus berupa angka positif lebih dari 0 m².');
       return;
     }
+
+    const calculatedAreaHa = Number((numM2 / 10000).toFixed(4));
 
     setIsProcessing(true);
     setErrorMsg('');
     try {
       await landRepository.update(land.id, {
         name: name.trim(),
-        areaHa: Number(areaHa),
+        areaHa: calculatedAreaHa,
         landType,
         waterSource,
         location: location.trim() || undefined,
@@ -232,20 +237,27 @@ export function ManageLandModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Luas Lahan (Hektar) <span className="text-red-500">*</span>
+                  Luas Lahan <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={areaHa || ''}
-                  onChange={(e) => setAreaHa(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
-                  required
-                />
-                <span className="text-[10px] text-slate-500 mt-1 block">
-                  = {(areaHa * 10000).toLocaleString('id-ID')} m²
-                </span>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={areaM2Str}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (/^[0-9]*[.,]?[0-9]*$/.test(val)) {
+                        setAreaM2Str(val);
+                      }
+                    }}
+                    placeholder="Contoh: 5000"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px] pr-12"
+                    required
+                  />
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500 pointer-events-none">
+                    m²
+                  </div>
+                </div>
               </div>
 
               <div>

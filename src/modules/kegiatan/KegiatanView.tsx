@@ -328,7 +328,7 @@ export function KegiatanView({
                 </h3>
                 <p className="text-xs text-slate-500 font-medium">
                   Varietas: {currentSeason?.varietyName || 'Padi'} • Luas:{' '}
-                  {currentLand?.areaHa} ha
+                  {Math.round((currentLand?.areaHa || 0) * 10000).toLocaleString('id-ID')} m²
                 </p>
               </div>
             </div>

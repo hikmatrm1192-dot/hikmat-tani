@@ -123,7 +123,7 @@ export function CultivationReportModal({
     lands.forEach((l, idx) => {
       const s = activeSeasons.find((sec) => sec.landId === l.id);
       const m2 = Math.round(l.areaHa * 10000);
-      text += `${idx + 1}. ${l.name} (${m2} m² / ${l.areaHa} ha) - ${
+      text += `${idx + 1}. ${l.name} (${m2.toLocaleString('id-ID')} m²) - ${
         s ? `Varietas: ${s.varietyName || 'Padi'}, Tanam: ${s.plantingDate}` : 'Tidak Ada Musim Aktif'
       }\n`;
     });
@@ -230,7 +230,7 @@ export function CultivationReportModal({
                   <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold text-[11px]">
                     <tr>
                       <th className="p-2.5">Nama Petak</th>
-                      <th className="p-2.5">Luas (m² / ha)</th>
+                      <th className="p-2.5">Luas Lahan</th>
                       <th className="p-2.5">Sumber Air</th>
                       <th className="p-2.5">Varietas Ditanam</th>
                       <th className="p-2.5">Tanggal Tanam</th>
@@ -245,8 +245,8 @@ export function CultivationReportModal({
                       return (
                         <tr key={land.id} className="hover:bg-slate-50">
                           <td className="p-2.5 font-bold text-slate-900">{land.name}</td>
-                          <td className="p-2.5 text-slate-700">
-                            {m2.toLocaleString('id-ID')} m² ({land.areaHa} ha)
+                          <td className="p-2.5 text-slate-700 font-semibold">
+                            {m2.toLocaleString('id-ID')} m²
                           </td>
                           <td className="p-2.5 text-slate-600 capitalize">
                             {land.waterSource ? land.waterSource.replace(/_/g, ' ').toLowerCase() : 'Irigasi'}

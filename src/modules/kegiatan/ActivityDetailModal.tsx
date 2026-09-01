@@ -160,7 +160,13 @@ function OptObservationDetailCard({
                 : 'Tidak Ditentukan'}
             </strong>
           </div>
-          {obs.attackPercentage && (
+          {obs.attackAreaM2 !== undefined && obs.attackAreaM2 !== null && obs.attackAreaM2 > 0 && (
+            <div>
+              Luas Serangan:{' '}
+              <strong className="text-slate-800">{obs.attackAreaM2.toLocaleString('id-ID')} m²</strong>
+            </div>
+          )}
+          {obs.attackPercentage !== undefined && obs.attackPercentage !== null && (
             <div>
               Intensitas Serangan:{' '}
               <strong className="text-slate-800">{obs.attackPercentage}%</strong>

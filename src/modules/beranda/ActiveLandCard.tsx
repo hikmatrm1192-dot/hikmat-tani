@@ -78,7 +78,7 @@ export function ActiveLandCard({
                 >
                   {allLands.map((l) => (
                     <option key={l.id} value={l.id} className="bg-[#072417] text-white">
-                      {l.name} ({l.areaHa} ha)
+                      {l.name} ({Math.round(l.areaHa * 10000).toLocaleString('id-ID')} m²)
                     </option>
                   ))}
                 </select>
@@ -89,7 +89,7 @@ export function ActiveLandCard({
               </h2>
             )}
             <p className="text-xs text-emerald-200/90 font-medium">
-              Luas: <span className="text-white font-bold">{land.areaHa} ha</span> ({(land.areaHa * 10000).toLocaleString('id-ID')} m²)
+              Luas: <span className="text-white font-bold">{Math.round(land.areaHa * 10000).toLocaleString('id-ID')} m²</span>
             </p>
           </div>
 

@@ -114,8 +114,7 @@ export function LandCard({
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Luas: <span className="font-bold text-slate-800">{land.areaHa} ha</span> (
-            {(land.areaHa * 10000).toLocaleString('id-ID')} m²) •{' '}
+            Luas: <span className="font-bold text-slate-800">{Math.round(land.areaHa * 10000).toLocaleString('id-ID')} m²</span> •{' '}
             {getWaterSourceLabel(land.waterSource)}
           </p>
         </div>

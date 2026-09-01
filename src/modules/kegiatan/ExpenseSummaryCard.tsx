@@ -60,13 +60,14 @@ export function ExpenseSummaryCard({ report, land, season }: ExpenseSummaryCardP
     maximumFractionDigits: 0,
   }).format(report.totalExpenseRp);
 
-  const costPerHa =
-    land && land.areaHa > 0
+  const areaM2 = land && land.areaHa > 0 ? Math.round(land.areaHa * 10000) : 0;
+  const costPerM2 =
+    areaM2 > 0
       ? new Intl.NumberFormat('id-ID', {
           style: 'currency',
           currency: 'IDR',
           maximumFractionDigits: 0,
-        }).format(report.totalExpenseRp / land.areaHa)
+        }).format(report.totalExpenseRp / areaM2)
       : null;
 
   const activeCategories = report.categories.filter((c) => c.totalAmountRp > 0);
@@ -129,13 +130,13 @@ export function ExpenseSummaryCard({ report, land, season }: ExpenseSummaryCardP
             </span>
           </div>
 
-          {costPerHa && (
+          {costPerM2 && (
             <div className="bg-emerald-50 px-3.5 py-2 rounded-xl border border-emerald-200 text-xs">
               <span className="text-emerald-700 block text-[10px] font-bold">
-                Estimasi Biaya / Hektar:
+                Estimasi Biaya / m²:
               </span>
               <span className="font-extrabold text-emerald-900">
-                {costPerHa} / ha
+                {costPerM2} / m²
               </span>
             </div>
           )}

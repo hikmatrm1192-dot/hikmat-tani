@@ -68,9 +68,9 @@ export function buildActivityTimeline({
       title: `Tanam Padi (${cropSeason.varietyName || 'Varietas belum dicatat'})`,
       activityDate: cropSeason.plantingDate,
       hst: 0,
-      notes: `Sistem Tanam: ${cropSeason.plantingSystem || 'Standar'}, Luas: ${
-        cropSeason.plantedAreaHa
-      } ha`,
+      notes: `Sistem Tanam: ${cropSeason.plantingSystem || 'Standar'}, Luas: ${Math.round(
+        (cropSeason.plantedAreaHa || 0) * 10000
+      ).toLocaleString('id-ID')} m²`,
       createdAt: cropSeason.createdAt,
     });
   }
@@ -140,9 +140,7 @@ export function buildActivityTimeline({
       activityDate: cropSeason.harvestDate,
       hst: harvestHst,
       notes: cropSeason.yieldKg
-        ? `Hasil Panen: ${cropSeason.yieldKg} kg (${(
-            cropSeason.yieldKg / (cropSeason.plantedAreaHa || 1)
-          ).toFixed(0)} kg/ha)`
+        ? `Hasil Panen: ${cropSeason.yieldKg.toLocaleString('id-ID')} kg`
         : 'Panen telah selesai dilaksanakan.',
       createdAt: cropSeason.updatedAt,
     });
