@@ -17,24 +17,54 @@ function replaceOnce(file, pattern, replacement, description) {
 }
 
 replaceOnce('src/services/officialAdministrativeBoundaryService.ts', /const MAX_RECORD_COUNT = 500;/, 'const MAX_RECORD_COUNT = 1000;', 'use BIG maximum page size for complete district retrieval');
+replaceOnce('src/services/officialAdministrativeBoundaryService.ts', /\nfunction buildWhere\(/, `
+async function fetchCount(url: string): Promise<number> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error(\`BIG boundary count request failed: HTTP \${response.status}\`);
+    const payload = (await response.json()) as { count?: number };
+    return Number(payload.count || 0);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function buildWhere(`, 'add fast official count helper');
+replaceOnce('src/services/officialAdministrativeBoundaryService.ts', /  async getJawaBaratDistricts\(\): Promise<AdministrativeFeature\[\]> \{\n    return this\.loadLevel\('DISTRICT'\);\n  \}/, `  async getJawaBaratDistricts(): Promise<AdministrativeFeature[]> {
+    return this.loadLevel('DISTRICT');
+  }
+
+  async getJawaBaratDistrictCount(): Promise<number> {
+    const params = new URLSearchParams({
+      where: buildWhere('DISTRICT'),
+      returnCountOnly: 'true',
+      f: 'json',
+    });
+    return fetchCount(\`\${ENDPOINTS.DISTRICT}/query?\${params.toString()}\`);
+  }
+
+  async getJawaBaratDistrictsInBbox(bbox: BoundingBox): Promise<AdministrativeFeature[]> {
+    return this.loadLevel('DISTRICT', undefined, bbox);
+  }`, 'add fast district count and viewport loader');
+
 replaceOnce('src/modules/peta/PetaPertanianView.tsx', /import \{ bigGeospatialService \} from '\.\.\/\.\.\/services\/bigGeospatialService\.ts';/, "import { officialAdministrativeBoundaryService } from '../../services/officialAdministrativeBoundaryService.ts';", 'switch map source to official BIG provider');
 replaceOnce('src/modules/peta/PetaPertanianView.tsx', /interface PetaPertanianViewProps \{([\s\S]*?)\n\}/, (match) => match.includes('onAdminViewportChange') ? match : match.replace("  onNavigateToTab?: (tab: 'beranda' | 'lahan' | 'kegiatan' | 'informasi' | 'saya' | 'cuaca') => void;", "  onNavigateToTab?: (tab: 'beranda' | 'lahan' | 'kegiatan' | 'informasi' | 'saya' | 'cuaca') => void;\n  onAdminViewportChange?: (bbox: { minLat: number; maxLat: number; minLng: number; maxLng: number }, zoom: number) => void;"), 'add optional admin viewport hook');
 replaceOnce('src/modules/peta/PetaPertanianView.tsx', /export function PetaPertanianView\(\{([\s\S]*?)\n\}: PetaPertanianViewProps\) \{/, (match) => match.includes('onAdminViewportChange,') ? match : match.replace('  onNavigateToTab,', '  onNavigateToTab,\n  onAdminViewportChange,'), 'accept admin viewport hook');
 replaceOnce('src/modules/peta/PetaPertanianView.tsx', /  \/\/ Inisialisasi batas wilayah 4-level resmi BIG[\s\S]*?\n  \/\/ GPS State/, `  // Inisialisasi batas wilayah resmi BIG: seluruh Jawa Barat.
-  // Kabupaten/kota + kecamatan dimuat penuh; desa/kelurahan dimuat berbasis viewport.
+  // Provinsi + kabupaten/kota dimuat penuh; kecamatan/desa dimuat berbasis viewport.
   useEffect(() => {
     let cancelled = false;
     const loadAdministrativeData = async () => {
       try {
-        const [provinces, regencies, districts] = await Promise.all([
+        const [provinces, regencies] = await Promise.all([
           officialAdministrativeBoundaryService.getJawaBaratProvinces(),
           officialAdministrativeBoundaryService.getJawaBaratRegencies(),
-          officialAdministrativeBoundaryService.getJawaBaratDistricts(),
         ]);
         if (cancelled) return;
         setProvinceBoundaries(provinces);
         setRegencyBoundaries(regencies);
-        setDistrictBoundaries(districts);
       } catch (error) {
         console.error('Gagal memuat batas administrasi BIG Jawa Barat:', error);
       }
@@ -45,21 +75,28 @@ replaceOnce('src/modules/peta/PetaPertanianView.tsx', /  \/\/ Inisialisasi batas
 
   const handleAdminViewportChange = useCallback(
     async (bbox: { minLat: number; maxLat: number; minLng: number; maxLng: number }, zoom: number) => {
-      if (zoom < 12 || !layerVisibility.showVillageBoundaries) {
+      if (zoom < 8) {
+        setDistrictBoundaries([]);
         setVillageBoundaries([]);
         return;
       }
       try {
+        const districts = await officialAdministrativeBoundaryService.getJawaBaratDistrictsInBbox(bbox);
+        setDistrictBoundaries(districts);
+        if (zoom < 12 || !layerVisibility.showVillageBoundaries) {
+          setVillageBoundaries([]);
+          return;
+        }
         const villages = await officialAdministrativeBoundaryService.getVillageBoundariesInBbox(bbox);
         setVillageBoundaries(villages);
       } catch (error) {
-        console.error('Gagal memuat batas desa/kelurahan BIG pada viewport:', error);
+        console.error('Gagal memuat batas kecamatan/desa BIG pada viewport:', error);
       }
     },
     [layerVisibility.showVillageBoundaries]
   );
 
-  // GPS State`, 'load complete Jabar hierarchy and viewport villages');
+  // GPS State`, 'load complete hierarchy with viewport-aware district/village loading');
 replaceOnce('src/modules/peta/PetaPertanianView.tsx', /        provinceBoundaries=\{provinceBoundaries\}/, "        provinceBoundaries={provinceBoundaries}\n        onAdminViewportChange={handleAdminViewportChange}", 'pass viewport loader to map');
 replaceOnce('src/modules/peta/SaveDrawnParcelModal.tsx', /import \{ bigGeospatialService \} from '\.\.\/\.\.\/services\/bigGeospatialService\.ts';/, "import { officialAdministrativeBoundaryService } from '../../services/officialAdministrativeBoundaryService.ts';", 'use official BIG provider for parcel spatial lookup');
 replaceOnce('src/modules/peta/SaveDrawnParcelModal.tsx', /bigGeospatialService\s*\.\s*lookupAdministrativeByPoint\(centroid\)/, 'officialAdministrativeBoundaryService.lookupAdministrativeByPoint(centroid)', 'use current BIG boundary lookup');
@@ -90,6 +127,8 @@ replaceOnce('src/modules/peta/AgriculturalMap.tsx', /      mapInstanceRef\.curre
 
       // Pasang Capture Tap Prioritas Tinggi`, 'emit viewport changes for administrative data');
 replaceOnce('tests/administrative-boundary-completeness.test.ts', /import \{ bigGeospatialService \} from '\.\.\/src\/services\/bigGeospatialService\.ts';/, "import { officialAdministrativeBoundaryService } from '../src/services/officialAdministrativeBoundaryService.ts';", 'test official provider');
+replaceOnce('tests/administrative-boundary-completeness.test.ts', /const districts = await officialAdministrativeBoundaryService\.getJawaBaratDistricts\(\);[\s\S]*?assert\.ok\(districts\.every\(\(d\) => d\.adminCode\.startsWith\('32\.'\)\)\);/, `const districtCount = await officialAdministrativeBoundaryService.getJawaBaratDistrictCount();
+    assert.equal(districtCount, 627, 'Jawa Barat harus memiliki 627 kecamatan');`, 'verify complete district count without downloading all district geometry');
 replaceOnce('tests/administrative-boundary-completeness.test.ts', /bigGeospatialService\./g, 'officialAdministrativeBoundaryService.', 'redirect completeness test to official provider');
 
 console.log('Official administrative boundary patch completed.');
