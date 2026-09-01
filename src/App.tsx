@@ -31,6 +31,7 @@ import {
 import {
   AddLandModal,
   BerandaView,
+  CuacaView,
   InformasiView,
   KegiatanView,
   LahanView,
@@ -387,6 +388,19 @@ export default function App() {
           onOpenAddLand={() => setIsAddLandModalOpen(true)}
           onOpenStartSeason={handleOpenStartSeasonModal}
           onRefreshData={loadData}
+        />
+      )}
+
+      {/* Prakiraan Cuaca & Pertanian */}
+      {activeTab === 'cuaca' && (
+        <CuacaView
+          lands={lands}
+          activeSeasons={activeSeasons}
+          allActivities={allActivities}
+          allFertApps={allFertApps}
+          allOptObs={allOptObs}
+          varieties={varieties}
+          onNavigateToTab={setActiveTab}
         />
       )}
 

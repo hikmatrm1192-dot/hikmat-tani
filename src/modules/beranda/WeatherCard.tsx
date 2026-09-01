@@ -37,9 +37,15 @@ interface WeatherCardProps {
   land?: Land | null;
   onUpdateLandLocation?: (lat: number, lon: number) => void;
   onWeatherLoaded?: (data: WeatherData | null) => void;
+  onNavigateToCuaca?: () => void;
 }
 
-export function WeatherCard({ land, onUpdateLandLocation, onWeatherLoaded }: WeatherCardProps) {
+export function WeatherCard({
+  land,
+  onUpdateLandLocation,
+  onWeatherLoaded,
+  onNavigateToCuaca,
+}: WeatherCardProps) {
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
@@ -311,6 +317,23 @@ export function WeatherCard({ land, onUpdateLandLocation, onWeatherLoaded }: Wea
                 ))}
               </div>
             </div>
+          )}
+
+          {/* Tombol Akses Modul Lengkap Cuaca & Pertanian */}
+          {onNavigateToCuaca && (
+            <button
+              type="button"
+              onClick={onNavigateToCuaca}
+              className="w-full mt-2 py-2.5 px-3.5 bg-white hover:bg-emerald-50 active:bg-emerald-100 border border-emerald-300/80 rounded-xl text-xs font-black text-emerald-900 flex items-center justify-between transition-all group shadow-2xs"
+            >
+              <div className="flex items-center gap-2">
+                <CloudSun className="w-4 h-4 text-emerald-700" />
+                <span>Buka Prakiraan Cuaca & Rekomendasi Lengkap (1–10 Hari, Tren & Saran)</span>
+              </div>
+              <span className="text-emerald-700 group-hover:translate-x-0.5 transition-transform text-sm font-bold">
+                →
+              </span>
+            </button>
           )}
 
           {/* Status Waktu Pembaruan & Lokasi */}

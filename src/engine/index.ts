@@ -15,3 +15,4 @@ export * from './recommendation/weatherModifier.ts';
 export * from './recommendation/evaluator.ts';
 export * from './optRelevanceEngine.ts';
 export * from './visualAnalysisEngine.ts';
+export * from './weatherAgriEngine.ts';

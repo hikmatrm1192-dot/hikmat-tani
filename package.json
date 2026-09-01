@@ -37,6 +37,7 @@
     "test:outbox": "tsx tests/outboxConsumer.test.ts",
     "test:knowledge": "tsx tests/knowledge.test.ts",
     "test:weather": "tsx tests/weather.test.ts",
+    "test:weather-agri": "tsx tests/weather-agri-module.test.ts",
     "test:admin": "tsx tests/admin.test.ts",
     "test:e2e": "tsx tests/e2e-integration.test.ts"
   },

@@ -9,7 +9,7 @@
 
 import { BookOpen, CalendarDays, Home, Layers, User } from 'lucide-react';
 
-export type MainNavTab = 'beranda' | 'lahan' | 'kegiatan' | 'informasi' | 'saya';
+export type MainNavTab = 'beranda' | 'lahan' | 'kegiatan' | 'informasi' | 'saya' | 'cuaca';
 
 interface BottomNavProps {
   activeTab: MainNavTab;

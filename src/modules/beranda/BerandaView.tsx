@@ -54,7 +54,7 @@ interface BerandaViewProps {
   opts?: Opt[];
   selectedLandId: string | null;
   onSelectLandId: (landId: string) => void;
-  onNavigateToTab: (tab: 'beranda' | 'lahan' | 'kegiatan' | 'informasi' | 'saya') => void;
+  onNavigateToTab: (tab: 'beranda' | 'lahan' | 'kegiatan' | 'informasi' | 'saya' | 'cuaca') => void;
   onNavigateToKnowledge?: (
     category: 'opt' | 'pupuk' | 'musuh_alami' | 'varietas' | 'panduan',
     itemId?: string,
@@ -289,6 +289,7 @@ export function BerandaView({
         land={activeLand}
         onUpdateLandLocation={handleUpdateLandLocation}
         onWeatherLoaded={setWeatherData}
+        onNavigateToCuaca={() => onNavigateToTab('cuaca')}
       />
 
       {/* 4. Kegiatan Terakhir */}
