@@ -16,6 +16,7 @@ function replaceOnce(file, pattern, replacement, description) {
   console.log(`patched ${file}: ${description}`);
 }
 
+replaceOnce('src/services/officialAdministrativeBoundaryService.ts', /const MAX_RECORD_COUNT = 500;/, 'const MAX_RECORD_COUNT = 1000;', 'use BIG maximum page size for complete district retrieval');
 replaceOnce('src/modules/peta/PetaPertanianView.tsx', /import \{ bigGeospatialService \} from '\.\.\/\.\.\/services\/bigGeospatialService\.ts';/, "import { officialAdministrativeBoundaryService } from '../../services/officialAdministrativeBoundaryService.ts';", 'switch map source to official BIG provider');
 replaceOnce('src/modules/peta/PetaPertanianView.tsx', /interface PetaPertanianViewProps \{([\s\S]*?)\n\}/, (match) => match.includes('onAdminViewportChange') ? match : match.replace("  onNavigateToTab?: (tab: 'beranda' | 'lahan' | 'kegiatan' | 'informasi' | 'saya' | 'cuaca') => void;", "  onNavigateToTab?: (tab: 'beranda' | 'lahan' | 'kegiatan' | 'informasi' | 'saya' | 'cuaca') => void;\n  onAdminViewportChange?: (bbox: { minLat: number; maxLat: number; minLng: number; maxLng: number }, zoom: number) => void;"), 'add optional admin viewport hook');
 replaceOnce('src/modules/peta/PetaPertanianView.tsx', /export function PetaPertanianView\(\{([\s\S]*?)\n\}: PetaPertanianViewProps\) \{/, (match) => match.includes('onAdminViewportChange,') ? match : match.replace('  onNavigateToTab,', '  onNavigateToTab,\n  onAdminViewportChange,'), 'accept admin viewport hook');
@@ -60,10 +61,8 @@ replaceOnce('src/modules/peta/PetaPertanianView.tsx', /  \/\/ Inisialisasi batas
 
   // GPS State`, 'load complete Jabar hierarchy and viewport villages');
 replaceOnce('src/modules/peta/PetaPertanianView.tsx', /        provinceBoundaries=\{provinceBoundaries\}/, "        provinceBoundaries={provinceBoundaries}\n        onAdminViewportChange={handleAdminViewportChange}", 'pass viewport loader to map');
-
 replaceOnce('src/modules/peta/SaveDrawnParcelModal.tsx', /import \{ bigGeospatialService \} from '\.\.\/\.\.\/services\/bigGeospatialService\.ts';/, "import { officialAdministrativeBoundaryService } from '../../services/officialAdministrativeBoundaryService.ts';", 'use official BIG provider for parcel spatial lookup');
 replaceOnce('src/modules/peta/SaveDrawnParcelModal.tsx', /bigGeospatialService\s*\.\s*lookupAdministrativeByPoint\(centroid\)/, 'officialAdministrativeBoundaryService.lookupAdministrativeByPoint(centroid)', 'use current BIG boundary lookup');
-
 replaceOnce('src/modules/peta/AgriculturalMap.tsx', /import \{ AdministrativeFeature \} from '\.\.\/\.\.\/types\/administrativeBoundary\.ts';/, "import { AdministrativeFeature, BoundingBox } from '../../types/administrativeBoundary.ts';", 'import BoundingBox for viewport callback');
 replaceOnce('src/modules/peta/AgriculturalMap.tsx', /  onGpsRequested\?: \(\) => void;\n\}/, "  onGpsRequested?: () => void;\n  onAdminViewportChange?: (bbox: BoundingBox, zoom: number) => void;\n}", 'add viewport callback prop');
 replaceOnce('src/modules/peta/AgriculturalMap.tsx', /  onGpsRequested,\n\}: AgriculturalMapProps\) \{/, "  onGpsRequested,\n  onAdminViewportChange,\n}: AgriculturalMapProps) {", 'accept viewport callback');
@@ -90,7 +89,6 @@ replaceOnce('src/modules/peta/AgriculturalMap.tsx', /      mapInstanceRef\.curre
       queueMicrotask(emitAdminViewport);
 
       // Pasang Capture Tap Prioritas Tinggi`, 'emit viewport changes for administrative data');
-
 replaceOnce('tests/administrative-boundary-completeness.test.ts', /import \{ bigGeospatialService \} from '\.\.\/src\/services\/bigGeospatialService\.ts';/, "import { officialAdministrativeBoundaryService } from '../src/services/officialAdministrativeBoundaryService.ts';", 'test official provider');
 replaceOnce('tests/administrative-boundary-completeness.test.ts', /bigGeospatialService\./g, 'officialAdministrativeBoundaryService.', 'redirect completeness test to official provider');
 
