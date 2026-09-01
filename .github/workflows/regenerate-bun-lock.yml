@@ -1,0 +1,43 @@
+name: Regenerate Bun Lockfile for Cloudflare
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - package.json
+      - bun.lock
+      - .github/workflows/regenerate-bun-lock.yml
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate-lockfile:
+    if: github.event.head_commit.message != 'chore: regenerate bun lockfile with Bun 1.2.15'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun 1.2.15
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.2.15'
+
+      - name: Regenerate compatible lockfile
+        run: |
+          rm -f bun.lock
+          bun install --lockfile-only
+
+      - name: Commit regenerated lockfile
+        run: |
+          if git diff --quiet -- bun.lock; then
+            echo 'No lockfile changes detected.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bun.lock
+          git commit -m 'chore: regenerate bun lockfile with Bun 1.2.15'
+          git push
