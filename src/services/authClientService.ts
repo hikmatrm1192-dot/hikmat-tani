@@ -9,6 +9,7 @@
  */
 
 import { initializeDatabase, setActiveFarmerDb } from '../db/database.ts';
+import { syncEngine } from '../sync/syncEngine.ts';
 import { Farmer } from '../types/index.ts';
 
 export interface AuthSession {
@@ -135,6 +136,7 @@ export class AuthClientService {
         if (parsed?.token && parsed?.farmer?.id) {
           this.currentSession = parsed;
           setActiveFarmerDb(parsed.farmer.id);
+          syncEngine.setFarmerContext(parsed.farmer.id);
         }
       }
     } catch {
@@ -153,6 +155,9 @@ export class AuthClientService {
     // Aktifkan partisi IndexedDB terisolasi untuk petani ini
     setActiveFarmerDb(session.farmer.id);
     await initializeDatabase(session.farmer.id);
+
+    // Sinkronkan konteks syncEngine dengan farmerId baru
+    syncEngine.setFarmerContext(session.farmer.id);
 
     // Simpan ke daftar akun perangkat untuk fitur ganti akun cepat
     this.saveToDeviceAccounts(session.farmer);
@@ -328,6 +333,7 @@ export class AuthClientService {
       this.currentSession = null;
       localStorage.removeItem(STORAGE_AUTH_SESSION);
       localStorage.removeItem(STORAGE_TOKEN);
+      syncEngine.resetContext();
       setActiveFarmerDb('default');
       this.notifyListeners();
     }

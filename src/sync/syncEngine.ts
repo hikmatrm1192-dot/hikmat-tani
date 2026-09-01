@@ -45,7 +45,9 @@ class SyncEngine {
   private isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
   private pendingCount = 0;
   private lastSyncAt: string | null = null;
+  private activeFarmerId: string | null = null;
   private listeners: Set<(info: SyncEngineStateInfo) => void> = new Set();
+  private dataListeners: Set<() => void> = new Set();
   private syncInProgress = false;
   private isInitialized = false;
   private debounceTimer: any = null;
@@ -90,9 +92,59 @@ class SyncEngine {
   }
 
   /**
+   * Mengatur konteks farmer aktif untuk mempartisi sync cursor & outbox
+   */
+  public setFarmerContext(farmerId: string | null): void {
+    const isChanged = this.activeFarmerId !== farmerId;
+    this.activeFarmerId = farmerId;
+    this.isInitialized = false; // Reset initialization so new context triggers full sync
+
+    if (typeof window !== 'undefined' && farmerId) {
+      this.lastSyncAt = localStorage.getItem(`${STORAGE_KEYS.LAST_SYNC_AT}_${farmerId}`) || localStorage.getItem(STORAGE_KEYS.LAST_SYNC_AT);
+    }
+
+    this.refreshPendingCount().catch(() => {});
+    this.notifyListeners();
+
+    if (isChanged && this.isOnline && farmerId) {
+      setTimeout(() => {
+        this.syncNow().catch(() => {});
+      }, 300);
+    }
+  }
+
+  /**
+   * Reset konteks saat logout
+   */
+  public resetContext(): void {
+    this.activeFarmerId = null;
+    this.isInitialized = false;
+    this.state = 'IDLE';
+    this.errorMessage = undefined;
+    this.pendingCount = 0;
+    this.notifyListeners();
+  }
+
+  private getCursorStorageKey(): string {
+    return this.activeFarmerId
+      ? `${STORAGE_KEYS.SYNC_CURSOR}_${this.activeFarmerId}`
+      : STORAGE_KEYS.SYNC_CURSOR;
+  }
+
+  private getLastSyncStorageKey(): string {
+    return this.activeFarmerId
+      ? `${STORAGE_KEYS.LAST_SYNC_AT}_${this.activeFarmerId}`
+      : STORAGE_KEYS.LAST_SYNC_AT;
+  }
+
+  /**
    * Inisialisasi awal saat aplikasi dimuat
    */
-  public async init(): Promise<void> {
+  public async init(farmerId?: string): Promise<void> {
+    if (farmerId && this.activeFarmerId !== farmerId) {
+      this.setFarmerContext(farmerId);
+      return;
+    }
     if (this.isInitialized) return;
     this.isInitialized = true;
     await this.refreshPendingCount();
@@ -102,7 +154,7 @@ class SyncEngine {
     if (this.isOnline) {
       setTimeout(() => {
         this.syncNow().catch(() => {});
-      }, 1500);
+      }, 500);
     }
   }
 
@@ -253,7 +305,8 @@ class SyncEngine {
       // ==========================================
       // 2. PULL: Tarik perubahan terbaru dari server
       // ==========================================
-      const lastCursor = localStorage.getItem(STORAGE_KEYS.SYNC_CURSOR) || '';
+      const cursorKey = this.getCursorStorageKey();
+      const lastCursor = localStorage.getItem(cursorKey) || '';
       const pullUrl = `/api/v1/sync/pull${lastCursor ? `?since=${encodeURIComponent(lastCursor)}` : ''}`;
 
       const pullResp = await fetch(pullUrl, {
@@ -276,13 +329,16 @@ class SyncEngine {
         // Terapkan perubahan ke Dexie IndexedDB
         await this.applyRemoteChanges(changes);
         pulledCount = changes.length;
+        this.notifyDataPulled();
       }
 
       if (newCursor) {
-        localStorage.setItem(STORAGE_KEYS.SYNC_CURSOR, newCursor);
+        localStorage.setItem(cursorKey, newCursor);
       }
 
       const nowIso = new Date().toISOString();
+      const lastSyncKey = this.getLastSyncStorageKey();
+      localStorage.setItem(lastSyncKey, nowIso);
       localStorage.setItem(STORAGE_KEYS.LAST_SYNC_AT, nowIso);
       this.lastSyncAt = nowIso;
       this.state = 'SUCCESS';
@@ -454,6 +510,26 @@ class SyncEngine {
     return () => {
       this.listeners.delete(listener);
     };
+  }
+
+  /**
+   * Daftarkan listener saat ada data baru yang berhasil ditarik dari Cloud ke Dexie
+   */
+  public onDataPulled(listener: () => void): () => void {
+    this.dataListeners.add(listener);
+    return () => {
+      this.dataListeners.delete(listener);
+    };
+  }
+
+  private notifyDataPulled(): void {
+    for (const listener of this.dataListeners) {
+      try {
+        listener();
+      } catch (err) {
+        console.error('[SyncEngine] Error in dataListener:', err);
+      }
+    }
   }
 
   private notifyListeners(): void {

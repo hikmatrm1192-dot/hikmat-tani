@@ -346,10 +346,15 @@ export class SyncService {
       };
     });
 
+    const effectiveCursor =
+      changes.length > 0
+        ? changes[changes.length - 1].serverTimestamp
+        : (since || currentServerTimestamp);
+
     return {
       success: true,
       changes,
-      serverTimestamp: currentServerTimestamp,
+      serverTimestamp: effectiveCursor,
       hasMore: false,
     };
   }

@@ -127,7 +127,7 @@ export default function App() {
       await initializeDatabase(farmerId);
 
       // Inisialisasi Sync Engine background sync
-      syncEngine.init().catch((e) => console.warn('[HIKMAT TANI] Sync engine init note:', e));
+      await syncEngine.init(farmerId).catch((e) => console.warn('[HIKMAT TANI] Sync engine init note:', e));
 
       // Profil Petani dari partisi lokal
       let currentFarmer = await farmerRepository.getById(farmerId);
@@ -186,11 +186,65 @@ export default function App() {
         }
         return allLands.length > 0 ? allLands[0].id : null;
       });
+
+      // Jika online, picu sinkronisasi segera agar data dari Cloud (HP lain) langsung masuk
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        syncEngine.syncNow().then(async (res) => {
+          if (res.success && res.pulledCount > 0) {
+            const freshLands = await landRepository.getAll();
+            const freshSeasons = await cropSeasonRepository.getAllActive();
+            const freshActivities = await db.activities.toArray();
+            const freshFertApps = await db.fertilizerApplications.toArray();
+            const freshOptObs = await db.optObservations.toArray();
+
+            setLands(freshLands);
+            setActiveSeasons(freshSeasons);
+            setAllActivities(freshActivities);
+            setAllFertApps(freshFertApps);
+            setAllOptObs(freshOptObs);
+
+            setSelectedLandId((prev) => {
+              if (prev && freshLands.some((l) => l.id === prev)) return prev;
+              return freshLands.length > 0 ? freshLands[0].id : null;
+            });
+          }
+        }).catch(() => {});
+      }
     } catch (err) {
       console.error('[HIKMAT TANI] Error loading data from Dexie:', err);
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  // Listener reaktif saat syncEngine menarik data baru dari Cloud
+  useEffect(() => {
+    const unsubDataPulled = syncEngine.onDataPulled(async () => {
+      const currentSess = authClientService.getSession();
+      if (!currentSess?.farmer?.id) return;
+      try {
+        const freshLands = await landRepository.getAll();
+        const freshSeasons = await cropSeasonRepository.getAllActive();
+        const freshActivities = await db.activities.toArray();
+        const freshFertApps = await db.fertilizerApplications.toArray();
+        const freshOptObs = await db.optObservations.toArray();
+
+        setLands(freshLands);
+        setActiveSeasons(freshSeasons);
+        setAllActivities(freshActivities);
+        setAllFertApps(freshFertApps);
+        setAllOptObs(freshOptObs);
+
+        setSelectedLandId((prev) => {
+          if (prev && freshLands.some((l) => l.id === prev)) return prev;
+          return freshLands.length > 0 ? freshLands[0].id : null;
+        });
+      } catch (e) {
+        console.error('[HIKMAT TANI] Error refreshing data on sync pull:', e);
+      }
+    });
+
+    return () => unsubDataPulled();
   }, []);
 
   useEffect(() => {
