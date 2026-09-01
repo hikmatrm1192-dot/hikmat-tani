@@ -4,8 +4,17 @@
  * Filosofi:
  * "Peta Satelit 2D Lapang Berbasis GPS & Petak Sawah m²."
  * 
- * Arsitektur Terpadu:
- * PETA SATELIT -> GPS -> PETAK SAWAH -> DATA TANAMAN -> DATA KEGIATAN -> OPT -> LUAS SERANGAN -> PETA KEKERINGAN -> CUACA -> ANALISIS -> REKOMENDASI PERTANIAN
+ * Modul Terpadu:
+ * 1. Peta Satelit 2D & Hibrid / Jalan
+ * 2. GPS Geolocation real-time & tracking
+ * 3. Gambar Petak Sawah (Polygon Drawer) m² dengan tap capture prioritas
+ * 4. Batas Wilayah Administrasi 4 Tingkat Resmi (BIG & Kemendagri):
+ *    - Batas Desa/Kelurahan
+ *    - Batas Kecamatan
+ *    - Batas Kabupaten/Kota
+ *    - Batas Provinsi
+ * 5. Marker Pengamatan OPT, Pemupukan, Pengairan, Panen & Perawatan
+ * 6. Peta Indikasi Kekeringan 5 Tingkat Standar
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -38,6 +47,7 @@ import {
   VillageBoundaryFeature,
   WeatherData,
 } from '../../types/index.ts';
+import { AdministrativeFeature } from '../../types/administrativeBoundary.ts';
 import { authClientService } from '../../services/authClientService.ts';
 import { bigGeospatialService } from '../../services/bigGeospatialService.ts';
 import { AgriculturalMap, BaseMapType, MapLayerVisibility } from './AgriculturalMap.tsx';
@@ -46,7 +56,7 @@ import { PolygonDrawerControls } from './PolygonDrawerControls.tsx';
 import { ParcelDetailDrawer } from './ParcelDetailDrawer.tsx';
 import { DroughtLegendModal } from './DroughtLegendModal.tsx';
 import { SaveDrawnParcelModal } from './SaveDrawnParcelModal.tsx';
-import { VillageDetailModal } from './VillageDetailModal.tsx';
+import { AdminBoundaryDetailModal } from './AdminBoundaryDetailModal.tsx';
 import { SAMPLE_DROUGHT_ZONES } from '../../engine/droughtEngine.ts';
 import { LatLngPoint } from '../../utils/geoUtils.ts';
 import { landRepository } from '../../db/repositories/landRepository.ts';
@@ -97,17 +107,30 @@ export function PetaPertanianView({
     showDroughtOverlay: false,
     showWeatherLayer: true,
     showVillageBoundaries: true,
+    showDistrictBoundaries: true,
+    showRegencyBoundaries: true,
+    showProvinceBoundaries: true,
   });
 
-  // BIG Village Boundaries State
+  // 4-Level Administrative Boundaries State (Resmi BIG & Kemendagri)
   const [villageBoundaries, setVillageBoundaries] = useState<VillageBoundaryFeature[]>([]);
-  const [selectedVillage, setSelectedVillage] = useState<VillageBoundaryFeature | null>(null);
-  const [isVillageModalOpen, setIsVillageModalOpen] = useState<boolean>(false);
+  const [districtBoundaries, setDistrictBoundaries] = useState<AdministrativeFeature[]>([]);
+  const [regencyBoundaries, setRegencyBoundaries] = useState<AdministrativeFeature[]>([]);
+  const [provinceBoundaries, setProvinceBoundaries] = useState<AdministrativeFeature[]>([]);
+  const [selectedAdminFeature, setSelectedAdminFeature] = useState<AdministrativeFeature | VillageBoundaryFeature | null>(null);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState<boolean>(false);
 
-  // Inisialisasi batas desa resmi BIG
+  // Inisialisasi batas wilayah 4-level resmi BIG
   useEffect(() => {
-    const boundaries = bigGeospatialService.getAllVillageBoundaries();
-    setVillageBoundaries(boundaries);
+    const villages = bigGeospatialService.getAllVillageBoundaries();
+    const districts = bigGeospatialService.getDistrictsByRegencyCode('32.15');
+    const regencies = bigGeospatialService.getRegenciesByProvinceCode('32');
+    const provinces = bigGeospatialService.getAllProvinces();
+
+    setVillageBoundaries(villages);
+    setDistrictBoundaries(districts);
+    setRegencyBoundaries(regencies);
+    setProvinceBoundaries(provinces);
   }, []);
 
   // GPS State
@@ -356,7 +379,7 @@ export function PetaPertanianView({
         />
       )}
 
-      {/* Fullscreen Satellite Map Component */}
+      {/* Fullscreen Satellite Map Component with 4-Level Boundaries */}
       <AgriculturalMap
         lands={lands}
         activeSeasons={activeSeasons}
@@ -364,6 +387,9 @@ export function PetaPertanianView({
         optObservations={allOptObs}
         droughtZones={SAMPLE_DROUGHT_ZONES}
         villageBoundaries={villageBoundaries}
+        districtBoundaries={districtBoundaries}
+        regencyBoundaries={regencyBoundaries}
+        provinceBoundaries={provinceBoundaries}
         selectedLandId={selectedParcel?.id || selectedLandId}
         baseMapType={baseMapType}
         layerVisibility={layerVisibility}
@@ -382,8 +408,12 @@ export function PetaPertanianView({
           setIsDroughtLegendOpen(true);
         }}
         onSelectVillage={(village) => {
-          setSelectedVillage(village);
-          setIsVillageModalOpen(true);
+          setSelectedAdminFeature(village);
+          setIsAdminModalOpen(true);
+        }}
+        onSelectAdminFeature={(feature) => {
+          setSelectedAdminFeature(feature);
+          setIsAdminModalOpen(true);
         }}
         userGps={userGps}
         onGpsRequested={requestGpsLocation}
@@ -417,11 +447,11 @@ export function PetaPertanianView({
         onClose={() => setIsDroughtLegendOpen(false)}
       />
 
-      {/* Village Boundary Detail Modal (BIG Official) */}
-      <VillageDetailModal
-        isOpen={isVillageModalOpen}
-        onClose={() => setIsVillageModalOpen(false)}
-        village={selectedVillage}
+      {/* 4-Level Administrative Boundary Detail Modal (BIG & Kemendagri) */}
+      <AdminBoundaryDetailModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
+        feature={selectedAdminFeature}
       />
 
       {/* Save Drawn Parcel Modal */}

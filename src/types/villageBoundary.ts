@@ -1,5 +1,5 @@
 /**
- * HIKMAT TANI - Official Village Administrative Boundary Types
+ * HIKMAT TANI - Official Village Administrative Boundary Types (Backward-Compatible Alias & Extension)
  * 
  * Standar Sumber:
  * - Badan Informasi Geospasial (BIG) - Ina-Geoportal / Peta Rupabumi Indonesia (RBI) Batas Wilayah Administrasi Desa/Kelurahan
@@ -7,13 +7,23 @@
  */
 
 import { LatLngPoint } from '../utils/geoUtils.ts';
+import {
+  AdminLevel,
+  AdministrativeFeature,
+  AdministrativeHierarchy,
+  AdministrativeSpatialLookupResult,
+  BoundingBox,
+  OfficialGeospatialMetadata,
+} from './administrativeBoundary.ts';
 
-export interface BoundingBox {
-  minLat: number;
-  maxLat: number;
-  minLng: number;
-  maxLng: number;
-}
+export type {
+  AdminLevel,
+  AdministrativeFeature,
+  AdministrativeHierarchy,
+  AdministrativeSpatialLookupResult,
+  BoundingBox,
+  OfficialGeospatialMetadata,
+};
 
 export interface VillageBoundaryFeature {
   id: string; // e.g. "big-adm-3215012001"
@@ -29,12 +39,15 @@ export interface VillageBoundaryFeature {
   coordinates: LatLngPoint[]; // Titik poligon batas luar desa
   center: LatLngPoint; // Centroid label desa
   bbox: BoundingBox;
+  isDiscrepancy?: boolean;
+  discrepancyNote?: string;
 }
 
 export interface VillageSpatialLookupResult {
   matched: boolean;
   feature?: VillageBoundaryFeature;
-  status: 'VERIFIED' | 'NEEDS_VERIFICATION' | 'OUTSIDE_COVERAGE';
+  hierarchy?: Partial<AdministrativeHierarchy>;
+  status: 'VERIFIED' | 'NEEDS_VERIFICATION' | 'OUTSIDE_COVERAGE' | 'MANUAL';
   distanceToBorderM?: number;
   message?: string;
   sourceMetadata: {
@@ -44,16 +57,4 @@ export interface VillageSpatialLookupResult {
     legalRef: string;
     verifiedAt: string;
   };
-}
-
-export interface OfficialGeospatialMetadata {
-  sourceName: string;
-  provider: string;
-  portalUrl: string;
-  datasetName: string;
-  edition: string;
-  legalReference: string;
-  scale: string;
-  coordinateSystem: string;
-  lastUpdated: string;
 }

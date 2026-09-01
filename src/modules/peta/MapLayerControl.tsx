@@ -9,6 +9,7 @@
  * - Titik Pemupukan
  * - Titik Pengairan
  * - Titik Perawatan & Panen
+ * - Batas Wilayah Administrasi 4 Tingkat (Desa, Kecamatan, Kabupaten/Kota, Provinsi)
  * - Peta Kekeringan (Overlay)
  */
 
@@ -69,7 +70,7 @@ export function MapLayerControl({
             className="fixed inset-0 z-20"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute top-12 left-0 z-30 w-72 sm:w-80 bg-white/98 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200 p-4 space-y-4 font-sans text-slate-900 animate-in fade-in zoom-in-95 duration-150">
+          <div className="absolute top-12 left-0 z-30 w-72 sm:w-84 max-h-[85vh] overflow-y-auto bg-white/98 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200 p-4 space-y-4 font-sans text-slate-900 animate-in fade-in zoom-in-95 duration-150">
             {/* Header */}
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
@@ -127,7 +128,7 @@ export function MapLayerControl({
               </div>
             </div>
 
-            {/* 2. Layer Toggles */}
+            {/* 2. Layer Toggles - Elemen Lapang */}
             <div className="space-y-2 pt-1 border-t border-slate-100">
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                 Elemen Lapang
@@ -216,17 +217,24 @@ export function MapLayerControl({
                   className="rounded text-amber-700 focus:ring-amber-500 w-4 h-4"
                 />
               </label>
+            </div>
 
-              {/* Batas Wilayah Desa / Kelurahan (Resmi BIG) */}
-              <label className="flex items-center justify-between text-xs font-bold text-slate-800 cursor-pointer select-none pt-1 border-t border-slate-100">
+            {/* 3. Batas Wilayah Administrasi Resmi (4 Tingkat) */}
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Batas Wilayah Resmi
+                </span>
+                <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 text-[9px] font-black rounded">
+                  BIG & Kemendagri
+                </span>
+              </div>
+
+              {/* Batas Desa / Kelurahan */}
+              <label className="flex items-center justify-between text-xs font-bold text-slate-800 cursor-pointer select-none">
                 <div className="flex items-center gap-2">
-                  <Building2 className="w-3.5 h-3.5 text-emerald-700" />
-                  <div className="flex items-center gap-1.5">
-                    <span>Batas Desa/Kelurahan</span>
-                    <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 text-[9px] font-black rounded">
-                      BIG
-                    </span>
-                  </div>
+                  <span className="w-3.5 h-3.5 rounded-sm border-2 border-dashed border-emerald-600 bg-emerald-100/50 inline-block" />
+                  <span>Batas Desa / Kelurahan</span>
                 </div>
                 <input
                   type="checkbox"
@@ -235,9 +243,51 @@ export function MapLayerControl({
                   className="rounded text-emerald-700 focus:ring-emerald-500 w-4 h-4"
                 />
               </label>
+
+              {/* Batas Kecamatan */}
+              <label className="flex items-center justify-between text-xs font-bold text-slate-800 cursor-pointer select-none">
+                <div className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 rounded-sm border-2 border-dashed border-teal-600 bg-teal-100/50 inline-block" />
+                  <span>Batas Kecamatan</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={layerVisibility.showDistrictBoundaries}
+                  onChange={() => onToggleLayer('showDistrictBoundaries')}
+                  className="rounded text-teal-700 focus:ring-teal-500 w-4 h-4"
+                />
+              </label>
+
+              {/* Batas Kabupaten / Kota */}
+              <label className="flex items-center justify-between text-xs font-bold text-slate-800 cursor-pointer select-none">
+                <div className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 rounded-sm border-2 border-dashed border-slate-600 bg-slate-200/50 inline-block" />
+                  <span>Batas Kabupaten / Kota</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={layerVisibility.showRegencyBoundaries}
+                  onChange={() => onToggleLayer('showRegencyBoundaries')}
+                  className="rounded text-slate-700 focus:ring-slate-500 w-4 h-4"
+                />
+              </label>
+
+              {/* Batas Provinsi */}
+              <label className="flex items-center justify-between text-xs font-bold text-slate-800 cursor-pointer select-none">
+                <div className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 rounded-sm border-2 border-dashed border-indigo-700 bg-indigo-100/50 inline-block" />
+                  <span>Batas Provinsi</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={layerVisibility.showProvinceBoundaries}
+                  onChange={() => onToggleLayer('showProvinceBoundaries')}
+                  className="rounded text-indigo-700 focus:ring-indigo-500 w-4 h-4"
+                />
+              </label>
             </div>
 
-            {/* 3. Drought Overlay */}
+            {/* 4. Drought Overlay */}
             <div className="pt-2 border-t border-slate-100 space-y-2">
               <label className="flex items-center justify-between text-xs font-bold text-slate-900 cursor-pointer select-none">
                 <div className="flex items-center gap-2">

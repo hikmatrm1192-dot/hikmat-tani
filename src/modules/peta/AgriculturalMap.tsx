@@ -10,7 +10,12 @@
  * 3. Gambar Petak Sawah (Polygon Drawer): Tap titik, hitung keliling (m) & luas otomatis (m²).
  * 4. Marker Spasial: Titik OPT, Pemupukan, Pengairan, Tanam, Panen, Perawatan dengan warna baku.
  * 5. Overlay Peta Kekeringan: Zona TERANCAM (🟡), RINGAN (🟠), SEDANG (🔴), BERAT (🟣), PUSO (⚫).
- * 6. Responsive Mobile First: Sentuhan responsif, tanpa flicker, gesture zoom & drag mulus.
+ * 6. Batas Wilayah Administrasi 4 Tingkat Resmi (BIG & Kemendagri):
+ *    - Provinsi (Garis Tebal Indigo)
+ *    - Kabupaten / Kota (Garis Slate)
+ *    - Kecamatan (Garis Teal)
+ *    - Desa / Kelurahan (Garis Detail Forest Emerald)
+ * 7. Capture Klik/Tap Prioritas Tinggi untuk Mode Gambar Polygon.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -25,6 +30,7 @@ import {
   OptObservation,
   VillageBoundaryFeature,
 } from '../../types/index.ts';
+import { AdministrativeFeature } from '../../types/administrativeBoundary.ts';
 import {
   calculateGeodesicPerimeterM,
   calculateGeodesicPolygonAreaM2,
@@ -32,6 +38,7 @@ import {
   formatAreaM2,
   LatLngPoint,
 } from '../../utils/geoUtils.ts';
+import { attachDrawingMapClickCapture } from './drawingMapInteraction.ts';
 
 // Default center Karawang / Pantura Jawa Barat jika belum ada GPS
 const DEFAULT_CENTER: [number, number] = [-6.3039, 107.3009];
@@ -51,6 +58,9 @@ export interface MapLayerVisibility {
   showDroughtOverlay: boolean;
   showWeatherLayer: boolean;
   showVillageBoundaries: boolean;
+  showDistrictBoundaries: boolean;
+  showRegencyBoundaries: boolean;
+  showProvinceBoundaries: boolean;
 }
 
 interface AgriculturalMapProps {
@@ -60,6 +70,9 @@ interface AgriculturalMapProps {
   optObservations?: OptObservation[];
   droughtZones?: DroughtZoneFeature[];
   villageBoundaries?: VillageBoundaryFeature[];
+  districtBoundaries?: AdministrativeFeature[];
+  regencyBoundaries?: AdministrativeFeature[];
+  provinceBoundaries?: AdministrativeFeature[];
   selectedLandId?: string | null;
   baseMapType: BaseMapType;
   layerVisibility: MapLayerVisibility;
@@ -71,6 +84,7 @@ interface AgriculturalMapProps {
   onSelectOptObs?: (optObs: OptObservation, activity?: Activity) => void;
   onSelectDroughtZone?: (zone: DroughtZoneFeature) => void;
   onSelectVillage?: (village: VillageBoundaryFeature) => void;
+  onSelectAdminFeature?: (feature: AdministrativeFeature) => void;
   userGps?: { lat: number; lng: number; accuracy?: number } | null;
   onGpsRequested?: () => void;
 }
@@ -82,6 +96,9 @@ export function AgriculturalMap({
   optObservations = [],
   droughtZones = [],
   villageBoundaries = [],
+  districtBoundaries = [],
+  regencyBoundaries = [],
+  provinceBoundaries = [],
   selectedLandId,
   baseMapType,
   layerVisibility,
@@ -93,6 +110,7 @@ export function AgriculturalMap({
   onSelectOptObs,
   onSelectDroughtZone,
   onSelectVillage,
+  onSelectAdminFeature,
   userGps,
   onGpsRequested,
 }: AgriculturalMapProps) {
@@ -101,25 +119,32 @@ export function AgriculturalMap({
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const hybridOverlayRef = useRef<L.TileLayer | null>(null);
 
-  // Layer groups untuk manajemen render (urutan: batas desa di bawah petak sawah & marker)
+  // Layer groups untuk manajemen render (urutan hierarkis dari bawah ke atas)
+  const provinceLayerGroupRef = useRef<L.LayerGroup | null>(null);
+  const regencyLayerGroupRef = useRef<L.LayerGroup | null>(null);
+  const districtLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const villageLayerGroupRef = useRef<L.LayerGroup | null>(null);
-  const parcelsLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const droughtLayerGroupRef = useRef<L.LayerGroup | null>(null);
+  const parcelsLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const markersLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const drawingLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const gpsLayerGroupRef = useRef<L.LayerGroup | null>(null);
 
-  // Mutable refs untuk callback & mode menggambar agar listener Leaflet selalu membaca nilai terkini (anti stale closure)
+  // Mutable refs untuk callback & mode menggambar agar listener Leaflet selalu membaca nilai terkini
   const isDrawingModeRef = useRef<boolean>(isDrawingMode);
   isDrawingModeRef.current = isDrawingMode;
   const onAddDrawingPointRef = useRef(onAddDrawingPoint);
   onAddDrawingPointRef.current = onAddDrawingPoint;
   const onSelectVillageRef = useRef(onSelectVillage);
   onSelectVillageRef.current = onSelectVillage;
+  const onSelectAdminFeatureRef = useRef(onSelectAdminFeature);
+  onSelectAdminFeatureRef.current = onSelectAdminFeature;
 
-  // Inisialisasi Peta Leaflet
+  // Inisialisasi Peta Leaflet & Native Tap Capture
   useEffect(() => {
     if (!mapContainerRef.current) return;
+
+    let detachCapture: (() => void) | null = null;
 
     if (!mapInstanceRef.current) {
       // Inisialisasi Map
@@ -135,6 +160,9 @@ export function AgriculturalMap({
       L.control.zoom({ position: 'topright' }).addTo(map);
 
       // Inisialisasi layer groups (urutan layer dari bawah ke atas)
+      provinceLayerGroupRef.current = L.layerGroup().addTo(map);
+      regencyLayerGroupRef.current = L.layerGroup().addTo(map);
+      districtLayerGroupRef.current = L.layerGroup().addTo(map);
       villageLayerGroupRef.current = L.layerGroup().addTo(map);
       droughtLayerGroupRef.current = L.layerGroup().addTo(map);
       parcelsLayerGroupRef.current = L.layerGroup().addTo(map);
@@ -144,7 +172,14 @@ export function AgriculturalMap({
 
       mapInstanceRef.current = map;
 
-      // Event listener tap/klik pada canvas peta
+      // Pasang Capture Tap Prioritas Tinggi agar mode gambar petak sawah tidak tertutup layer manapun
+      detachCapture = attachDrawingMapClickCapture(
+        map,
+        isDrawingModeRef,
+        onAddDrawingPointRef
+      );
+
+      // Fallback listener Leaflet standar jika capture tidak triggered
       map.on('click', (e: L.LeafletMouseEvent) => {
         if (isDrawingModeRef.current && onAddDrawingPointRef.current) {
           onAddDrawingPointRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
@@ -153,6 +188,9 @@ export function AgriculturalMap({
     }
 
     return () => {
+      if (detachCapture) {
+        detachCapture();
+      }
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -222,7 +260,256 @@ export function AgriculturalMap({
     }
   }, [baseMapType]);
 
-  // Render Batas Wilayah Desa / Kelurahan Resmi (BIG)
+  // 1. Render Batas Provinsi (Level 1 - Garis Tebal Indigo)
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const group = provinceLayerGroupRef.current;
+    if (!map || !group) return;
+
+    group.clearLayers();
+    if (!layerVisibility.showProvinceBoundaries) return;
+
+    provinceBoundaries.forEach((province) => {
+      if (!province.coordinates || province.coordinates.length < 3) return;
+      const coords: [number, number][] = province.coordinates.map((pt) => [pt.lat, pt.lng]);
+
+      const polygon = L.polygon(coords, {
+        color: '#312E81',
+        weight: 3.5,
+        dashArray: '12, 8',
+        opacity: 0.85,
+        fillColor: '#4338CA',
+        fillOpacity: 0.02,
+      });
+
+      const center = province.center || calculatePolygonCentroid(province.coordinates);
+      const labelIcon = L.divIcon({
+        className: 'hikmat-prov-label-wrapper',
+        html: `
+          <div style="
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(30, 27, 75, 0.9);
+            color: #ffffff;
+            border: 1px solid #6366f1;
+            padding: 3px 10px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 800;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            pointer-events: none;
+            white-space: nowrap;
+            transform: translate(-50%, -50%);
+          ">
+            <span>🇮🇩</span>
+            <span>Prov. ${province.name}</span>
+          </div>
+        `,
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      });
+
+      const labelMarker = L.marker([center.lat, center.lng], {
+        icon: labelIcon,
+        interactive: false,
+      });
+
+      polygon.bindTooltip(
+        `
+        <div class="px-2 py-1 text-center font-sans">
+          <div class="font-black text-xs text-indigo-950">Provinsi ${province.name}</div>
+          <div class="text-[10px] text-slate-600">Kode Wilayah: ${province.adminCode}</div>
+          <div class="text-[9px] font-bold text-indigo-800 mt-0.5">Sumber: BIG & Kemendagri</div>
+        </div>
+        `,
+        { permanent: false, direction: 'top' }
+      );
+
+      polygon.on('click', (e: L.LeafletMouseEvent) => {
+        if (isDrawingModeRef.current) {
+          if (onAddDrawingPointRef.current) {
+            onAddDrawingPointRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
+          }
+          return;
+        }
+        if (onSelectAdminFeatureRef.current) {
+          onSelectAdminFeatureRef.current(province);
+        }
+      });
+
+      group.addLayer(polygon);
+      group.addLayer(labelMarker);
+    });
+  }, [provinceBoundaries, layerVisibility.showProvinceBoundaries]);
+
+  // 2. Render Batas Kabupaten / Kota (Level 2 - Garis Slate / Steel)
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const group = regencyLayerGroupRef.current;
+    if (!map || !group) return;
+
+    group.clearLayers();
+    if (!layerVisibility.showRegencyBoundaries) return;
+
+    regencyBoundaries.forEach((regency) => {
+      if (!regency.coordinates || regency.coordinates.length < 3) return;
+      const coords: [number, number][] = regency.coordinates.map((pt) => [pt.lat, pt.lng]);
+
+      const polygon = L.polygon(coords, {
+        color: '#334155',
+        weight: 2.8,
+        dashArray: '10, 6',
+        opacity: 0.85,
+        fillColor: '#64748B',
+        fillOpacity: 0.03,
+      });
+
+      const center = regency.center || calculatePolygonCentroid(regency.coordinates);
+      const labelIcon = L.divIcon({
+        className: 'hikmat-regency-label-wrapper',
+        html: `
+          <div style="
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid #475569;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 800;
+            color: #1e293b;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+            pointer-events: none;
+            white-space: nowrap;
+            transform: translate(-50%, -50%);
+          ">
+            <span>🏙️</span>
+            <span>${regency.name}</span>
+          </div>
+        `,
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      });
+
+      const labelMarker = L.marker([center.lat, center.lng], {
+        icon: labelIcon,
+        interactive: false,
+      });
+
+      polygon.bindTooltip(
+        `
+        <div class="px-2 py-1 text-center font-sans">
+          <div class="font-black text-xs text-slate-900">${regency.name}</div>
+          <div class="text-[10px] text-slate-600">Kode Wilayah: ${regency.adminCode}</div>
+          <div class="text-[9px] font-bold text-slate-700 mt-0.5">Sumber: BIG & Kemendagri</div>
+        </div>
+        `,
+        { permanent: false, direction: 'top' }
+      );
+
+      polygon.on('click', (e: L.LeafletMouseEvent) => {
+        if (isDrawingModeRef.current) {
+          if (onAddDrawingPointRef.current) {
+            onAddDrawingPointRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
+          }
+          return;
+        }
+        if (onSelectAdminFeatureRef.current) {
+          onSelectAdminFeatureRef.current(regency);
+        }
+      });
+
+      group.addLayer(polygon);
+      group.addLayer(labelMarker);
+    });
+  }, [regencyBoundaries, layerVisibility.showRegencyBoundaries]);
+
+  // 3. Render Batas Kecamatan (Level 3 - Garis Teal)
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const group = districtLayerGroupRef.current;
+    if (!map || !group) return;
+
+    group.clearLayers();
+    if (!layerVisibility.showDistrictBoundaries) return;
+
+    districtBoundaries.forEach((district) => {
+      if (!district.coordinates || district.coordinates.length < 3) return;
+      const coords: [number, number][] = district.coordinates.map((pt) => [pt.lat, pt.lng]);
+
+      const polygon = L.polygon(coords, {
+        color: '#0D9488',
+        weight: 2.2,
+        dashArray: '8, 5',
+        opacity: 0.85,
+        fillColor: '#14B8A6',
+        fillOpacity: 0.03,
+      });
+
+      const center = district.center || calculatePolygonCentroid(district.coordinates);
+      const labelIcon = L.divIcon({
+        className: 'hikmat-district-label-wrapper',
+        html: `
+          <div style="
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid #0d9488;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 800;
+            color: #134e4a;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+            pointer-events: none;
+            white-space: nowrap;
+            transform: translate(-50%, -50%);
+          ">
+            <span>🏛️</span>
+            <span>Kec. ${district.name}</span>
+          </div>
+        `,
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      });
+
+      const labelMarker = L.marker([center.lat, center.lng], {
+        icon: labelIcon,
+        interactive: false,
+      });
+
+      polygon.bindTooltip(
+        `
+        <div class="px-2 py-1 text-center font-sans">
+          <div class="font-black text-xs text-teal-950">Kecamatan ${district.name}</div>
+          <div class="text-[10px] text-slate-600">Kode Wilayah: ${district.adminCode}</div>
+          <div class="text-[9px] font-bold text-teal-800 mt-0.5">Sumber: BIG & Kemendagri</div>
+        </div>
+        `,
+        { permanent: false, direction: 'top' }
+      );
+
+      polygon.on('click', (e: L.LeafletMouseEvent) => {
+        if (isDrawingModeRef.current) {
+          if (onAddDrawingPointRef.current) {
+            onAddDrawingPointRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
+          }
+          return;
+        }
+        if (onSelectAdminFeatureRef.current) {
+          onSelectAdminFeatureRef.current(district);
+        }
+      });
+
+      group.addLayer(polygon);
+      group.addLayer(labelMarker);
+    });
+  }, [districtBoundaries, layerVisibility.showDistrictBoundaries]);
+
+  // 4. Render Batas Wilayah Desa / Kelurahan Resmi (Level 4 - Garis Forest Emerald Detail)
   useEffect(() => {
     const map = mapInstanceRef.current;
     const group = villageLayerGroupRef.current;
@@ -233,20 +520,17 @@ export function AgriculturalMap({
 
     villageBoundaries.forEach((village) => {
       if (!village.coordinates || village.coordinates.length < 3) return;
-
       const coords: [number, number][] = village.coordinates.map((pt) => [pt.lat, pt.lng]);
 
-      // Garis batas administrasi desa: garis tegas putus-putus emerald/slate, tidak mengganggu satelit
       const polygon = L.polygon(coords, {
         color: '#047857',
-        weight: 2,
-        dashArray: '8, 6',
-        opacity: 0.85,
+        weight: 1.8,
+        dashArray: '6, 4',
+        opacity: 0.9,
         fillColor: '#10B981',
-        fillOpacity: 0.04, // Sangat transparan agar citra satelit tetap jernih
+        fillOpacity: 0.04,
       });
 
-      // Label Nama Desa/Kelurahan dengan badge bersih di centroid
       const center = village.center || calculatePolygonCentroid(village.coordinates);
       const labelIcon = L.divIcon({
         className: 'hikmat-village-label-wrapper',
@@ -255,7 +539,7 @@ export function AgriculturalMap({
             display: inline-flex;
             align-items: center;
             gap: 4px;
-            background: rgba(255, 255, 255, 0.92);
+            background: rgba(255, 255, 255, 0.94);
             backdrop-filter: blur(4px);
             border: 1px solid #10b981;
             padding: 2px 8px;
@@ -268,7 +552,7 @@ export function AgriculturalMap({
             white-space: nowrap;
             transform: translate(-50%, -50%);
           ">
-            <span style="font-size: 10px;">🏛️</span>
+            <span>🌾</span>
             <span>${village.villageName}</span>
           </div>
         `,
@@ -281,19 +565,17 @@ export function AgriculturalMap({
         interactive: false,
       });
 
-      // Tooltip Resmi BIG
       polygon.bindTooltip(
         `
         <div class="px-2 py-1 text-center font-sans">
-          <div class="font-bold text-xs text-emerald-950">${village.villageName}</div>
-          <div class="text-[11px] text-slate-700">${village.districtName}, ${village.regencyName}</div>
+          <div class="font-black text-xs text-emerald-950">Desa ${village.villageName}</div>
+          <div class="text-[11px] text-slate-700">Kec. ${village.districtName}, ${village.regencyName}</div>
           <div class="text-[9px] font-bold text-emerald-800 mt-0.5">Sumber: BIG (Ina-Geoportal)</div>
         </div>
         `,
         { permanent: false, direction: 'top' }
       );
 
-      // Event Listener Tap / Klik
       polygon.on('click', (e: L.LeafletMouseEvent) => {
         if (isDrawingModeRef.current) {
           if (onAddDrawingPointRef.current) {
@@ -311,7 +593,7 @@ export function AgriculturalMap({
     });
   }, [villageBoundaries, layerVisibility.showVillageBoundaries]);
 
-  // Render Poligon Petak Sawah Lahan
+  // 5. Render Poligon Petak Sawah Lahan (m²)
   useEffect(() => {
     const map = mapInstanceRef.current;
     const group = parcelsLayerGroupRef.current;
@@ -321,16 +603,14 @@ export function AgriculturalMap({
     if (!layerVisibility.showParcels) return;
 
     lands.forEach((land) => {
-      // Dapatkan titik-titik koordinat polygon
       let coords: [number, number][] = [];
 
       if (land.coordinates && land.coordinates.length >= 3) {
         coords = land.coordinates.map((pt) => [pt.lat, pt.lng]);
       } else if (land.latitude && land.longitude) {
-        // Jika hanya ada titik pin tengah, buat perkiraan kotak petak sawah proporsional
         const lat = land.latitude;
         const lng = land.longitude;
-        const delta = 0.0003; // ~33 meter persegi
+        const delta = 0.0003;
         coords = [
           [lat - delta, lng - delta],
           [lat - delta, lng + delta],
@@ -345,7 +625,6 @@ export function AgriculturalMap({
       const droughtCat = land.droughtCategory;
       const droughtInfo = droughtCat ? DROUGHT_STANDARDS[droughtCat] : null;
 
-      // Warna polygon: prioritaskan status kekeringan jika ada, atau hijau padi
       const strokeColor = isSelected
         ? '#D4AF37'
         : droughtInfo
@@ -362,7 +641,6 @@ export function AgriculturalMap({
         dashArray: isSelected ? '4, 4' : undefined,
       });
 
-      // Popup & Tooltip
       const areaLabel = formatAreaM2(land.areaM2, land.areaHa);
       const activeSeason = activeSeasons.find(
         (s) => s.landId === land.id && s.status === 'ACTIVE'
@@ -407,7 +685,7 @@ export function AgriculturalMap({
     });
   }, [lands, activeSeasons, selectedLandId, layerVisibility.showParcels, onSelectLand]);
 
-  // Render Overlay Peta Kekeringan
+  // 6. Render Overlay Peta Kekeringan
   useEffect(() => {
     const map = mapInstanceRef.current;
     const group = droughtLayerGroupRef.current;
@@ -452,7 +730,7 @@ export function AgriculturalMap({
     });
   }, [droughtZones, layerVisibility.showDroughtOverlay, onSelectDroughtZone]);
 
-  // Render Marker Kegiatan & OPT
+  // 7. Render Marker Kegiatan & OPT
   useEffect(() => {
     const map = mapInstanceRef.current;
     const group = markersLayerGroupRef.current;
@@ -460,9 +738,8 @@ export function AgriculturalMap({
 
     group.clearLayers();
 
-    // 1. Marker Kegiatan (Pupuk, Tanam, Pengairan, dll)
+    // Marker Kegiatan (Pupuk, Tanam, Pengairan, dll)
     activities.forEach((act) => {
-      // Cari koordinat: dari activity langsung atau centroid land musimnya
       let lat = act.latitude;
       let lng = act.longitude;
 
@@ -485,7 +762,6 @@ export function AgriculturalMap({
 
       if (!lat || !lng) return;
 
-      // Filter layer visibility berdasarkan kategori
       if (act.category === 'PLANTING' && !layerVisibility.showParcels) return;
       if (act.category === 'FERTILIZER' && !layerVisibility.showFertilizerMarkers) return;
       if (act.category === 'IRRIGATION' && !layerVisibility.showIrrigationMarkers) return;
@@ -493,7 +769,6 @@ export function AgriculturalMap({
       if (act.category === 'HARVEST' && !layerVisibility.showHarvestMarkers) return;
       if (act.category === 'OPT' && !layerVisibility.showOptMarkers) return;
 
-      // Icon Styling
       let colorBg = '#059669';
       let iconEmoji = '🌱';
       let label = 'Tanam';
@@ -574,7 +849,7 @@ export function AgriculturalMap({
       group.addLayer(marker);
     });
 
-    // 2. Marker Khusus Pengamatan OPT
+    // Marker Khusus Pengamatan OPT
     if (layerVisibility.showOptMarkers) {
       optObservations.forEach((optObs) => {
         let lat = optObs.latitude;
@@ -592,7 +867,7 @@ export function AgriculturalMap({
               const land = lands.find((l) => l.id === season.landId);
               if (land && land.coordinates && land.coordinates.length > 0) {
                 const c = calculatePolygonCentroid(land.coordinates);
-                lat = c.lat + 0.0001; // offset sedikit agar tidak tumpang tindih
+                lat = c.lat + 0.0001;
                 lng = c.lng + 0.0001;
               }
             }
@@ -663,7 +938,7 @@ export function AgriculturalMap({
     onSelectOptObs,
   ]);
 
-  // Render Drawing Mode (Polygon yang sedang digambar)
+  // 8. Render Drawing Mode (Polygon yang sedang digambar)
   useEffect(() => {
     const map = mapInstanceRef.current;
     const group = drawingLayerGroupRef.current;
@@ -740,7 +1015,7 @@ export function AgriculturalMap({
     }
   }, [isDrawingMode, drawingPoints]);
 
-  // Render Marker GPS Pengguna
+  // 9. Render Marker GPS Pengguna
   useEffect(() => {
     const map = mapInstanceRef.current;
     const group = gpsLayerGroupRef.current;
@@ -749,7 +1024,6 @@ export function AgriculturalMap({
     group.clearLayers();
     if (!layerVisibility.showGps || !userGps) return;
 
-    // Lingkaran akurasi
     if (userGps.accuracy && userGps.accuracy < 200) {
       const circle = L.circle([userGps.lat, userGps.lng], {
         radius: userGps.accuracy,
@@ -761,7 +1035,6 @@ export function AgriculturalMap({
       group.addLayer(circle);
     }
 
-    // Titik lokasi berkedip
     const gpsIcon = L.divIcon({
       className: 'hikmat-gps-marker',
       html: `

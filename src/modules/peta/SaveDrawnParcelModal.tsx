@@ -4,13 +4,14 @@
  * Menyimpan petak sawah baru dari hasil gambar polygon pada peta satelit 2D.
  * Standar:
  * - Semua luasan menggunakan m².
- * - Integrasi Spatial Check Batas Desa Resmi BIG secara otomatis terhadap titik centroid petak sawah.
+ * - Integrasi 4-Level Spatial Hierarchy Check Batas Resmi BIG & Kemendagri secara otomatis terhadap centroid.
  */
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { AlertCircle, Building2, CheckCircle2, Layers, MapPin, Shield, Sparkles } from 'lucide-react';
 import { Modal } from '../../components/common/Modal.tsx';
-import { Land, LandType, WaterSource, VillageSpatialLookupResult } from '../../types/index.ts';
+import { Land, LandType, WaterSource } from '../../types/index.ts';
+import { AdministrativeHierarchyLookupResult } from '../../types/administrativeBoundary.ts';
 import { calculatePolygonCentroid, formatAreaM2, LatLngPoint } from '../../utils/geoUtils.ts';
 import { bigGeospatialService } from '../../services/bigGeospatialService.ts';
 
@@ -35,14 +36,14 @@ export function SaveDrawnParcelModal({
   const [waterSource, setWaterSource] = useState<WaterSource>('IRRIGATION_TECHNICAL');
   const [landType, setLandType] = useState<LandType>('LOWLAND_PADDY');
   const [location, setLocation] = useState<string>('');
-  const [spatialResult, setSpatialResult] = useState<VillageSpatialLookupResult | null>(null);
+  const [spatialResult, setSpatialResult] = useState<AdministrativeHierarchyLookupResult | null>(null);
   const [isCheckingSpatial, setIsCheckingSpatial] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const centroid = calculatePolygonCentroid(points);
 
-  // Jalankan Spatial Check otomatis saat modal terbuka & titik tersedia
+  // Jalankan 4-level spatial lookup otomatis saat modal terbuka & titik tersedia
   useEffect(() => {
     if (!isOpen || points.length < 3) return;
 
@@ -50,18 +51,18 @@ export function SaveDrawnParcelModal({
     setIsCheckingSpatial(true);
 
     bigGeospatialService
-      .findVillageByPoint(centroid)
+      .lookupAdministrativeByPoint(centroid)
       .then((res) => {
         if (isMounted) {
           setSpatialResult(res);
-          // Set default lokasi deskriptif jika teridentifikasi resmi
-          if (res.matched && res.feature && !location) {
-            setLocation(`${res.feature.villageName}, ${res.feature.districtName}`);
+          // Set default lokasi deskriptif jika teridentifikasi
+          if (res.hierarchy.desaKelurahan && !location) {
+            setLocation(`${res.hierarchy.desaKelurahan}, ${res.hierarchy.kecamatan || ''}`);
           }
         }
       })
       .catch((err) => {
-        console.error('Gagal melakukan spatial lookup batas desa:', err);
+        console.error('Gagal melakukan spatial lookup batas administrasi 4-level:', err);
       })
       .finally(() => {
         if (isMounted) setIsCheckingSpatial(false);
@@ -90,31 +91,39 @@ export function SaveDrawnParcelModal({
       // Konversi aman ke areaHa untuk backward-compat
       const areaHa = areaM2 / 10000;
 
-      // Metadata administrasi resmi jika terdeteksi dari BIG
+      // Metadata administrasi resmi 4-tingkat
       let administrativeData = undefined;
-      let villageShortcut = undefined;
-      let districtShortcut = undefined;
-      let regencyShortcut = undefined;
-      let provinceShortcut = undefined;
-      let admCodeShortcut = undefined;
+      let prov = undefined;
+      let provCode = undefined;
+      let kab = undefined;
+      let kabCode = undefined;
+      let kec = undefined;
+      let kecCode = undefined;
+      let des = undefined;
+      let desCode = undefined;
 
-      if (spatialResult && spatialResult.matched && spatialResult.feature) {
+      if (spatialResult && spatialResult.hierarchy) {
+        const h = spatialResult.hierarchy;
+        prov = h.provinsi;
+        provCode = h.provinsiCode;
+        kab = h.kabupatenKota;
+        kabCode = h.kabupatenKotaCode;
+        kec = h.kecamatan;
+        kecCode = h.kecamatanCode;
+        des = h.desaKelurahan;
+        desCode = h.desaKelurahanCode;
+
         administrativeData = {
-          village: spatialResult.feature.villageName,
-          district: spatialResult.feature.districtName,
-          regency: spatialResult.feature.regencyName,
-          province: spatialResult.feature.provinceName,
-          code: spatialResult.feature.adminCode,
+          village: des,
+          district: kec,
+          regency: kab,
+          province: prov,
+          code: desCode || kecCode || kabCode || provCode,
           source: spatialResult.sourceMetadata.source,
           edition: spatialResult.sourceMetadata.edition,
           status: spatialResult.status,
           verifiedAt: spatialResult.sourceMetadata.verifiedAt,
         };
-        villageShortcut = spatialResult.feature.villageName;
-        districtShortcut = spatialResult.feature.districtName;
-        regencyShortcut = spatialResult.feature.regencyName;
-        provinceShortcut = spatialResult.feature.provinceName;
-        admCodeShortcut = spatialResult.feature.adminCode;
       }
 
       await onSave({
@@ -130,11 +139,21 @@ export function SaveDrawnParcelModal({
         landType,
         location: location.trim() || undefined,
         administrative: administrativeData,
-        village: villageShortcut,
-        district: districtShortcut,
-        regency: regencyShortcut,
-        province: provinceShortcut,
-        admCode: admCodeShortcut,
+        // Backward-compatible shortcut fields
+        village: des,
+        district: kec,
+        regency: kab,
+        province: prov,
+        admCode: desCode || kecCode || kabCode || provCode,
+        // 4-level formal hierarchy fields
+        provinsi: prov,
+        provinsiCode: provCode,
+        kabupatenKota: kab,
+        kabupatenKotaCode: kabCode,
+        kecamatan: kec,
+        kecamatanCode: kecCode,
+        desaKelurahan: des,
+        desaKelurahanCode: desCode,
         status: 'ACTIVE',
       });
 
@@ -179,17 +198,17 @@ export function SaveDrawnParcelModal({
           </div>
         </div>
 
-        {/* Kotak Deteksi Spasial Batas Administrasi Desa Resmi (BIG) */}
+        {/* Kotak Deteksi Spasial Batas Administrasi Resmi BIG & Kemendagri */}
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5 text-emerald-700" />
-              Deteksi Batas Administrasi Desa (BIG)
+              Deteksi Batas Wilayah 4 Tingkat (BIG & Kemendagri)
             </span>
             {spatialResult?.status === 'VERIFIED' && (
-              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full flex items-center gap-1 border border-emerald-300">
+              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-full flex items-center gap-1 border border-emerald-300">
                 <CheckCircle2 className="w-3 h-3 text-emerald-700" />
-                Terverifikasi Resmi
+                Terverifikasi
               </span>
             )}
             {spatialResult?.status === 'NEEDS_VERIFICATION' && (
@@ -202,18 +221,20 @@ export function SaveDrawnParcelModal({
 
           {isCheckingSpatial ? (
             <div className="text-xs text-slate-500 italic py-1">
-              Memeriksa letak spasial titik centroid terhadap batas wilayah BIG...
+              Memeriksa letak spasial titik centroid terhadap hierarki batas wilayah BIG...
             </div>
-          ) : spatialResult?.matched && spatialResult.feature ? (
-            <div className="space-y-1 text-xs">
+          ) : spatialResult && spatialResult.hierarchy.desaKelurahan ? (
+            <div className="space-y-1.5 text-xs">
               <div className="flex items-center justify-between font-bold text-slate-900">
-                <span>{spatialResult.feature.villageName}</span>
-                <span className="font-mono text-[11px] text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                  {spatialResult.feature.adminCode}
-                </span>
+                <span>🌾 Desa {spatialResult.hierarchy.desaKelurahan}</span>
+                {spatialResult.hierarchy.desaKelurahanCode && (
+                  <span className="font-mono text-[11px] text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                    {spatialResult.hierarchy.desaKelurahanCode}
+                  </span>
+                )}
               </div>
               <div className="text-[11px] text-slate-600">
-                {spatialResult.feature.districtName}, {spatialResult.feature.regencyName}, {spatialResult.feature.provinceName}
+                Kec. {spatialResult.hierarchy.kecamatan || '-'}, {spatialResult.hierarchy.kabupatenKota || '-'}, {spatialResult.hierarchy.provinsi || '-'}
               </div>
               {spatialResult.status === 'NEEDS_VERIFICATION' && (
                 <div className="p-2 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-800 mt-1">
@@ -221,9 +242,18 @@ export function SaveDrawnParcelModal({
                 </div>
               )}
             </div>
+          ) : spatialResult && spatialResult.hierarchy.provinsi ? (
+            <div className="space-y-1 text-xs">
+              <div className="font-bold text-slate-900">
+                Wilayah: {spatialResult.hierarchy.kecamatan || spatialResult.hierarchy.kabupatenKota || spatialResult.hierarchy.provinsi}
+              </div>
+              <div className="text-[11px] text-slate-500">
+                Hierarki: {spatialResult.hierarchy.provinsi}
+              </div>
+            </div>
           ) : (
             <div className="text-[11px] text-slate-500">
-              Lokasi petak di luar batas desa terindeks. Anda dapat melengkapi informasi lokasi secara manual.
+              Lokasi petak di luar batas terindeks. Anda dapat melengkapi informasi lokasi secara manual.
             </div>
           )}
         </div>
@@ -251,63 +281,72 @@ export function SaveDrawnParcelModal({
           <select
             value={waterSource}
             onChange={(e) => setWaterSource(e.target.value as WaterSource)}
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
           >
-            <option value="IRRIGATION_TECHNICAL">Irigasi Teknis</option>
-            <option value="IRRIGATION_SEMI_TECHNICAL">Irigasi Semi Teknis / Desa</option>
-            <option value="RAIN_FED">Tadah Hujan</option>
-            <option value="GROUNDWATER">Sumur Pantek / Air Tanah</option>
+            <option value="IRRIGATION_TECHNICAL">Irigasi Teknis (Bendung / Saluran Primer)</option>
+            <option value="IRRIGATION_SEMI">Irigasi Semi Teknis</option>
+            <option value="IRRIGATION_SIMPLE">Irigasi Sederhana / Desa</option>
+            <option value="RAIN_FED">Tadah Hujan (Bergantung Musim Basah)</option>
+            <option value="RIVER">Pompanisasi Sungai / Saluran</option>
+            <option value="GROUNDWATER">Sumur Bor / Airtanah Dalam</option>
             <option value="OTHER">Lainnya</option>
           </select>
         </div>
 
-        {/* Tipologi Sawah */}
+        {/* Tipe Lahan */}
         <div>
           <label className="block text-xs font-bold text-slate-700 mb-1">
-            Tipologi Sawah
+            Tipe Lahan
           </label>
           <select
             value={landType}
             onChange={(e) => setLandType(e.target.value as LandType)}
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
           >
             <option value="LOWLAND_PADDY">Sawah Irigasi Dataran Rendah</option>
-            <option value="RAINFED_PADDY">Sawah Tadah Hujan</option>
-            <option value="TIDAL_SWAMP">Lahan Rawa Pasang Surut / Lebak</option>
-            <option value="UPLAND">Padi Gogo / Lahan Kering</option>
+            <option value="HIGHLAND_PADDY">Sawah Dataran Tinggi</option>
+            <option value="TIDAL_LOWLAND">Lahan Pasang Surut / Rawa</option>
+            <option value="DRY_LAND">Lahan Kering / Gogo Rancah</option>
           </select>
         </div>
 
-        {/* Lokasi / Blok Keterangan */}
+        {/* Lokasi / Alamat Deskriptif */}
         <div>
           <label className="block text-xs font-bold text-slate-700 mb-1">
-            Keterangan Blok / Lokasi (Opsional)
+            Catatan Lokasi / Blok
           </label>
           <input
             type="text"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
-            placeholder="Contoh: Dekat pintu air primer desa"
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            placeholder="Contoh: Dusun Krajan 1, RT 02 / RW 01"
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 min-h-[44px]"
           />
         </div>
 
-        {/* Buttons */}
-        <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-slate-100">
+        {/* Tombol Simpan & Batal */}
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="px-4 py-2.5 min-h-[44px] rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors min-h-[44px]"
           >
             Batal
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="px-5 py-2.5 min-h-[44px] bg-emerald-800 hover:bg-emerald-900 active:bg-emerald-950 text-white rounded-xl text-xs font-bold transition-colors shadow-xs disabled:opacity-50"
+            className="px-5 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold shadow-md transition-all active:scale-95 flex items-center gap-1.5 min-h-[44px]"
           >
-            {isSubmitting ? 'Menyimpan...' : 'Simpan Petak Sawah'}
+            {isSubmitting ? (
+              <span>Menyimpan...</span>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                <span>Simpan Petak Sawah (m²)</span>
+              </>
+            )}
           </button>
         </div>
       </form>
