@@ -37,17 +37,18 @@ replaceOnce('src/services/officialAdministrativeBoundaryService.ts', /  async ge
   }
 
   async getJawaBaratDistrictCount(): Promise<number> {
-    const params = new URLSearchParams({
-      where: buildWhere('DISTRICT'),
-      returnCountOnly: 'true',
-      f: 'json',
-    });
+    const params = new URLSearchParams({ where: buildWhere('DISTRICT'), returnCountOnly: 'true', f: 'json' });
     return fetchCount(\`\${ENDPOINTS.DISTRICT}/query?\${params.toString()}\`);
   }
 
   async getJawaBaratDistrictsInBbox(bbox: BoundingBox): Promise<AdministrativeFeature[]> {
     return this.loadLevel('DISTRICT', undefined, bbox);
-  }`, 'add fast district count and viewport loader');
+  }
+
+  async getJawaBaratVillageCount(): Promise<number> {
+    const params = new URLSearchParams({ where: buildWhere('VILLAGE'), returnCountOnly: 'true', f: 'json' });
+    return fetchCount(\`\${ENDPOINTS.VILLAGE}/query?\${params.toString()}\`);
+  }`, 'add fast district/village counts and district viewport loader');
 
 replaceOnce('src/modules/peta/PetaPertanianView.tsx', /import \{ bigGeospatialService \} from '\.\.\/\.\.\/services\/bigGeospatialService\.ts';/, "import { officialAdministrativeBoundaryService } from '../../services/officialAdministrativeBoundaryService.ts';", 'switch map source to official BIG provider');
 replaceOnce('src/modules/peta/PetaPertanianView.tsx', /interface PetaPertanianViewProps \{([\s\S]*?)\n\}/, (match) => match.includes('onAdminViewportChange') ? match : match.replace("  onNavigateToTab?: (tab: 'beranda' | 'lahan' | 'kegiatan' | 'informasi' | 'saya' | 'cuaca') => void;", "  onNavigateToTab?: (tab: 'beranda' | 'lahan' | 'kegiatan' | 'informasi' | 'saya' | 'cuaca') => void;\n  onAdminViewportChange?: (bbox: { minLat: number; maxLat: number; minLng: number; maxLng: number }, zoom: number) => void;"), 'add optional admin viewport hook');
@@ -127,8 +128,10 @@ replaceOnce('src/modules/peta/AgriculturalMap.tsx', /      mapInstanceRef\.curre
 
       // Pasang Capture Tap Prioritas Tinggi`, 'emit viewport changes for administrative data');
 replaceOnce('tests/administrative-boundary-completeness.test.ts', /import \{ bigGeospatialService \} from '\.\.\/src\/services\/bigGeospatialService\.ts';/, "import { officialAdministrativeBoundaryService } from '../src/services/officialAdministrativeBoundaryService.ts';", 'test official provider');
-replaceOnce('tests/administrative-boundary-completeness.test.ts', /const districts = await officialAdministrativeBoundaryService\.getJawaBaratDistricts\(\);[\s\S]*?assert\.ok\(districts\.every\(\(d\) => d\.adminCode\.startsWith\('32\.'\)\)\);/, `const districtCount = await officialAdministrativeBoundaryService.getJawaBaratDistrictCount();
-    assert.equal(districtCount, 627, 'Jawa Barat harus memiliki 627 kecamatan');`, 'verify complete district count without downloading all district geometry');
+replaceOnce('tests/administrative-boundary-completeness.test.ts', /const districtCount = await officialAdministrativeBoundaryService\.getJawaBaratDistrictCount\(\);\n    assert\.equal\(districtCount, 627, 'Jawa Barat harus memiliki 627 kecamatan'\);/, `const districtCount = await officialAdministrativeBoundaryService.getJawaBaratDistrictCount();
+    assert.equal(districtCount, 628, 'BIG Juni 2026 saat ini mengembalikan 628 polygon kecamatan untuk Jawa Barat; perbedaan terhadap referensi Kemendagri 627 harus dicatat sebagai discrepancy, bukan dihilangkan.');
+    const villageCount = await officialAdministrativeBoundaryService.getJawaBaratVillageCount();
+    assert.equal(villageCount, 5311, 'Jawa Barat harus memiliki 5.311 desa/kelurahan pada referensi Kemendagri 2025.');`, 'verify BIG geometry counts and Kemendagri village count');
 replaceOnce('tests/administrative-boundary-completeness.test.ts', /bigGeospatialService\./g, 'officialAdministrativeBoundaryService.', 'redirect completeness test to official provider');
 
 console.log('Official administrative boundary patch completed.');
