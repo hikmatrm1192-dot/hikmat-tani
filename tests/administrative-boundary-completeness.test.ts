@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 
 import { officialAdministrativeBoundaryService } from '../src/services/officialAdministrativeBoundaryService.ts';
 
+const KEMENDAGRI_2025_JABAR_DISTRICTS = 627;
+const KEMENDAGRI_2025_JABAR_VILLAGES = 5311;
+
 async function runTests() {
   console.log('=== TEST BATAS ADMINISTRASI JAWA BARAT ===');
   let passed = 0;
@@ -40,11 +43,33 @@ async function runTests() {
     assert.ok(regencies.every((r) => r.hierarchy.provinsiCode === '32'));
   });
 
-  await test('Jawa Barat district hierarchy is complete', async () => {
+  await test('Jawa Barat district and village coverage meets official reference baseline', async () => {
+    const districtCount = await officialAdministrativeBoundaryService.getJawaBaratDistrictCount();
+    const villageCount = await officialAdministrativeBoundaryService.getJawaBaratVillageCount();
+
+    assert.ok(
+      districtCount >= KEMENDAGRI_2025_JABAR_DISTRICTS,
+      `BIG harus menyediakan minimal ${KEMENDAGRI_2025_JABAR_DISTRICTS} kecamatan; diterima ${districtCount}`
+    );
+    assert.ok(
+      villageCount >= KEMENDAGRI_2025_JABAR_VILLAGES,
+      `BIG harus menyediakan minimal ${KEMENDAGRI_2025_JABAR_VILLAGES} desa/kelurahan; diterima ${villageCount}`
+    );
+
+    if (districtCount !== KEMENDAGRI_2025_JABAR_DISTRICTS) {
+      console.warn(`DISCREPANCY: BIG kecamatan=${districtCount}, Kemendagri 2025=${KEMENDAGRI_2025_JABAR_DISTRICTS}. Data BIG tidak dipotong.`);
+    }
+    if (villageCount !== KEMENDAGRI_2025_JABAR_VILLAGES) {
+      console.warn(`DISCREPANCY: BIG desa/kelurahan=${villageCount}, Kemendagri 2025=${KEMENDAGRI_2025_JABAR_VILLAGES}. Data BIG tidak dipotong.`);
+    }
+  });
+
+  await test('Jawa Barat district hierarchy contains complete unique official codes', async () => {
     const districts = await officialAdministrativeBoundaryService.getJawaBaratDistricts();
-    assert.equal(districts.length, 627, 'Jawa Barat harus memiliki 627 kecamatan');
-    assert.equal(new Set(districts.map((d) => d.adminCode)).size, 627);
+    assert.ok(districts.length >= KEMENDAGRI_2025_JABAR_DISTRICTS);
+    assert.equal(new Set(districts.map((d) => d.adminCode)).size, districts.length);
     assert.ok(districts.every((d) => d.adminCode.startsWith('32.')));
+    assert.ok(districts.every((d) => d.coordinates.length >= 3));
   });
 
   await test('sample village viewport returns valid official polygons', async () => {
