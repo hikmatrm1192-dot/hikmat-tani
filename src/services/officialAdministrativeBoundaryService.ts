@@ -16,19 +16,7 @@ import {
   minDistanceToPolygonBorderM,
 } from '../utils/geoUtils.ts';
 
-/**
- * Official administrative boundary provider for HIKMAT TANI.
- *
- * Geometry: BIG, June 2026 administrative boundary datasets.
- * Codes/nomenclature: BIG attributes sourced from/linked to Kemendagri
- * administrative code data; current legal reference is Kepmendagri
- * 300.2.2-2430 Tahun 2025.
- *
- * The service is viewport-aware: province/regency/district data can be
- * loaded broadly, while village polygons are requested by bbox so a phone
- * never has to render all 5,311+ village polygons at once.
- */
-
+/** Official BIG administrative boundary provider for HIKMAT TANI. */
 const BIG_BASE = 'https://geoservices.big.go.id/rbi/rest/services/BATASWILAYAH';
 const ENDPOINTS: Record<AdminLevel, string> = {
   PROVINCE: `${BIG_BASE}/BATAS_WILAYAH/MapServer/12`,
@@ -36,9 +24,8 @@ const ENDPOINTS: Record<AdminLevel, string> = {
   DISTRICT: `${BIG_BASE}/BATAS_KECAMATAN_AR/MapServer/0`,
   VILLAGE: `${BIG_BASE}/BATAS_DESAKEL_AR/MapServer/0`,
 };
-
 const JAWA_BARAT_CODE = '32';
-const MAX_RECORD_COUNT = 500;
+const MAX_RECORD_COUNT = 1000;
 const REQUEST_TIMEOUT_MS = 20000;
 const CACHE_PREFIX = 'hikmat-tani:big-admin:2026-06:';
 
@@ -59,10 +46,7 @@ interface GeoJsonFeatureCollection {
   type: 'FeatureCollection';
   features: Array<{
     type: 'Feature';
-    geometry: {
-      type: string;
-      coordinates: unknown;
-    } | null;
+    geometry: { type: string; coordinates: unknown } | null;
     properties?: Record<string, unknown>;
   }>;
 }
@@ -70,10 +54,7 @@ interface GeoJsonFeatureCollection {
 function normalizeCode(value: unknown): string {
   return typeof value === 'string' ? value.trim() : value == null ? '' : String(value).trim();
 }
-
-function cleanName(value: unknown): string {
-  return normalizeCode(value);
-}
+function cleanName(value: unknown): string { return normalizeCode(value); }
 
 function ringToPoints(ring: unknown): LatLngPoint[] {
   if (!Array.isArray(ring)) return [];
@@ -86,12 +67,9 @@ function ringToPoints(ring: unknown): LatLngPoint[] {
 function geometryToPoints(geometry: { type: string; coordinates: unknown } | null): LatLngPoint[] {
   if (!geometry) return [];
   const coords = geometry.coordinates;
-  if (geometry.type === 'Polygon' && Array.isArray(coords)) {
-    return ringToPoints(coords[0]);
-  }
+  if (geometry.type === 'Polygon' && Array.isArray(coords)) return ringToPoints(coords[0]);
   if (geometry.type === 'MultiPolygon' && Array.isArray(coords)) {
-    const polygons = coords as unknown[];
-    const largest = polygons
+    const largest = (coords as unknown[])
       .map((polygon) => (Array.isArray(polygon) ? ringToPoints(polygon[0]) : []))
       .sort((a, b) => b.length - a.length)[0];
     return largest || [];
@@ -99,15 +77,7 @@ function geometryToPoints(geometry: { type: string; coordinates: unknown } | nul
   return [];
 }
 
-function featureMatchesProvince(properties: Record<string, unknown>, provinceCode: string): boolean {
-  const code = normalizeCode(properties.KDPPUM ?? properties.kdppum ?? properties.KDPUM);
-  return code === provinceCode || code.startsWith(`${provinceCode}.`);
-}
-
-function toAdministrativeFeature(
-  level: AdminLevel,
-  feature: GeoJsonFeatureCollection['features'][number]
-): AdministrativeFeature | null {
+function toAdministrativeFeature(level: AdminLevel, feature: GeoJsonFeatureCollection['features'][number]): AdministrativeFeature | null {
   const p = feature.properties || {};
   const coordinates = geometryToPoints(feature.geometry);
   if (coordinates.length < 3) return null;
@@ -120,36 +90,11 @@ function toAdministrativeFeature(
   const regencyName = cleanName(p.WADMKK ?? p.wadmkk);
   const districtName = cleanName(p.WADMKC ?? p.wadmkc);
   const villageName = cleanName(p.WADMKD ?? p.wadmkd);
-
-  const adminCode =
-    level === 'PROVINCE'
-      ? provinceCode
-      : level === 'REGENCY'
-        ? regencyCode
-        : level === 'DISTRICT'
-          ? districtCode
-          : villageCode;
-
+  const adminCode = level === 'PROVINCE' ? provinceCode : level === 'REGENCY' ? regencyCode : level === 'DISTRICT' ? districtCode : villageCode;
   if (!adminCode) return null;
 
-  const name =
-    level === 'PROVINCE'
-      ? provinceName
-      : level === 'REGENCY'
-        ? regencyName
-        : level === 'DISTRICT'
-          ? districtName
-          : villageName;
-
-  const parentCode =
-    level === 'REGENCY'
-      ? provinceCode
-      : level === 'DISTRICT'
-        ? regencyCode
-        : level === 'VILLAGE'
-          ? districtCode
-          : undefined;
-
+  const name = level === 'PROVINCE' ? provinceName : level === 'REGENCY' ? regencyName : level === 'DISTRICT' ? districtName : villageName;
+  const parentCode = level === 'REGENCY' ? provinceCode : level === 'DISTRICT' ? regencyCode : level === 'VILLAGE' ? districtCode : undefined;
   const hierarchy: Partial<AdministrativeHierarchy> = {
     provinsi: provinceName,
     provinsiCode: provinceCode,
@@ -160,10 +105,6 @@ function toAdministrativeFeature(
     desaKelurahan: villageName,
     desaKelurahanCode: villageCode,
   };
-
-  const center = calculatePolygonCentroid(coordinates);
-  const bbox = getPolygonBoundingBox(coordinates);
-
   return {
     id: `big-${level.toLowerCase()}-${adminCode}`,
     level,
@@ -176,15 +117,13 @@ function toAdministrativeFeature(
     datasetRef: `BIG:${level}:JAWA_BARAT_2026_06`,
     legalRef: OFFICIAL_ADMIN_METADATA.legalReference,
     coordinates,
-    center,
-    bbox,
+    center: calculatePolygonCentroid(coordinates),
+    bbox: getPolygonBoundingBox(coordinates),
   };
 }
 
 function cacheKey(level: AdminLevel, where: string, bbox?: BoundingBox | null): string {
-  const bboxKey = bbox
-    ? `${bbox.minLat.toFixed(4)},${bbox.minLng.toFixed(4)},${bbox.maxLat.toFixed(4)},${bbox.maxLng.toFixed(4)}`
-    : 'all';
+  const bboxKey = bbox ? `${bbox.minLat.toFixed(4)},${bbox.minLng.toFixed(4)},${bbox.maxLat.toFixed(4)},${bbox.maxLng.toFixed(4)}` : 'all';
   return `${CACHE_PREFIX}${level}:${where}:${bboxKey}`;
 }
 
@@ -192,161 +131,103 @@ async function fetchJson(url: string): Promise<GeoJsonFeatureCollection> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: { Accept: 'application/geo+json, application/json' },
-    });
+    const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/geo+json, application/json' } });
     if (!response.ok) throw new Error(`BIG boundary request failed: HTTP ${response.status}`);
     return (await response.json()) as GeoJsonFeatureCollection;
-  } finally {
-    clearTimeout(timeout);
-  }
+  } finally { clearTimeout(timeout); }
+}
+
+async function fetchCount(url: string): Promise<number> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error(`BIG boundary count request failed: HTTP ${response.status}`);
+    const payload = (await response.json()) as { count?: number };
+    return Number(payload.count || 0);
+  } finally { clearTimeout(timeout); }
 }
 
 function buildWhere(level: AdminLevel, parentCode?: string): string {
-  if (level === 'PROVINCE') return `KDPPUM='${JAWA_BARAT_CODE}'`;
-  if (level === 'REGENCY') return `KDPPUM='${JAWA_BARAT_CODE}'`;
+  if (level === 'PROVINCE' || level === 'REGENCY') return `KDPPUM='${JAWA_BARAT_CODE}'`;
   if (level === 'DISTRICT') return parentCode ? `KDPKAB='${parentCode}'` : `KDPPUM='${JAWA_BARAT_CODE}'`;
   return parentCode ? `KDCPUM='${parentCode}'` : `KDPPUM='${JAWA_BARAT_CODE}'`;
 }
 
-function buildQueryUrl(
-  level: AdminLevel,
-  where: string,
-  offset: number,
-  bbox?: BoundingBox | null
-): string {
-  const params = new URLSearchParams({
-    where,
-    outFields: '*',
-    returnGeometry: 'true',
-    outSR: '4326',
-    f: 'geojson',
-    resultOffset: String(offset),
-    resultRecordCount: String(MAX_RECORD_COUNT),
-  });
-
+function buildQueryUrl(level: AdminLevel, where: string, offset: number, bbox?: BoundingBox | null): string {
+  const params = new URLSearchParams({ where, outFields: '*', returnGeometry: 'true', outSR: '4326', f: 'geojson', resultOffset: String(offset), resultRecordCount: String(MAX_RECORD_COUNT) });
   if (bbox) {
-    params.set('geometry', JSON.stringify({
-      xmin: bbox.minLng,
-      ymin: bbox.minLat,
-      xmax: bbox.maxLng,
-      ymax: bbox.maxLat,
-      spatialReference: { wkid: 4326 },
-    }));
+    params.set('geometry', JSON.stringify({ xmin: bbox.minLng, ymin: bbox.minLat, xmax: bbox.maxLng, ymax: bbox.maxLat, spatialReference: { wkid: 4326 } }));
     params.set('geometryType', 'esriGeometryEnvelope');
     params.set('inSR', '4326');
     params.set('spatialRel', 'esriSpatialRelIntersects');
   }
-
   return `${ENDPOINTS[level]}/query?${params.toString()}`;
 }
 
 class OfficialAdministrativeBoundaryService {
   private memoryCache = new Map<string, AdministrativeFeature[]>();
 
-  getOfficialMetadata(): OfficialGeospatialMetadata {
-    return { ...OFFICIAL_ADMIN_METADATA };
-  }
+  getOfficialMetadata(): OfficialGeospatialMetadata { return { ...OFFICIAL_ADMIN_METADATA }; }
 
-  private async loadLevel(
-    level: AdminLevel,
-    parentCode?: string,
-    bbox?: BoundingBox | null
-  ): Promise<AdministrativeFeature[]> {
+  private async loadLevel(level: AdminLevel, parentCode?: string, bbox?: BoundingBox | null): Promise<AdministrativeFeature[]> {
     const where = buildWhere(level, parentCode);
     const key = cacheKey(level, where, bbox);
-    const memory = this.memoryCache.get(key);
-    if (memory) return memory;
+    const cached = this.memoryCache.get(key);
+    if (cached) return cached;
 
-    let all: AdministrativeFeature[] = [];
+    const all: AdministrativeFeature[] = [];
     for (let offset = 0; ; offset += MAX_RECORD_COUNT) {
       const json = await fetchJson(buildQueryUrl(level, where, offset, bbox));
-      const page = json.features
-        .map((feature) => toAdministrativeFeature(level, feature))
-        .filter((feature): feature is AdministrativeFeature => Boolean(feature));
+      const page = json.features.map((feature) => toAdministrativeFeature(level, feature)).filter((feature): feature is AdministrativeFeature => Boolean(feature));
       all.push(...page);
       if (page.length < MAX_RECORD_COUNT) break;
     }
-
     const unique = Array.from(new Map(all.map((f) => [f.adminCode, f])).values());
     this.memoryCache.set(key, unique);
     return unique;
   }
 
-  async getJawaBaratProvinces(): Promise<AdministrativeFeature[]> {
-    return this.loadLevel('PROVINCE');
+  async getJawaBaratProvinces(): Promise<AdministrativeFeature[]> { return this.loadLevel('PROVINCE'); }
+  async getJawaBaratRegencies(): Promise<AdministrativeFeature[]> { return this.loadLevel('REGENCY'); }
+  async getJawaBaratDistricts(): Promise<AdministrativeFeature[]> { return this.loadLevel('DISTRICT'); }
+  async getJawaBaratDistrictsInBbox(bbox: BoundingBox): Promise<AdministrativeFeature[]> { return this.loadLevel('DISTRICT', undefined, bbox); }
+  async getJawaBaratVillages(bbox?: BoundingBox | null): Promise<AdministrativeFeature[]> { return this.loadLevel('VILLAGE', undefined, bbox); }
+  async getDistrictsByRegencyCode(regencyCode: string): Promise<AdministrativeFeature[]> { return this.loadLevel('DISTRICT', regencyCode); }
+  async getVillagesByDistrictCode(districtCode: string): Promise<AdministrativeFeature[]> { return this.loadLevel('VILLAGE', districtCode); }
+
+  async getJawaBaratDistrictCount(): Promise<number> {
+    const params = new URLSearchParams({ where: buildWhere('DISTRICT'), returnCountOnly: 'true', f: 'json' });
+    return fetchCount(`${ENDPOINTS.DISTRICT}/query?${params.toString()}`);
   }
 
-  async getJawaBaratRegencies(): Promise<AdministrativeFeature[]> {
-    return this.loadLevel('REGENCY');
-  }
-
-  async getJawaBaratDistricts(): Promise<AdministrativeFeature[]> {
-    return this.loadLevel('DISTRICT');
-  }
-
-  async getJawaBaratVillages(bbox?: BoundingBox | null): Promise<AdministrativeFeature[]> {
-    return this.loadLevel('VILLAGE', undefined, bbox);
-  }
-
-  async getDistrictsByRegencyCode(regencyCode: string): Promise<AdministrativeFeature[]> {
-    return this.loadLevel('DISTRICT', regencyCode);
-  }
-
-  async getVillagesByDistrictCode(districtCode: string): Promise<AdministrativeFeature[]> {
-    return this.loadLevel('VILLAGE', districtCode);
+  async getJawaBaratVillageCount(): Promise<number> {
+    const params = new URLSearchParams({ where: buildWhere('VILLAGE'), returnCountOnly: 'true', f: 'json' });
+    return fetchCount(`${ENDPOINTS.VILLAGE}/query?${params.toString()}`);
   }
 
   async lookupAdministrativeByPoint(point: LatLngPoint): Promise<AdministrativeSpatialLookupResult> {
-    const sourceMetadata = {
-      source: OFFICIAL_ADMIN_METADATA.sourceName,
-      edition: OFFICIAL_ADMIN_METADATA.edition,
-      datasetRef: 'BIG:JAWA_BARAT_ADMIN_2026_06',
-      legalRef: OFFICIAL_ADMIN_METADATA.legalReference,
-      verifiedAt: new Date().toISOString(),
-    };
-
-    if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) {
-      return { matched: false, hierarchy: {}, status: 'OUTSIDE_COVERAGE', message: 'Koordinat tidak valid', sourceMetadata };
-    }
+    const sourceMetadata = { source: OFFICIAL_ADMIN_METADATA.sourceName, edition: OFFICIAL_ADMIN_METADATA.edition, datasetRef: 'BIG:JAWA_BARAT_ADMIN_2026_06', legalRef: OFFICIAL_ADMIN_METADATA.legalReference, verifiedAt: new Date().toISOString() };
+    if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return { matched: false, hierarchy: {}, status: 'OUTSIDE_COVERAGE', message: 'Koordinat tidak valid', sourceMetadata };
 
     const probe = 0.02;
-    const bbox: BoundingBox = {
-      minLat: point.lat - probe,
-      maxLat: point.lat + probe,
-      minLng: point.lng - probe,
-      maxLng: point.lng + probe,
-    };
-
+    const bbox: BoundingBox = { minLat: point.lat - probe, maxLat: point.lat + probe, minLng: point.lng - probe, maxLng: point.lng + probe };
     const villages = await this.getJawaBaratVillages(bbox);
     const village = villages.find((feature) => isPointInPolygon(point, feature.coordinates));
-
-    if (!village) {
-      return {
-        matched: false,
-        hierarchy: {},
-        status: 'NEEDS_VERIFICATION',
-        message: 'Tidak ditemukan polygon desa/kelurahan BIG pada titik centroid. Periksa posisi polygon dan koneksi data resmi.',
-        sourceMetadata,
-      };
-    }
+    if (!village) return { matched: false, hierarchy: {}, status: 'NEEDS_VERIFICATION', message: 'Tidak ditemukan polygon desa/kelurahan BIG pada titik centroid. Periksa posisi polygon dan koneksi data resmi.', sourceMetadata };
 
     const districtCode = village.hierarchy.kecamatanCode || '';
     const regencyCode = village.hierarchy.kabupatenKotaCode || '';
     const provinceCode = village.hierarchy.provinsiCode || JAWA_BARAT_CODE;
-
     const [districts, regencies, provinces] = await Promise.all([
       districtCode ? this.getDistrictsByRegencyCode(regencyCode) : Promise.resolve([]),
       this.getJawaBaratRegencies(),
       this.getJawaBaratProvinces(),
     ]);
-
     const district = districts.find((f) => f.adminCode === districtCode);
     const regency = regencies.find((f) => f.adminCode === regencyCode);
     const province = provinces.find((f) => f.adminCode === provinceCode);
     const distance = minDistanceToPolygonBorderM(point, village.coordinates);
-
     return {
       matched: true,
       hierarchy: { ...village.hierarchy },
@@ -356,33 +237,28 @@ class OfficialAdministrativeBoundaryService {
       provinceFeature: province,
       status: distance < 15 ? 'NEEDS_VERIFICATION' : 'VERIFIED',
       distanceToBorderM: distance,
-      message:
-        distance < 15
-          ? `Centroid berada sekitar ${Math.round(distance)}m dari batas desa; verifikasi lapangan disarankan.`
-          : `Teridentifikasi resmi di ${village.name}, ${village.hierarchy.kecamatan || '-'}, ${village.hierarchy.kabupatenKota || '-'}, ${village.hierarchy.provinsi || '-'}.`,
+      message: distance < 15 ? `Centroid berada sekitar ${Math.round(distance)}m dari batas desa; verifikasi lapangan disarankan.` : `Teridentifikasi resmi di ${village.name}, ${village.hierarchy.kecamatan || '-'}, ${village.hierarchy.kabupatenKota || '-'}, ${village.hierarchy.provinsi || '-'}.`,
       sourceMetadata,
     };
   }
 
   async getVillageBoundariesInBbox(bbox: BoundingBox): Promise<VillageBoundaryFeature[]> {
     const features = await this.getJawaBaratVillages(bbox);
-    return features
-      .filter((feature) => isBBoxIntersecting(feature.bbox, bbox))
-      .map((feature) => ({
-        id: feature.id,
-        villageName: feature.name,
-        districtName: feature.hierarchy.kecamatan || '',
-        regencyName: feature.hierarchy.kabupatenKota || '',
-        provinceName: feature.hierarchy.provinsi || '',
-        adminCode: feature.adminCode,
-        source: feature.source,
-        edition: feature.edition,
-        datasetRef: feature.datasetRef,
-        legalRef: feature.legalRef,
-        coordinates: feature.coordinates,
-        center: feature.center,
-        bbox: feature.bbox,
-      }));
+    return features.filter((feature) => isBBoxIntersecting(feature.bbox, bbox)).map((feature) => ({
+      id: feature.id,
+      villageName: feature.name,
+      districtName: feature.hierarchy.kecamatan || '',
+      regencyName: feature.hierarchy.kabupatenKota || '',
+      provinceName: feature.hierarchy.provinsi || '',
+      adminCode: feature.adminCode,
+      source: feature.source,
+      edition: feature.edition,
+      datasetRef: feature.datasetRef,
+      legalRef: feature.legalRef,
+      coordinates: feature.coordinates,
+      center: feature.center,
+      bbox: feature.bbox,
+    }));
   }
 }
 
