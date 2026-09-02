@@ -18,6 +18,8 @@
 
 import {
   AdminLevel,
+  ADMIN_MAP_CONFIG,
+  AdministrativeCacheStats,
   AdministrativeFeature,
   AdministrativeHierarchy,
   AdministrativeSpatialLookupResult,
@@ -30,12 +32,15 @@ import {
 } from '../types/villageBoundary.ts';
 import {
   calculatePolygonCentroid,
+  createBBoxAroundPoint,
   getPolygonBoundingBox,
   isBBoxIntersecting,
   isPointInPolygon,
   LatLngPoint,
   minDistanceToPolygonBorderM,
+  simplifyPolygon,
 } from '../utils/geoUtils.ts';
+
 
 export const OFFICIAL_BIG_METADATA: OfficialGeospatialMetadata = {
   sourceName: 'Badan Informasi Geospasial (BIG) - Ina-Geoportal',
@@ -558,9 +563,18 @@ class BigGeospatialService {
   private villageCache: Map<string, AdministrativeFeature> = new Map();
   private isInitialized = false;
 
+  // Viewport Tile / Grid Caching & Performance Metrics
+  private tileGridCache: Map<string, AdministrativeFeature[]> = new Map();
+  private villageTileCache: Map<string, VillageBoundaryFeature[]> = new Map();
+  private cacheHits = 0;
+  private cacheMisses = 0;
+  private lastPreloadedArea = '';
+  private lastQueryDurationMs = 0;
+
   constructor() {
     this.initPreloadedDataset();
   }
+
 
   private initPreloadedDataset() {
     if (this.isInitialized) return;
@@ -831,11 +845,221 @@ class BigGeospatialService {
   }
 
   /**
+   * Mengambil toleransi simplifikasi geometri berdasarkan level zoom (Ramer-Douglas-Peucker)
+   */
+  public getToleranceForZoom(zoom: number): number {
+    if (zoom < 10) return ADMIN_MAP_CONFIG.simplifyTolerances.lowZoom;
+    if (zoom < 14) return ADMIN_MAP_CONFIG.simplifyTolerances.mediumZoom;
+    if (zoom === 14) return ADMIN_MAP_CONFIG.simplifyTolerances.highZoom;
+    return 0; // Zoom >= 15: full raw precision
+  }
+
+  /**
+   * Helper pembuatan Grid/Tile Cache Key berbasis kuantisasi spasial
+   */
+  private makeCacheKey(
+    level: AdminLevel,
+    bbox: BoundingBox,
+    zoom: number,
+    tolerance: number
+  ): string {
+    const minLatQ = Math.floor(bbox.minLat * 50) / 50;
+    const maxLatQ = Math.ceil(bbox.maxLat * 50) / 50;
+    const minLngQ = Math.floor(bbox.minLng * 50) / 50;
+    const maxLngQ = Math.ceil(bbox.maxLng * 50) / 50;
+    return `${ADMIN_MAP_CONFIG.datasetVersion}:${level}:${minLatQ.toFixed(2)}_${maxLatQ.toFixed(2)}_${minLngQ.toFixed(2)}_${maxLngQ.toFixed(2)}:z${zoom}:t${tolerance.toFixed(4)}`;
+  }
+
+  /**
+   * PROGRESSIVE VIEWPORT LOADING UNTUK TINGKAT ADMINISTRASI (Provinsi, Kabupaten, Kecamatan)
+   * 
+   * Mengambil polygon batas wilayah yang hanya berada di dalam Viewport Bounding Box Leaflet,
+   * dengan simplifikasi geometri adaptif berdasarkan zoom level untuk menghemat memori & CPU HP.
+   */
+  public getViewportBoundaries(
+    level: AdminLevel,
+    viewport: BoundingBox,
+    zoom: number
+  ): AdministrativeFeature[] {
+    const startTime = performance.now();
+    this.initPreloadedDataset();
+
+    // 1. Zoom gate check: Jangan proses jika zoom belum mencapai ambang batas level ini
+    const minZoomRequired =
+      level === 'PROVINCE'
+        ? ADMIN_MAP_CONFIG.zoomLevels.provinceMinZoom
+        : level === 'REGENCY'
+        ? ADMIN_MAP_CONFIG.zoomLevels.regencyMinZoom
+        : level === 'DISTRICT'
+        ? ADMIN_MAP_CONFIG.zoomLevels.districtMinZoom
+        : ADMIN_MAP_CONFIG.zoomLevels.villageMinZoom;
+
+    if (zoom < minZoomRequired) {
+      return [];
+    }
+
+    const tolerance = this.getToleranceForZoom(zoom);
+    const cacheKey = this.makeCacheKey(level, viewport, zoom, tolerance);
+
+    // 2. Cek Cache Lokal di HP
+    if (this.tileGridCache.has(cacheKey)) {
+      this.cacheHits++;
+      this.lastQueryDurationMs = Math.round((performance.now() - startTime) * 100) / 100;
+      return this.tileGridCache.get(cacheKey)!;
+    }
+
+    this.cacheMisses++;
+
+    // 3. Ambil data dari indexed dataset (spatial bbox intersection)
+    let sourcePool: AdministrativeFeature[] = [];
+    switch (level) {
+      case 'PROVINCE':
+        sourcePool = Array.from(this.provinceCache.values());
+        break;
+      case 'REGENCY':
+        sourcePool = Array.from(this.regencyCache.values());
+        break;
+      case 'DISTRICT':
+        sourcePool = Array.from(this.districtCache.values());
+        break;
+      case 'VILLAGE':
+        sourcePool = Array.from(this.villageCache.values());
+        break;
+    }
+
+    const intersecting = sourcePool.filter((f) => isBBoxIntersecting(f.bbox, viewport));
+
+    // 4. Non-destructive geometry simplification untuk render layer Leaflet
+    const renderedFeatures: AdministrativeFeature[] = intersecting.map((feat) => {
+      if (tolerance <= 0) return feat;
+      return {
+        ...feat,
+        coordinates: simplifyPolygon(feat.coordinates, tolerance),
+      };
+    });
+
+    // 5. Simpan ke Cache (Limit 200 entri untuk mencegah konsumsi RAM berlebih)
+    if (this.tileGridCache.size >= 200) {
+      const oldestKey = this.tileGridCache.keys().next().value;
+      if (oldestKey) this.tileGridCache.delete(oldestKey);
+    }
+    this.tileGridCache.set(cacheKey, renderedFeatures);
+
+    this.lastQueryDurationMs = Math.round((performance.now() - startTime) * 100) / 100;
+    return renderedFeatures;
+  }
+
+  /**
+   * PROGRESSIVE VIEWPORT LOADING UNTUK DESA / KELURAHAN (Level 4)
+   * 
+   * Hanya memuat Desa/Kelurahan yang terlihat pada Viewport saat zoom >= villageMinZoom.
+   */
+  public getViewportVillages(
+    viewport: BoundingBox,
+    zoom: number
+  ): VillageBoundaryFeature[] {
+    const startTime = performance.now();
+    this.initPreloadedDataset();
+
+    if (zoom < ADMIN_MAP_CONFIG.zoomLevels.villageMinZoom) {
+      return [];
+    }
+
+    const tolerance = this.getToleranceForZoom(zoom);
+    const cacheKey = this.makeCacheKey('VILLAGE', viewport, zoom, tolerance);
+
+    if (this.villageTileCache.has(cacheKey)) {
+      this.cacheHits++;
+      this.lastQueryDurationMs = Math.round((performance.now() - startTime) * 100) / 100;
+      return this.villageTileCache.get(cacheKey)!;
+    }
+
+    this.cacheMisses++;
+
+    const allVillages = Array.from(this.villageCache.values());
+    const intersecting = allVillages.filter((v) => isBBoxIntersecting(v.bbox, viewport));
+
+    const renderedVillages: VillageBoundaryFeature[] = intersecting.map((feat) => ({
+      id: feat.id,
+      villageName: feat.name,
+      districtName: feat.hierarchy.kecamatan || '',
+      regencyName: feat.hierarchy.kabupatenKota || '',
+      provinceName: feat.hierarchy.provinsi || '',
+      adminCode: feat.adminCode,
+      source: feat.source,
+      edition: feat.edition,
+      datasetRef: feat.datasetRef,
+      legalRef: feat.legalRef,
+      coordinates: tolerance > 0 ? simplifyPolygon(feat.coordinates, tolerance) : feat.coordinates,
+      center: feat.center,
+      bbox: feat.bbox,
+      isDiscrepancy: feat.isDiscrepancy,
+      discrepancyNote: feat.discrepancyNote,
+    }));
+
+    if (this.villageTileCache.size >= 200) {
+      const oldestKey = this.villageTileCache.keys().next().value;
+      if (oldestKey) this.villageTileCache.delete(oldestKey);
+    }
+    this.villageTileCache.set(cacheKey, renderedVillages);
+
+    this.lastQueryDurationMs = Math.round((performance.now() - startTime) * 100) / 100;
+    return renderedVillages;
+  }
+
+  /**
+   * PRELOAD CERDAS (Vicinity Preload):
+   * Saat GPS terdeteksi atau petak sawah dipilih, preload Kecamatan & Desa di radius terdekat (~5-8km)
+   * ke dalam cache lokal HP tanpa membebani seluruh data Jawa Barat.
+   */
+  public preloadVicinity(center: LatLngPoint, radiusKm: number = 5): void {
+    if (!center || isNaN(center.lat) || isNaN(center.lng)) return;
+    this.initPreloadedDataset();
+
+    const vicinityBbox = createBBoxAroundPoint(center, radiusKm);
+    this.lastPreloadedArea = `Lat: ${center.lat.toFixed(4)}, Lng: ${center.lng.toFixed(4)} (Radius: ${radiusKm}km)`;
+
+    // Preload Kecamatan (zoom 12) & Desa (zoom 14) ke cache
+    this.getViewportBoundaries('DISTRICT', vicinityBbox, 12);
+    this.getViewportVillages(vicinityBbox, 14);
+  }
+
+  /**
+   * Ambil statistik dan metrik performa cache untuk monitoring
+   */
+  public getCacheStats(): AdministrativeCacheStats {
+    return {
+      datasetVersion: ADMIN_MAP_CONFIG.datasetVersion,
+      totalFeaturesIndexed:
+        this.provinceCache.size +
+        this.regencyCache.size +
+        this.districtCache.size +
+        this.villageCache.size,
+      cachedEntriesCount: this.tileGridCache.size + this.villageTileCache.size,
+      cacheHits: this.cacheHits,
+      cacheMisses: this.cacheMisses,
+      lastPreloadedArea: this.lastPreloadedArea,
+      lastQueryDurationMs: this.lastQueryDurationMs,
+    };
+  }
+
+  /**
+   * Reset cache lokal (misal saat dataset diperbarui)
+   */
+  public clearViewportCache(): void {
+    this.tileGridCache.clear();
+    this.villageTileCache.clear();
+    this.cacheHits = 0;
+    this.cacheMisses = 0;
+  }
+
+  /**
    * Ambil semua fitur batas desa/kelurahan dalam area Bounding Box (Viewport Peta)
    */
   public async getVillageBoundariesInBbox(
     viewportBbox?: BoundingBox | null
   ): Promise<VillageBoundaryFeature[]> {
+
     this.initPreloadedDataset();
     const all = this.getAllVillageBoundaries();
     if (!viewportBbox) return all;

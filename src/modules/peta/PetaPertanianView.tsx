@@ -47,10 +47,15 @@ import {
   VillageBoundaryFeature,
   WeatherData,
 } from '../../types/index.ts';
-import { AdministrativeFeature } from '../../types/administrativeBoundary.ts';
+import {
+  ADMIN_MAP_CONFIG,
+  AdministrativeFeature,
+  BoundingBox,
+} from '../../types/administrativeBoundary.ts';
 import { authClientService } from '../../services/authClientService.ts';
 import { bigGeospatialService } from '../../services/bigGeospatialService.ts';
 import { AgriculturalMap, BaseMapType, MapLayerVisibility } from './AgriculturalMap.tsx';
+
 import { MapLayerControl } from './MapLayerControl.tsx';
 import { PolygonDrawerControls } from './PolygonDrawerControls.tsx';
 import { ParcelDetailDrawer } from './ParcelDetailDrawer.tsx';
@@ -120,23 +125,46 @@ export function PetaPertanianView({
   const [selectedAdminFeature, setSelectedAdminFeature] = useState<AdministrativeFeature | VillageBoundaryFeature | null>(null);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState<boolean>(false);
 
-  // Inisialisasi batas wilayah 4-level resmi BIG
+  // Inisialisasi batas wilayah tingkat makro (Provinsi & Kabupaten) yang ringan
   useEffect(() => {
-    const villages = bigGeospatialService.getAllVillageBoundaries();
-    const districts = bigGeospatialService.getDistrictsByRegencyCode('32.15');
     const regencies = bigGeospatialService.getRegenciesByProvinceCode('32');
     const provinces = bigGeospatialService.getAllProvinces();
 
-    setVillageBoundaries(villages);
-    setDistrictBoundaries(districts);
     setRegencyBoundaries(regencies);
     setProvinceBoundaries(provinces);
   }, []);
+
+  // Progressive Viewport & Zoom LOD Handler untuk Kecamatan & Desa
+  const handleViewportChange = useCallback((viewport: BoundingBox, zoom: number) => {
+    // Progressive LOD untuk Kecamatan
+    if (layerVisibility.showDistrictBoundaries && zoom >= ADMIN_MAP_CONFIG.zoomLevels.districtMinZoom) {
+      const districts = bigGeospatialService.getViewportBoundaries('DISTRICT', viewport, zoom);
+      setDistrictBoundaries(districts);
+    } else if (zoom < ADMIN_MAP_CONFIG.zoomLevels.districtMinZoom) {
+      setDistrictBoundaries((prev) => (prev.length > 0 ? [] : prev));
+    }
+
+    // Progressive LOD untuk Desa / Kelurahan
+    if (layerVisibility.showVillageBoundaries && zoom >= ADMIN_MAP_CONFIG.zoomLevels.villageMinZoom) {
+      const villages = bigGeospatialService.getViewportVillages(viewport, zoom);
+      setVillageBoundaries(villages);
+    } else if (zoom < ADMIN_MAP_CONFIG.zoomLevels.villageMinZoom) {
+      setVillageBoundaries((prev) => (prev.length > 0 ? [] : prev));
+    }
+  }, [layerVisibility.showDistrictBoundaries, layerVisibility.showVillageBoundaries]);
 
   // GPS State
   const [userGps, setUserGps] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState<boolean>(false);
+
+  // Preload vicinity cache saat GPS terdeteksi
+  useEffect(() => {
+    if (userGps) {
+      bigGeospatialService.preloadVicinity({ lat: userGps.lat, lng: userGps.lng }, 5);
+    }
+  }, [userGps]);
+
 
   // Drawing Polygon State
   const [isDrawingMode, setIsDrawingMode] = useState<boolean>(false);
@@ -415,6 +443,7 @@ export function PetaPertanianView({
           setSelectedAdminFeature(feature);
           setIsAdminModalOpen(true);
         }}
+        onViewportChange={handleViewportChange}
         userGps={userGps}
         onGpsRequested={requestGpsLocation}
       />

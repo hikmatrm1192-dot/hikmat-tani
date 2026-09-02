@@ -268,3 +268,120 @@ export function isBBoxIntersecting(
   );
 }
 
+/**
+ * Hitung jarak tegak lurus (perpendicular distance) dalam derajat kuadrat
+ */
+function getSqSegDist(
+  p: LatLngPoint,
+  p1: LatLngPoint,
+  p2: LatLngPoint
+): number {
+  let x = p1.lng;
+  let y = p1.lat;
+  let dx = p2.lng - x;
+  let dy = p2.lat - y;
+
+  if (dx !== 0 || dy !== 0) {
+    const t = ((p.lng - x) * dx + (p.lat - y) * dy) / (dx * dx + dy * dy);
+    if (t > 1) {
+      x = p2.lng;
+      y = p2.lat;
+    } else if (t > 0) {
+      x += dx * t;
+      y += dy * t;
+    }
+  }
+
+  dx = p.lng - x;
+  dy = p.lat - y;
+
+  return dx * dx + dy * dy;
+}
+
+/**
+ * Rekursi Ramer-Douglas-Peucker untuk penyederhanaan geometri garis/poligon
+ */
+function simplifyDPStep(
+  points: LatLngPoint[],
+  first: number,
+  last: number,
+  sqTolerance: number,
+  simplified: LatLngPoint[]
+) {
+  let maxSqDist = sqTolerance;
+  let index = 0;
+
+  for (let i = first + 1; i < last; i++) {
+    const sqDist = getSqSegDist(points[i], points[first], points[last]);
+    if (sqDist > maxSqDist) {
+      index = i;
+      maxSqDist = sqDist;
+    }
+  }
+
+  if (maxSqDist > sqTolerance) {
+    if (index - first > 1) simplifyDPStep(points, first, index, sqTolerance, simplified);
+    simplified.push(points[index]);
+    if (last - index > 1) simplifyDPStep(points, index, last, sqTolerance, simplified);
+  }
+}
+
+/**
+ * Penyederhanaan Poligon Non-Destruktif (Ramer-Douglas-Peucker)
+ * 
+ * Digunakan khusus untuk rendering Leaflet pada level zoom menengah/rendah
+ * agar HP tidak terbebani ribuan vertex, tanpa mengubah data asli BIG.
+ */
+export function simplifyPolygon(
+  points: LatLngPoint[],
+  toleranceDegrees: number
+): LatLngPoint[] {
+  if (!points || points.length <= 4 || toleranceDegrees <= 0) {
+    return points;
+  }
+
+  const sqTolerance = toleranceDegrees * toleranceDegrees;
+  const isClosed =
+    points[0].lat === points[points.length - 1].lat &&
+    points[0].lng === points[points.length - 1].lng;
+
+  const pts = isClosed ? points.slice(0, -1) : points;
+  if (pts.length <= 3) return points;
+
+  const simplified: LatLngPoint[] = [pts[0]];
+  simplifyDPStep(pts, 0, pts.length - 1, sqTolerance, simplified);
+  simplified.push(pts[pts.length - 1]);
+
+  if (isClosed) {
+    simplified.push({ lat: simplified[0].lat, lng: simplified[0].lng });
+  }
+
+  // Jika hasil simplifikasi kurang dari 3 titik unik (rusak), kembalikan polygon asli
+  const uniqueCount = isClosed ? simplified.length - 1 : simplified.length;
+  if (uniqueCount < 3) {
+    return points;
+  }
+
+  return simplified;
+}
+
+/**
+ * Membuat Bounding Box di sekitar titik koordinat dengan radius (km)
+ */
+export function createBBoxAroundPoint(
+  center: LatLngPoint,
+  radiusKm: number = 5
+): { minLat: number; maxLat: number; minLng: number; maxLng: number } {
+  // 1 derajat lat ~ 111 km
+  const latDelta = radiusKm / 111;
+  // 1 derajat lng ~ 111 * cos(lat)
+  const lngDelta = radiusKm / (111 * Math.cos(toRad(center.lat)));
+
+  return {
+    minLat: center.lat - latDelta,
+    maxLat: center.lat + latDelta,
+    minLng: center.lng - lngDelta,
+    maxLng: center.lng + lngDelta,
+  };
+}
+

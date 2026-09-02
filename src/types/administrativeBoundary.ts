@@ -86,3 +86,64 @@ export interface OfficialGeospatialMetadata {
   lastUpdated: string;
   fallbackReference?: string;
 }
+
+export interface AdministrativeZoomConfig {
+  zoomLevels: {
+    provinceMinZoom: number;
+    regencyMinZoom: number;
+    districtMinZoom: number;
+    villageMinZoom: number;
+  };
+  labelZoom: {
+    provinceMaxZoom: number;
+    regencyMinZoom: number;
+    regencyMaxZoom: number;
+    districtMinZoom: number;
+    districtMaxZoom: number;
+    villageMinZoom: number;
+  };
+  viewportDebounceMs: number;
+  simplifyTolerances: {
+    lowZoom: number;
+    mediumZoom: number;
+    highZoom: number;
+    rawZoom: number;
+  };
+  datasetVersion: string;
+}
+
+export const ADMIN_MAP_CONFIG: AdministrativeZoomConfig = {
+  zoomLevels: {
+    provinceMinZoom: 1,
+    regencyMinZoom: 5,
+    districtMinZoom: 10,
+    villageMinZoom: 13,
+  },
+  labelZoom: {
+    provinceMaxZoom: 9,
+    regencyMinZoom: 6,
+    regencyMaxZoom: 12,
+    districtMinZoom: 10,
+    districtMaxZoom: 14,
+    villageMinZoom: 14,
+  },
+  viewportDebounceMs: 350,
+  simplifyTolerances: {
+    lowZoom: 0.015,     // Zoom < 10
+    mediumZoom: 0.003,  // Zoom 10 - 13
+    highZoom: 0.0006,   // Zoom 14
+    rawZoom: 15,        // Zoom >= 15 uses raw exact BIG coordinates
+  },
+  datasetVersion: 'ksp-rbi-2024-v2',
+};
+
+export interface AdministrativeCacheStats {
+  datasetVersion: string;
+  totalFeaturesIndexed: number;
+  cachedEntriesCount: number;
+  cacheHits: number;
+  cacheMisses: number;
+  lastPreloadedArea?: string;
+  lastQueryDurationMs: number;
+}
+

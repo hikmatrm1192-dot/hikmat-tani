@@ -30,7 +30,11 @@ import {
   OptObservation,
   VillageBoundaryFeature,
 } from '../../types/index.ts';
-import { AdministrativeFeature } from '../../types/administrativeBoundary.ts';
+import {
+  ADMIN_MAP_CONFIG,
+  AdministrativeFeature,
+  BoundingBox,
+} from '../../types/administrativeBoundary.ts';
 import {
   calculateGeodesicPerimeterM,
   calculateGeodesicPolygonAreaM2,
@@ -85,6 +89,7 @@ interface AgriculturalMapProps {
   onSelectDroughtZone?: (zone: DroughtZoneFeature) => void;
   onSelectVillage?: (village: VillageBoundaryFeature) => void;
   onSelectAdminFeature?: (feature: AdministrativeFeature) => void;
+  onViewportChange?: (viewport: BoundingBox, zoom: number) => void;
   userGps?: { lat: number; lng: number; accuracy?: number } | null;
   onGpsRequested?: () => void;
 }
@@ -111,6 +116,7 @@ export function AgriculturalMap({
   onSelectDroughtZone,
   onSelectVillage,
   onSelectAdminFeature,
+  onViewportChange,
   userGps,
   onGpsRequested,
 }: AgriculturalMapProps) {
@@ -118,6 +124,9 @@ export function AgriculturalMap({
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const hybridOverlayRef = useRef<L.TileLayer | null>(null);
+
+  // Status zoom peta saat ini untuk Progressive LOD rendering
+  const [currentZoom, setCurrentZoom] = useState<number>(DEFAULT_ZOOM);
 
   // Layer groups untuk manajemen render (urutan hierarkis dari bawah ke atas)
   const provinceLayerGroupRef = useRef<L.LayerGroup | null>(null);
@@ -139,6 +148,29 @@ export function AgriculturalMap({
   onSelectVillageRef.current = onSelectVillage;
   const onSelectAdminFeatureRef = useRef(onSelectAdminFeature);
   onSelectAdminFeatureRef.current = onSelectAdminFeature;
+  const onViewportChangeRef = useRef(onViewportChange);
+  onViewportChangeRef.current = onViewportChange;
+
+  const notifyViewportTimeoutRef = useRef<number | null>(null);
+
+  const triggerViewportUpdate = useCallback((map: L.Map) => {
+    if (notifyViewportTimeoutRef.current) {
+      window.clearTimeout(notifyViewportTimeoutRef.current);
+    }
+    notifyViewportTimeoutRef.current = window.setTimeout(() => {
+      if (!map) return;
+      const zoom = map.getZoom();
+      setCurrentZoom(zoom);
+      const bounds = map.getBounds();
+      const bbox: BoundingBox = {
+        minLat: bounds.getSouth(),
+        maxLat: bounds.getNorth(),
+        minLng: bounds.getWest(),
+        maxLng: bounds.getEast(),
+      };
+      onViewportChangeRef.current?.(bbox, zoom);
+    }, ADMIN_MAP_CONFIG.viewportDebounceMs);
+  }, []);
 
   // Inisialisasi Peta Leaflet & Native Tap Capture
   useEffect(() => {
@@ -172,6 +204,16 @@ export function AgriculturalMap({
 
       mapInstanceRef.current = map;
 
+      // Event listener untuk pergerakan & zoom viewport peta
+      map.on('moveend', () => triggerViewportUpdate(map));
+      map.on('zoomend', () => {
+        setCurrentZoom(map.getZoom());
+        triggerViewportUpdate(map);
+      });
+
+      // Trigger awal saat map dimuat
+      triggerViewportUpdate(map);
+
       // Pasang Capture Tap Prioritas Tinggi agar mode gambar petak sawah tidak tertutup layer manapun
       detachCapture = attachDrawingMapClickCapture(
         map,
@@ -188,6 +230,9 @@ export function AgriculturalMap({
     }
 
     return () => {
+      if (notifyViewportTimeoutRef.current) {
+        window.clearTimeout(notifyViewportTimeoutRef.current);
+      }
       if (detachCapture) {
         detachCapture();
       }
@@ -196,7 +241,8 @@ export function AgriculturalMap({
         mapInstanceRef.current = null;
       }
     };
-  }, []);
+  }, [triggerViewportUpdate]);
+
 
   // Update cursor saat mode gambar aktif
   useEffect(() => {
@@ -267,7 +313,13 @@ export function AgriculturalMap({
     if (!map || !group) return;
 
     group.clearLayers();
-    if (!layerVisibility.showProvinceBoundaries) return;
+    if (
+      !layerVisibility.showProvinceBoundaries ||
+      currentZoom < ADMIN_MAP_CONFIG.zoomLevels.provinceMinZoom
+    )
+      return;
+
+    const showLabel = currentZoom <= ADMIN_MAP_CONFIG.labelZoom.provinceMaxZoom;
 
     provinceBoundaries.forEach((province) => {
       if (!province.coordinates || province.coordinates.length < 3) return;
@@ -282,38 +334,41 @@ export function AgriculturalMap({
         fillOpacity: 0.02,
       });
 
-      const center = province.center || calculatePolygonCentroid(province.coordinates);
-      const labelIcon = L.divIcon({
-        className: 'hikmat-prov-label-wrapper',
-        html: `
-          <div style="
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            background: rgba(30, 27, 75, 0.9);
-            color: #ffffff;
-            border: 1px solid #6366f1;
-            padding: 3px 10px;
-            border-radius: 9999px;
-            font-size: 11px;
-            font-weight: 800;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-            pointer-events: none;
-            white-space: nowrap;
-            transform: translate(-50%, -50%);
-          ">
-            <span>🇮🇩</span>
-            <span>Prov. ${province.name}</span>
-          </div>
-        `,
-        iconSize: [0, 0],
-        iconAnchor: [0, 0],
-      });
+      if (showLabel) {
+        const center = province.center || calculatePolygonCentroid(province.coordinates);
+        const labelIcon = L.divIcon({
+          className: 'hikmat-prov-label-wrapper',
+          html: `
+            <div style="
+              display: inline-flex;
+              align-items: center;
+              gap: 4px;
+              background: rgba(30, 27, 75, 0.9);
+              color: #ffffff;
+              border: 1px solid #6366f1;
+              padding: 3px 10px;
+              border-radius: 9999px;
+              font-size: 11px;
+              font-weight: 800;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+              pointer-events: none;
+              white-space: nowrap;
+              transform: translate(-50%, -50%);
+            ">
+              <span>🇮🇩</span>
+              <span>Prov. ${province.name}</span>
+            </div>
+          `,
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
+        });
 
-      const labelMarker = L.marker([center.lat, center.lng], {
-        icon: labelIcon,
-        interactive: false,
-      });
+        const labelMarker = L.marker([center.lat, center.lng], {
+          icon: labelIcon,
+          interactive: false,
+        });
+        group.addLayer(labelMarker);
+      }
 
       polygon.bindTooltip(
         `
@@ -339,9 +394,8 @@ export function AgriculturalMap({
       });
 
       group.addLayer(polygon);
-      group.addLayer(labelMarker);
     });
-  }, [provinceBoundaries, layerVisibility.showProvinceBoundaries]);
+  }, [provinceBoundaries, layerVisibility.showProvinceBoundaries, currentZoom]);
 
   // 2. Render Batas Kabupaten / Kota (Level 2 - Garis Slate / Steel)
   useEffect(() => {
@@ -350,7 +404,15 @@ export function AgriculturalMap({
     if (!map || !group) return;
 
     group.clearLayers();
-    if (!layerVisibility.showRegencyBoundaries) return;
+    if (
+      !layerVisibility.showRegencyBoundaries ||
+      currentZoom < ADMIN_MAP_CONFIG.zoomLevels.regencyMinZoom
+    )
+      return;
+
+    const showLabel =
+      currentZoom >= ADMIN_MAP_CONFIG.labelZoom.regencyMinZoom &&
+      currentZoom <= ADMIN_MAP_CONFIG.labelZoom.regencyMaxZoom;
 
     regencyBoundaries.forEach((regency) => {
       if (!regency.coordinates || regency.coordinates.length < 3) return;
@@ -365,38 +427,41 @@ export function AgriculturalMap({
         fillOpacity: 0.03,
       });
 
-      const center = regency.center || calculatePolygonCentroid(regency.coordinates);
-      const labelIcon = L.divIcon({
-        className: 'hikmat-regency-label-wrapper',
-        html: `
-          <div style="
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            background: rgba(255, 255, 255, 0.94);
-            border: 1px solid #475569;
-            padding: 2px 8px;
-            border-radius: 9999px;
-            font-size: 11px;
-            font-weight: 800;
-            color: #1e293b;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-            pointer-events: none;
-            white-space: nowrap;
-            transform: translate(-50%, -50%);
-          ">
-            <span>🏙️</span>
-            <span>${regency.name}</span>
-          </div>
-        `,
-        iconSize: [0, 0],
-        iconAnchor: [0, 0],
-      });
+      if (showLabel) {
+        const center = regency.center || calculatePolygonCentroid(regency.coordinates);
+        const labelIcon = L.divIcon({
+          className: 'hikmat-regency-label-wrapper',
+          html: `
+            <div style="
+              display: inline-flex;
+              align-items: center;
+              gap: 4px;
+              background: rgba(255, 255, 255, 0.94);
+              border: 1px solid #475569;
+              padding: 2px 8px;
+              border-radius: 9999px;
+              font-size: 11px;
+              font-weight: 800;
+              color: #1e293b;
+              box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+              pointer-events: none;
+              white-space: nowrap;
+              transform: translate(-50%, -50%);
+            ">
+              <span>🏙️</span>
+              <span>${regency.name}</span>
+            </div>
+          `,
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
+        });
 
-      const labelMarker = L.marker([center.lat, center.lng], {
-        icon: labelIcon,
-        interactive: false,
-      });
+        const labelMarker = L.marker([center.lat, center.lng], {
+          icon: labelIcon,
+          interactive: false,
+        });
+        group.addLayer(labelMarker);
+      }
 
       polygon.bindTooltip(
         `
@@ -422,9 +487,8 @@ export function AgriculturalMap({
       });
 
       group.addLayer(polygon);
-      group.addLayer(labelMarker);
     });
-  }, [regencyBoundaries, layerVisibility.showRegencyBoundaries]);
+  }, [regencyBoundaries, layerVisibility.showRegencyBoundaries, currentZoom]);
 
   // 3. Render Batas Kecamatan (Level 3 - Garis Teal)
   useEffect(() => {
@@ -433,7 +497,15 @@ export function AgriculturalMap({
     if (!map || !group) return;
 
     group.clearLayers();
-    if (!layerVisibility.showDistrictBoundaries) return;
+    if (
+      !layerVisibility.showDistrictBoundaries ||
+      currentZoom < ADMIN_MAP_CONFIG.zoomLevels.districtMinZoom
+    )
+      return;
+
+    const showLabel =
+      currentZoom >= ADMIN_MAP_CONFIG.labelZoom.districtMinZoom &&
+      currentZoom <= ADMIN_MAP_CONFIG.labelZoom.districtMaxZoom;
 
     districtBoundaries.forEach((district) => {
       if (!district.coordinates || district.coordinates.length < 3) return;
@@ -448,38 +520,41 @@ export function AgriculturalMap({
         fillOpacity: 0.03,
       });
 
-      const center = district.center || calculatePolygonCentroid(district.coordinates);
-      const labelIcon = L.divIcon({
-        className: 'hikmat-district-label-wrapper',
-        html: `
-          <div style="
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            background: rgba(255, 255, 255, 0.94);
-            border: 1px solid #0d9488;
-            padding: 2px 8px;
-            border-radius: 9999px;
-            font-size: 11px;
-            font-weight: 800;
-            color: #134e4a;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.18);
-            pointer-events: none;
-            white-space: nowrap;
-            transform: translate(-50%, -50%);
-          ">
-            <span>🏛️</span>
-            <span>Kec. ${district.name}</span>
-          </div>
-        `,
-        iconSize: [0, 0],
-        iconAnchor: [0, 0],
-      });
+      if (showLabel) {
+        const center = district.center || calculatePolygonCentroid(district.coordinates);
+        const labelIcon = L.divIcon({
+          className: 'hikmat-district-label-wrapper',
+          html: `
+            <div style="
+              display: inline-flex;
+              align-items: center;
+              gap: 4px;
+              background: rgba(255, 255, 255, 0.94);
+              border: 1px solid #0d9488;
+              padding: 2px 8px;
+              border-radius: 9999px;
+              font-size: 11px;
+              font-weight: 800;
+              color: #134e4a;
+              box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+              pointer-events: none;
+              white-space: nowrap;
+              transform: translate(-50%, -50%);
+            ">
+              <span>🏛️</span>
+              <span>Kec. ${district.name}</span>
+            </div>
+          `,
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
+        });
 
-      const labelMarker = L.marker([center.lat, center.lng], {
-        icon: labelIcon,
-        interactive: false,
-      });
+        const labelMarker = L.marker([center.lat, center.lng], {
+          icon: labelIcon,
+          interactive: false,
+        });
+        group.addLayer(labelMarker);
+      }
 
       polygon.bindTooltip(
         `
@@ -505,9 +580,8 @@ export function AgriculturalMap({
       });
 
       group.addLayer(polygon);
-      group.addLayer(labelMarker);
     });
-  }, [districtBoundaries, layerVisibility.showDistrictBoundaries]);
+  }, [districtBoundaries, layerVisibility.showDistrictBoundaries, currentZoom]);
 
   // 4. Render Batas Wilayah Desa / Kelurahan Resmi (Level 4 - Garis Forest Emerald Detail)
   useEffect(() => {
@@ -516,7 +590,13 @@ export function AgriculturalMap({
     if (!map || !group) return;
 
     group.clearLayers();
-    if (!layerVisibility.showVillageBoundaries) return;
+    if (
+      !layerVisibility.showVillageBoundaries ||
+      currentZoom < ADMIN_MAP_CONFIG.zoomLevels.villageMinZoom
+    )
+      return;
+
+    const showLabel = currentZoom >= ADMIN_MAP_CONFIG.labelZoom.villageMinZoom;
 
     villageBoundaries.forEach((village) => {
       if (!village.coordinates || village.coordinates.length < 3) return;
@@ -531,39 +611,42 @@ export function AgriculturalMap({
         fillOpacity: 0.04,
       });
 
-      const center = village.center || calculatePolygonCentroid(village.coordinates);
-      const labelIcon = L.divIcon({
-        className: 'hikmat-village-label-wrapper',
-        html: `
-          <div style="
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            background: rgba(255, 255, 255, 0.94);
-            backdrop-filter: blur(4px);
-            border: 1px solid #10b981;
-            padding: 2px 8px;
-            border-radius: 9999px;
-            font-size: 11px;
-            font-weight: 800;
-            color: #064e3b;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.18);
-            pointer-events: none;
-            white-space: nowrap;
-            transform: translate(-50%, -50%);
-          ">
-            <span>🌾</span>
-            <span>${village.villageName}</span>
-          </div>
-        `,
-        iconSize: [0, 0],
-        iconAnchor: [0, 0],
-      });
+      if (showLabel) {
+        const center = village.center || calculatePolygonCentroid(village.coordinates);
+        const labelIcon = L.divIcon({
+          className: 'hikmat-village-label-wrapper',
+          html: `
+            <div style="
+              display: inline-flex;
+              align-items: center;
+              gap: 4px;
+              background: rgba(255, 255, 255, 0.94);
+              backdrop-filter: blur(4px);
+              border: 1px solid #10b981;
+              padding: 2px 8px;
+              border-radius: 9999px;
+              font-size: 11px;
+              font-weight: 800;
+              color: #064e3b;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+              pointer-events: none;
+              white-space: nowrap;
+              transform: translate(-50%, -50%);
+            ">
+              <span>🌾</span>
+              <span>${village.villageName}</span>
+            </div>
+          `,
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
+        });
 
-      const labelMarker = L.marker([center.lat, center.lng], {
-        icon: labelIcon,
-        interactive: false,
-      });
+        const labelMarker = L.marker([center.lat, center.lng], {
+          icon: labelIcon,
+          interactive: false,
+        });
+        group.addLayer(labelMarker);
+      }
 
       polygon.bindTooltip(
         `
@@ -589,9 +672,9 @@ export function AgriculturalMap({
       });
 
       group.addLayer(polygon);
-      group.addLayer(labelMarker);
     });
-  }, [villageBoundaries, layerVisibility.showVillageBoundaries]);
+  }, [villageBoundaries, layerVisibility.showVillageBoundaries, currentZoom]);
+
 
   // 5. Render Poligon Petak Sawah Lahan (m²)
   useEffect(() => {
