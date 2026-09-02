@@ -27,6 +27,7 @@
     "test:worker": "tsx tests/cloudflare-worker-global-scope.test.ts",
     "test:worker-admin": "tsx tests/worker-admin-secret.test.ts",
     "test:live": "tsx tests/live-production-worker.test.ts",
+    "test:live-health": "tsx tests/live-production-health.test.ts",
     "test:registration": "tsx tests/registration-flow.test.ts",
     "test:identity": "tsx tests/farmer-identity-isolation.test.ts",
     "test:aggregated": "tsx tests/aggregated-knowledge.test.ts",
@@ -64,17 +65,14 @@
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
-    "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/sharp": "^0.32.0",
     "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0",
     "fake-indexeddb": "^6.2.5",
     "sharp": "^0.35.4",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3",
     "wrangler": "^4.127.1"
   }
 }
