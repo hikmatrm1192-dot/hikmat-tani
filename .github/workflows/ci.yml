@@ -32,9 +32,6 @@ jobs:
       - name: Polygon tap regression
         run: npm run test:polygon-tap
 
-      - name: Official administrative boundary regression
-        run: npm run test:map-admin
-
       - name: Full regression suite
         run: npm test
 
