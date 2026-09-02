@@ -43,3 +43,6 @@ jobs:
 
       - name: Cloudflare Wrangler dry-run validation
         run: npx wrangler deploy --dry-run
+
+      - name: Live production non-mutating smoke
+        run: npm run test:live-health
