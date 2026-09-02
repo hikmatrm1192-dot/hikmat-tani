@@ -1,158 +1,235 @@
-# PANDUAN DEPLOYMENT PRODUCTION & OPERASIONAL
-## HIKMAT TANI
-**Tagline Resmi: "CERDAS BERTANI, BIJAK MENGAMBIL KEPUTUSAN."**
+# Panduan Deployment Production — HIKMAT TANI
 
-Dokumen ini menjelaskan tata cara deployment, konfigurasi environment, migrasi database PostgreSQL, pengoperasian server Express, dan pemantauan sistem HIKMAT TANI di lingkungan production (Cloud Run, Docker Container, VPS, atau PaaS).
+Dokumen ini adalah panduan deployment **arsitektur production yang saat ini digunakan HIKMAT TANI**: React/Vite PWA di Cloudflare Workers Assets, API di Cloudflare Worker, dan persistence cloud di Cloudflare D1.
 
----
+## 1. Arsitektur Production
 
-## 1. Arsitektur Deployment
-
-HIKMAT TANI dirancang dengan arsitektur **Hybrid Offline-First Full-Stack**:
-- **Client (Frontend)**: React 19 + TypeScript + Vite + Tailwind CSS + Dexie (IndexedDB) + PWA Service Worker. Berjalan offline secara mandiri di perangkat petani.
-- **Server (Backend)**: Node.js / Express + TypeScript (dibundel menjadi `dist/server.cjs` menggunakan esbuild) + Drizzle ORM.
-- **Database (Cloud Persistence)**: PostgreSQL 14+ (Cloud SQL, Supabase, Neon, RDS, atau instance PostgreSQL mandiri).
-
----
-
-## 2. Variabel Lingkungan (Environment Variables)
-
-Salin `.env.example` ke `.env` di server atau atur variabel lingkungan pada platform deployment (misal: Cloud Run Secret Manager / Environment Variables):
-
-| Variabel | Tipe | Wajib | Keterangan | Contoh Nilai |
-| :--- | :--- | :---: | :--- | :--- |
-| `PORT` | Number | Opsional | Port listener server HTTP (default: `3000`) | `3000` atau `8080` |
-| `NODE_ENV` | String | **Wajib** | Mode runtime Node.js | `production` |
-| `JWT_SECRET` | String | **Wajib** | Secret key acak untuk token sesi (HS256) | `openssl rand -base64 32` |
-| `CORS_ORIGIN` | String | Opsional | Domain yang diizinkan (atau `*` untuk multi-domain) | `https://app.hikmattani.id` |
-| `DATABASE_URL` | String | Opsional | Connection string PostgreSQL Drizzle | `postgresql://user:pass@host:5432/dbname?sslmode=require` |
-| `VITE_DONATION_URL` | String | Opsional | URL tautan donasi eksternal (Kitabisa/Saweria/dll) | `https://saweria.co/hikmattani` |
-
-> ⚠️ **Catatan Keamanan**: Jangan pernah menyertakan `JWT_SECRET` atau `DATABASE_URL` nyata ke dalam repository git.
-
----
-
-## 3. Langkah-Langkah Deployment
-
-### Tahap 1: Instalasi Dependensi
-```bash
-npm ci
+```text
+Petani / Browser / PWA
+        │
+        ▼
+https://app.hikmattani.id
+        │
+        ▼
+Cloudflare Worker: hikmat-tani
+        ├── SPA Assets
+        ├── /api/v1/*
+        ├── Auth & RBAC
+        ├── Offline sync gateway
+        └── Scheduled outbox drain
+                │
+                ▼
+Cloudflare D1: hikmat-tani-db
 ```
 
-### Tahap 2: Migrasi Database PostgreSQL (Idempotent)
-Jalankan migrasi skema SQL sebelum menyalakan server production:
-```bash
-npm run db:migrate
-```
-*Skrip `server/db/migrations/0000_init.sql` bersifat idempotent menggunakan klausa `CREATE TABLE IF NOT EXISTS`, sehingga aman dijalankan berulang kali.*
+Frontend tetap **offline-first** menggunakan IndexedDB/Dexie. Data cloud disinkronkan melalui Worker ketika koneksi tersedia.
 
-### Tahap 3: Kompilasi / Build Production
-Kompilasi client SPA dan backend server:
+## 2. Repository dan Environment
+
+Source of truth deployment adalah repository GitHub HIKMAT TANI dan konfigurasi `wrangler.toml`.
+
+Production binding saat ini:
+
+| Item | Nilai |
+|---|---|
+| Worker | `hikmat-tani` |
+| Custom domain | `app.hikmattani.id` |
+| Fallback | `hikmat-tani.hikmat-rm1192.workers.dev` |
+| D1 | `hikmat-tani-db` |
+| D1 binding | `DB` |
+| Provider | `d1` |
+| Runtime | Cloudflare Workers (Edge) |
+| API version | `v1` |
+
+Jangan commit secret production ke repository.
+
+Secret/credential production dikelola melalui Cloudflare, termasuk secret autentikasi pengelola dan secret JWT bila dikonfigurasi.
+
+## 3. Build dan Validasi Sebelum Deploy
+
+Gunakan Node.js 22.
+
+```bash
+npm install
+npm run lint
+npm test
+npm run build
+npx wrangler deploy --dry-run
+```
+
+CI production-readiness menjalankan urutan:
+
+1. Type check
+2. Polygon tap regression
+3. Full regression suite
+4. Production build
+5. Wrangler dry-run validation
+6. Non-mutating live production smoke
+
+Regression BIG administrative boundary adalah pemeriksaan khusus/manual karena upstream BIG dapat mengalami timeout/HTTP 5xx dan bukan dependency yang boleh membuat seluruh aplikasi gagal.
+
+## 4. Deployment Cloudflare
+
+Setelah validasi lokal/CI lolos:
+
 ```bash
 npm run build
-```
-Perintah ini akan menghasilkan:
-1. `dist/` — Artefak statis web (HTML, JS, CSS, PWA manifest, service worker).
-2. `dist/server.cjs` — Bundle server Express CommonJS mandiri siap eksekusi.
-
-### Tahap 4: Menjalankan Server Production
-Jalankan server menggunakan Node.js:
-```bash
-NODE_ENV=production npm start
-# atau
-NODE_ENV=production node dist/server.cjs
+npx wrangler deploy
 ```
 
----
+Pastikan Wrangler menunjukkan binding D1 `DB` menuju database production yang benar.
 
-## 4. Health Check & Monitoring
+Jangan menjalankan migration production secara sembarang dari laptop. Gunakan migration SQL yang versioned dan prosedur D1 yang sudah ditetapkan repository.
 
-Sistem menyediakan dua endpoint health check untuk orkestrator kontainer (Kubernetes, Docker Swarm, Cloud Run, AWS ECS):
+## 5. D1 Migration
 
-### 1. Endpoint Utama: `GET /api/v1/health`
-**Respons:**
-```json
-{
-  "success": true,
-  "status": "ok",
-  "app": "HIKMAT TANI",
-  "version": "1.0.0",
-  "apiVersion": "v1",
-  "environment": "production",
-  "database": {
-    "configured": true,
-    "connected": true,
-    "engine": "PostgreSQL (Drizzle ORM)",
-    "schemaVersion": "1.0.0"
-  },
-  "timestamp": "2026-08-27T10:00:00.000Z"
-}
+Migration production berada di:
+
+```text
+server/db/d1/migrations/
 ```
 
-### 2. Endpoint Kompatibilitas: `GET /api/health`
-**Respons:**
+Migration harus idempotent atau dijalankan melalui migration runner resmi yang mencatat migration yang sudah diterapkan.
+
+Sebelum perubahan schema:
+
+- pastikan migration sudah diuji;
+- pastikan tidak ada destructive operation yang tidak disengaja;
+- verifikasi schema D1 setelah deployment;
+- jangan menghapus data petani sebagai bagian dari deployment normal.
+
+## 6. Health Check
+
+Endpoint utama:
+
+```text
+GET /api/v1/health
+```
+
+Health production memeriksa **koneksi D1 secara nyata dengan `SELECT 1`**, bukan hanya keberadaan binding Worker.
+
+Respons sehat harus memiliki:
+
 ```json
 {
   "status": "ok",
   "app": "HIKMAT TANI",
-  "mode": "production",
+  "runtime": "Cloudflare Workers (Edge)",
   "database": {
     "configured": true,
-    "connected": true,
-    "engine": "PostgreSQL (Drizzle ORM)",
-    "schemaVersion": "1.0.0"
-  },
-  "timestamp": "2026-08-27T10:00:00.000Z"
+    "connected": true
+  }
 }
 ```
 
----
+Jika D1 tidak dapat diprobe, health menjadi `degraded` dan HTTP `503`.
 
-## 5. Konfigurasi Container (Dockerfile Contoh)
+Endpoint kompatibilitas tetap tersedia:
 
-```dockerfile
-# Multi-stage Dockerfile untuk HIKMAT TANI
-FROM node:22-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-
-FROM node:22-alpine AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-ENV PORT=3000
-COPY package*.json ./
-RUN npm ci --omit=dev
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/server ./server
-
-EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/v1/health || exit 1
-
-CMD ["node", "dist/server.cjs"]
+```text
+GET /api/health
 ```
 
----
+## 7. CORS dan Security Boundary
 
-## 6. Prosedur Graceful Shutdown
+Production tidak menggunakan wildcard CORS secara default.
 
-Server Express telah dilengkapi pendengar sinyal `SIGTERM` dan `SIGINT`:
-- Saat menerima sinyal penghentian, server menghentikan penerimaan request baru dan menyelesaikan request yang sedang berjalan.
-- Koneksi HTTP ditutup secara bersih dengan batas waktu maksimal 10 detik sebelum proses dimatikan.
+Origin production yang dipercaya secara eksplisit:
 
----
+- `https://app.hikmattani.id`
+- `https://hikmat-tani.hikmat-rm1192.workers.dev`
 
-## 7. Prosedur Pencadangan & Pemulihan (Backup & Disaster Recovery)
+Origin lain tidak otomatis dipercaya hanya karena merupakan subdomain `hikmattani.id` atau `workers.dev`.
 
-1. **Sisi Klien (Petani)**:
-   - Petani dapat melakukan ekspor JSON cadangan data lokal secara mandiri melalui menu **Pengaturan $\rightarrow$ Cadangkan Data**.
-   - Berkas backup terenkapsulasi dengan skema JSON standar HIKMAT TANI dan dapat dipulihkan kapan saja (*Atomic Restore*).
+Jika `CORS_ORIGIN` diatur, gunakan daftar origin eksplisit yang dipisahkan koma. Wildcard `*` hanya boleh digunakan jika memang sengaja dibutuhkan dan dipahami konsekuensinya.
 
-2. **Sisi Server (PostgreSQL)**:
-   - Gunakan `pg_dump` standar untuk pencadangan rutin basis data:
-   ```bash
-   pg_dump -U postgres -d hikmat_tani -F c -b -v -f "/backup/hikmat_tani_$(date +%Y%m%d_%H%M%S).dump"
-   ```
+## 8. Authentication dan Data Isolation
+
+Authentication petani menggunakan session token. Endpoint terproteksi harus memperoleh identitas dari token, bukan mempercayai `farmerId` yang dikirim bebas oleh client.
+
+Aturan penting:
+
+- Farmer A tidak boleh membaca atau mengubah data Farmer B.
+- Sync push/pull wajib terikat pada identitas sesi.
+- Duplicate operation harus idempotent.
+- Password/PIN tidak disimpan plaintext.
+- Secret Worker tidak dimasukkan ke frontend atau config publik.
+
+## 9. Offline-First dan PWA
+
+Aplikasi dirancang agar fungsi inti tetap dapat digunakan tanpa internet.
+
+PWA production harus menyediakan:
+
+- manifest;
+- service worker;
+- asset lokal untuk startup;
+- IndexedDB/Dexie untuk data lokal;
+- outbox untuk perubahan yang menunggu sinkronisasi.
+
+Saat online kembali, sync menggunakan operation ID/idempotency agar retry tidak menggandakan transaksi.
+
+## 10. Backup dan Recovery
+
+### Data lokal petani
+
+Gunakan fitur **Cadangkan Data / Backup** pada aplikasi untuk membuat backup JSON lokal. Restore harus divalidasi sebelum data diterapkan.
+
+### Data cloud
+
+Cloudflare D1 harus diperlakukan sebagai persistence production. Ikuti kemampuan backup/time-travel/export yang tersedia pada akun Cloudflare dan lakukan prosedur recovery secara terpisah dari deployment biasa.
+
+Jangan mengandalkan backup lokal petani sebagai satu-satunya backup database cloud.
+
+## 11. Smoke Test Setelah Deploy
+
+Setelah deployment, verifikasi minimal:
+
+```text
+GET https://app.hikmattani.id/api/v1/health
+GET https://app.hikmattani.id/
+```
+
+Kemudian secara manual dari perangkat Android:
+
+1. buka domain production;
+2. install/add to home screen sebagai PWA;
+3. buka ulang aplikasi;
+4. uji login/register dengan data uji yang aman;
+5. buat satu data lahan uji;
+6. matikan internet;
+7. pastikan data lokal masih dapat dibaca/ditambah;
+8. nyalakan internet;
+9. pastikan sync kembali berjalan;
+10. hapus data uji sesuai prosedur.
+
+**Catatan:** CI live smoke adalah bukti HTTP dari runner, bukan pengganti pengujian fisik Android.
+
+## 12. Rollback
+
+Jika deployment baru menyebabkan regresi:
+
+1. hentikan perubahan lanjutan;
+2. identifikasi commit/deployment terakhir yang sehat;
+3. rollback Worker ke versi yang sudah terverifikasi;
+4. jangan melakukan rollback schema D1 secara destruktif tanpa migration/recovery plan;
+5. verifikasi `/api/v1/health` dan SPA setelah rollback;
+6. catat incident dan root cause.
+
+## 13. Production Readiness Gate
+
+Deployment dinyatakan siap apabila:
+
+- type check lulus;
+- seluruh regression suite lulus;
+- build production lulus;
+- Wrangler dry-run lulus;
+- live production HTTP smoke lulus;
+- D1 health probe nyata lulus;
+- CORS tidak memberikan wildcard kepada origin asing;
+- farmer data isolation lulus;
+- PWA/startup regression lulus;
+- tidak ada secret production yang masuk repository;
+- pengujian Android fisik sudah dilakukan sebelum distribusi luas.
+
+Jika pengujian fisik Android belum dilakukan, status harus dicatat sebagai **production readiness terbukti secara otomatis, physical-device verification masih pending** — bukan dianggap sudah terbukti.
