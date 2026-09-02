@@ -4,15 +4,56 @@
  * Purpose: prove that the public Cloudflare deployment is reachable from CI.
  * This test intentionally performs GET-only requests and never creates or
  * modifies farmer/admin data.
+ *
+ * CI may provide PROD_IP when the runner's recursive DNS resolver cannot
+ * resolve the custom domain. HTTPS still uses the production hostname for
+ * SNI/Host/certificate validation while the socket is pinned to that IP.
  */
 
+import https from 'node:https';
+
 const PROD_URL = process.env.PROD_URL || 'https://app.hikmattani.id';
+const PROD_IP = process.env.PROD_IP?.trim() || '';
+
+function getUrl(path: string) {
+  return new URL(path, PROD_URL);
+}
+
+async function get(path: string, accept: string): Promise<Response> {
+  const url = getUrl(path);
+
+  if (!PROD_IP) {
+    return fetch(url, {
+      method: 'GET',
+      headers: { Accept: accept },
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    const request = https.request(url, {
+      method: 'GET',
+      headers: { Accept: accept },
+      servername: url.hostname,
+      lookup: (_hostname, _options, callback) => callback(null, PROD_IP, 4),
+    }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+      response.on('end', () => {
+        resolve(new Response(Buffer.concat(chunks), {
+          status: response.statusCode || 0,
+          headers: response.headers as Record<string, string | string[] | undefined>,
+        }));
+      });
+      response.on('error', reject);
+    });
+
+    request.on('error', reject);
+    request.end();
+  });
+}
 
 async function assertJsonHealth() {
-  const response = await fetch(`${PROD_URL}/api/v1/health`, {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-  });
+  const response = await get('/api/v1/health', 'application/json');
 
   if (response.status !== 200) {
     throw new Error(`Live production health returned HTTP ${response.status}`);
@@ -38,10 +79,7 @@ async function assertJsonHealth() {
 }
 
 async function assertSpaGateway() {
-  const response = await fetch(`${PROD_URL}/`, {
-    method: 'GET',
-    headers: { Accept: 'text/html' },
-  });
+  const response = await get('/', 'text/html');
 
   if (response.status !== 200) {
     throw new Error(`Live production SPA returned HTTP ${response.status}`);
@@ -54,7 +92,7 @@ async function assertSpaGateway() {
 }
 
 async function run() {
-  console.log(`\n=== LIVE PRODUCTION HEALTH SMOKE: ${PROD_URL} ===`);
+  console.log(`\n=== LIVE PRODUCTION HEALTH SMOKE: ${PROD_URL}${PROD_IP ? ` (IP pin ${PROD_IP})` : ''} ===`);
   await assertJsonHealth();
   console.log('✓ GET /api/v1/health reachable and identifies the expected Worker runtime');
   await assertSpaGateway();
