@@ -25,9 +25,10 @@ const ENDPOINTS: Record<AdminLevel, string> = {
   VILLAGE: `${BIG_BASE}/BATAS_DESAKEL_AR/MapServer/0`,
 };
 const JAWA_BARAT_CODE = '32';
-const MAX_RECORD_COUNT = 1000;
-const REQUEST_TIMEOUT_MS = 20000;
+const MAX_RECORD_COUNT = 200;
+const REQUEST_TIMEOUT_MS = 60000;
 const CACHE_PREFIX = 'hikmat-tani:big-admin:2026-06:';
+const REQUIRED_FIELDS = 'KDPPUM,KDPKAB,KDCPUM,KDEPUM,WADMPR,WADMKK,WADMKC,WADMKD';
 
 export const OFFICIAL_ADMIN_METADATA: OfficialGeospatialMetadata = {
   sourceName: 'Badan Informasi Geospasial (BIG) - Geoservices / Ina-Geoportal',
@@ -128,13 +129,13 @@ function cacheKey(level: AdminLevel, where: string, bbox?: BoundingBox | null): 
   return `${CACHE_PREFIX}${level}:${where}:${bboxKey}`;
 }
 
-async function fetchJson(url: string): Promise<GeoJsonFeatureCollection> {
+async function fetchJson<T>(url: string): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/geo+json, application/json' } });
     if (!response.ok) throw new Error(`BIG boundary request failed: HTTP ${response.status}`);
-    return (await response.json()) as GeoJsonFeatureCollection;
+    return (await response.json()) as T;
   } finally { clearTimeout(timeout); }
 }
 
@@ -155,8 +156,28 @@ function buildWhere(level: AdminLevel, parentCode?: string): string {
   return parentCode ? `KDCPUM='${parentCode}'` : `KDPPUM='${JAWA_BARAT_CODE}'`;
 }
 
+function geometrySimplification(level: AdminLevel, bbox?: BoundingBox | null): number {
+  if (bbox) {
+    const span = Math.max(bbox.maxLat - bbox.minLat, bbox.maxLng - bbox.minLng);
+    return Math.max(0.000005, Math.min(0.00015, span / 5000));
+  }
+  if (level === 'PROVINCE') return 0.01;
+  if (level === 'REGENCY') return 0.001;
+  if (level === 'DISTRICT') return 0.00025;
+  return 0.00008;
+}
+
 function buildQueryUrl(level: AdminLevel, where: string, offset: number, bbox?: BoundingBox | null): string {
-  const params = new URLSearchParams({ where, outFields: '*', returnGeometry: 'true', outSR: '4326', f: 'geojson', resultOffset: String(offset), resultRecordCount: String(MAX_RECORD_COUNT) });
+  const params = new URLSearchParams({
+    where,
+    outFields: REQUIRED_FIELDS,
+    returnGeometry: 'true',
+    outSR: '4326',
+    f: 'geojson',
+    resultOffset: String(offset),
+    resultRecordCount: String(MAX_RECORD_COUNT),
+    maxAllowableOffset: String(geometrySimplification(level, bbox)),
+  });
   if (bbox) {
     params.set('geometry', JSON.stringify({ xmin: bbox.minLng, ymin: bbox.minLat, xmax: bbox.maxLng, ymax: bbox.maxLat, spatialReference: { wkid: 4326 } }));
     params.set('geometryType', 'esriGeometryEnvelope');
@@ -179,12 +200,9 @@ class OfficialAdministrativeBoundaryService {
 
     const all: AdministrativeFeature[] = [];
     for (let offset = 0; ; offset += MAX_RECORD_COUNT) {
-      const json = await fetchJson(buildQueryUrl(level, where, offset, bbox));
+      const json = await fetchJson<GeoJsonFeatureCollection>(buildQueryUrl(level, where, offset, bbox));
       const page = json.features.map((feature) => toAdministrativeFeature(level, feature)).filter((feature): feature is AdministrativeFeature => Boolean(feature));
       all.push(...page);
-      // ArcGIS/BIG explicitly exposes this flag for paginated queries. Do not infer
-      // pagination from page length: spatial filtering can return a full page while
-      // the service is already at the end, or fewer records while more remain.
       if (json.exceededTransferLimit !== true) break;
     }
     const unique = Array.from(new Map(all.map((f) => [f.adminCode, f])).values());
