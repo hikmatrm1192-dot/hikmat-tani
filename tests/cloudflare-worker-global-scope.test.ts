@@ -59,10 +59,12 @@ async function runWorkerGlobalScopeTests() {
       prepare: (query: string) => {
         if (query.trim().toUpperCase() === 'SELECT 1') healthProbeCount++;
         return {
-          bind: () => ({
+          first: async () => null,
+          bind: (...args: any[]) => ({
             all: async () => ({ results: [] }),
             first: async () => null,
             run: async () => ({ success: true }),
+            raw: async () => [],
           }),
         };
       },
