@@ -10,6 +10,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PROD_URL: https://app.hikmattani.id
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -32,9 +35,6 @@ jobs:
       - name: Polygon tap regression
         run: npm run test:polygon-tap
 
-      - name: Official administrative boundary regression
-        run: npm run test:map-admin
-
       - name: Full regression suite
         run: npm test
 
@@ -43,3 +43,6 @@ jobs:
 
       - name: Cloudflare Wrangler dry-run validation
         run: npx wrangler deploy --dry-run
+
+      - name: Live production non-mutating smoke
+        run: npm run test:live-health

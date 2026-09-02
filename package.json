@@ -27,6 +27,7 @@
     "test:worker": "tsx tests/cloudflare-worker-global-scope.test.ts",
     "test:worker-admin": "tsx tests/worker-admin-secret.test.ts",
     "test:live": "tsx tests/live-production-worker.test.ts",
+    "test:live-health": "tsx tests/live-production-health.test.ts",
     "test:registration": "tsx tests/registration-flow.test.ts",
     "test:identity": "tsx tests/farmer-identity-isolation.test.ts",
     "test:aggregated": "tsx tests/aggregated-knowledge.test.ts",
