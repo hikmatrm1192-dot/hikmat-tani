@@ -1,7 +1,7 @@
 /**
  * HIKMAT TANI - Integration & Regression Tests:
  * Deteksi OPT Berbasis Foto & Integrasi Form Pengamatan OPT ke Rujukan PHT
- * 
+ *
  * 14 Skenario Pengujian:
  * 1. Pengamatan manual tanpa foto menghasilkan rujukan relevan (PHT diprioritaskan).
  * 2. Pengamatan manual + foto jelas mengekstraksi visual clues dan memperkuat relevansi kandidat.
@@ -38,10 +38,8 @@ export async function runOptPhotoIntegrationTests() {
   // Skenario 1: Pengamatan manual tanpa foto
   {
     const results = matchOptRelevance(SEED_OPTS, 'daun menguning dan rumpun kerdil', {
-      attackLocations: ['LEAF'],
-      minScoreThreshold: 6,
+      attackLocations: ['LEAF'], minScoreThreshold: 6,
     });
-
     assert(results.length > 0, 'Skenario 1: Harus menemukan rujukan relevan');
     const top = results[0];
     assert.strictEqual(top.phtSteps.length, 7, 'Skenario 1: Harus ada 7 langkah PHT');
@@ -55,17 +53,11 @@ export async function runOptPhotoIntegrationTests() {
   {
     const photoData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
     const visualAnalysis = await analyzePlantPhoto(photoData, 'LEAF');
-
     assert(visualAnalysis !== null, 'Skenario 2: Analisis visual harus menghasilkan objek result');
     assert(Array.isArray(visualAnalysis.visualClues), 'Skenario 2: Visual clues harus berupa array');
-
     const results = matchOptRelevance(SEED_OPTS, 'pucuk daun mengering mudah dicabut', {
-      attackLocations: ['LEAF', 'STEM'],
-      visualTokens: ['kuning', 'putih'],
-      visualClues: visualAnalysis.visualClues,
-      minScoreThreshold: 6,
+      attackLocations: ['LEAF', 'STEM'], visualTokens: ['kuning', 'putih'], visualClues: visualAnalysis.visualClues, minScoreThreshold: 6,
     });
-
     assert(results.length > 0, 'Skenario 2: Harus menemukan kandidat');
     const pbpkMatch = results.find((r) => r.opt.id === 'opt-penggerek-kuning');
     assert(pbpkMatch !== undefined, 'Skenario 2: Penggerek Batang Kuning harus ditemukan');
@@ -76,11 +68,8 @@ export async function runOptPhotoIntegrationTests() {
   // Skenario 3: Opsi "Belum tahu" + foto tidak menghasilkan diagnosis palsu
   {
     const results = matchOptRelevance(SEED_OPTS, 'bercak belah ketupat di tepi daun', {
-      attackLocations: ['LEAF'],
-      visualTokens: ['bercak', 'belah ketupat'],
-      minScoreThreshold: 6,
+      attackLocations: ['LEAF'], visualTokens: ['bercak', 'belah ketupat'], minScoreThreshold: 6,
     });
-
     assert(results.length > 0, 'Skenario 3: Harus menemukan rujukan');
     const top = results[0];
     assert(top.relevanceLabel.includes('Rujukan Pembanding'), 'Skenario 3: Harus berlabel Rujukan Pembanding');
@@ -92,17 +81,17 @@ export async function runOptPhotoIntegrationTests() {
 
   // Skenario 4: Foto tidak jelas / gelap ditangani dengan baik
   {
+    // Foto kosong adalah input tidak valid, sehingga kontraknya adalah UNCLEAR.
+    // BLURRY_OR_DARK dipakai oleh analisis piksel saat gambar terbaca tetapi
+    // pencahayaannya terlalu gelap/terang.
     const emptyResult = await analyzePlantPhoto('', 'LEAF');
-    assert.strictEqual(emptyResult.clarityStatus, 'BLURRY_OR_DARK');
+    assert.strictEqual(emptyResult.clarityStatus, 'UNCLEAR');
     assert.strictEqual(emptyResult.isHelpful, false);
     assert(emptyResult.clarityMessage.includes('belum cukup jelas'));
 
     const searchResult = matchOptRelevance(SEED_OPTS, 'malai hampa beluk', {
-      attackLocations: ['PANICLE'],
-      visualTokens: emptyResult.detectedKeywords,
-      minScoreThreshold: 6,
+      attackLocations: ['PANICLE'], visualTokens: emptyResult.detectedKeywords, minScoreThreshold: 6,
     });
-
     assert(searchResult.length > 0, 'Skenario 4: Pencarian tetap berjalan dengan baik');
     console.log('✓ Skenario 4 Lolos: Foto kosong atau format tidak valid menghasilkan status fallback yang aman');
   }
@@ -111,7 +100,6 @@ export async function runOptPhotoIntegrationTests() {
   {
     const wereng = SEED_OPTS.find((o) => o.id === 'opt-wereng-coklat')!;
     const steps = buildPhtSteps(wereng);
-
     assert.strictEqual(steps.length, 7);
     assert.strictEqual(steps[0].stepNumber, 1);
     assert(steps[0].actionTitle.includes('Konfirmasi Lapang'));
@@ -128,7 +116,6 @@ export async function runOptPhotoIntegrationTests() {
   {
     const pbpk = SEED_OPTS.find((o) => o.id === 'opt-penggerek-kuning')!;
     const chemOptions = buildChemicalOptions(pbpk);
-
     assert.strictEqual(chemOptions.hasChemicalData, true);
     assert(chemOptions.activeIngredients.includes('Klorantraniliprol'));
     assert(chemOptions.activeIngredients.includes('Dimehipo'));
@@ -140,18 +127,8 @@ export async function runOptPhotoIntegrationTests() {
   // Skenario 7: Tidak mengarang bahan aktif jika tidak ada di database
   {
     const customOpt: Opt = {
-      id: 'opt-custom-test',
-      commonName: 'Hama Uji Coba Lapang',
-      category: 'INSECT_PEST',
-      symptoms: 'Daun berlubang sedikit',
-      aliases: [],
-      hostPlants: ['Padi'],
-      triggerFactors: ['Kelembapan tinggi'],
-      activeIngredients: [],
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z',
+      id: 'opt-custom-test', commonName: 'Hama Uji Coba Lapang', category: 'INSECT_PEST', symptoms: 'Daun berlubang sedikit', aliases: [], hostPlants: ['Padi'], triggerFactors: ['Kelembapan tinggi'], activeIngredients: [], createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
     };
-
     const chemOptions = buildChemicalOptions(customOpt);
     assert.strictEqual(chemOptions.hasChemicalData, false);
     assert.strictEqual(chemOptions.activeIngredients.length, 0);
@@ -160,35 +137,20 @@ export async function runOptPhotoIntegrationTests() {
 
   // Skenario 8: Konteks bagian tanaman memprioritaskan OPT yang menyerang organ tersebut
   {
-    const panicleResults = matchOptRelevance(SEED_OPTS, 'gabah hampa bintik coklat', {
-      attackLocations: ['PANICLE'],
-      minScoreThreshold: 6,
-    });
-
+    const panicleResults = matchOptRelevance(SEED_OPTS, 'gabah hampa bintik coklat', { attackLocations: ['PANICLE'], minScoreThreshold: 6 });
     assert(panicleResults.length > 0);
     const topIds = panicleResults.slice(0, 3).map((r) => r.opt.id);
-    const isPaniclePestTop =
-      topIds.includes('opt-walang-sangit') || topIds.includes('opt-penggerek-kuning');
+    const isPaniclePestTop = topIds.includes('opt-walang-sangit') || topIds.includes('opt-penggerek-kuning');
     assert(isPaniclePestTop, 'Skenario 8: OPT malai (walang sangit / penggerek beluk) harus masuk kandidat teratas');
     console.log('✓ Skenario 8 Lolos: Bagian tanaman malai mengangkat beluk/walang sangit di atas hama daun');
   }
 
   // Skenario 9: Sinergi multi-gejala memberikan bobot kecocokan lebih tinggi
   {
-    const singleSymptom = matchOptRelevance(SEED_OPTS, 'daun menguning', {
-      attackLocations: ['LEAF'],
-      minScoreThreshold: 6,
-    });
-
-    const multiSymptom = matchOptRelevance(SEED_OPTS, 'daun menguning dan tanaman kerdil anakan sedikit', {
-      attackLocations: ['LEAF'],
-      minScoreThreshold: 6,
-    });
-
+    const singleSymptom = matchOptRelevance(SEED_OPTS, 'daun menguning', { attackLocations: ['LEAF'], minScoreThreshold: 6 });
+    const multiSymptom = matchOptRelevance(SEED_OPTS, 'daun menguning dan tanaman kerdil anakan sedikit', { attackLocations: ['LEAF'], minScoreThreshold: 6 });
     assert(singleSymptom.length > 0 && multiSymptom.length > 0);
-    const singleTop = singleSymptom[0];
-    const multiTop = multiSymptom[0];
-    assert(multiTop.score >= singleTop.score, 'Skenario 9: Multi gejala harus memiliki skor lebih tinggi atau sama');
+    assert(multiSymptom[0].score >= singleSymptom[0].score, 'Skenario 9: Multi gejala harus memiliki skor lebih tinggi atau sama');
     console.log('✓ Skenario 9 Lolos: Input multi-gejala spesifik mendapat bonus sinergi skor');
   }
 
@@ -206,11 +168,7 @@ export async function runOptPhotoIntegrationTests() {
 
   // Skenario 11: Pemetaan alias lokal terdaftar
   {
-    const results = matchOptRelevance(SEED_OPTS, 'kresek daun', {
-      attackLocations: ['LEAF'],
-      minScoreThreshold: 6,
-    });
-
+    const results = matchOptRelevance(SEED_OPTS, 'kresek daun', { attackLocations: ['LEAF'], minScoreThreshold: 6 });
     assert(results.length > 0);
     assert.strictEqual(results[0].opt.id, 'opt-hawar-daun-bakteri');
     assert.strictEqual(results[0].isExactMatch, true);
@@ -222,7 +180,6 @@ export async function runOptPhotoIntegrationTests() {
     const query = 'pucuk mati sundep batang padi';
     const run1 = matchOptRelevance(SEED_OPTS, query, { attackLocations: ['STEM'] });
     const run2 = matchOptRelevance(SEED_OPTS, query, { attackLocations: ['STEM'] });
-
     assert.strictEqual(run1.length, run2.length);
     assert.strictEqual(run1[0].opt.id, run2[0].opt.id);
     assert.strictEqual(run1[0].score, run2[0].score);
@@ -242,7 +199,6 @@ export async function runOptPhotoIntegrationTests() {
     const hst = calculateHST('2026-08-01', '2026-08-21');
     assert.strictEqual(hst.isValid, true);
     assert.strictEqual(hst.hst, 20);
-
     const nutrients = calculateNutrients(100, { N: 46, P2O5: 0, K2O: 0 });
     assert.strictEqual(nutrients.primarySummary.N_kg, 46);
     assert.strictEqual(nutrients.primarySummary.P2O5_kg, 0);
