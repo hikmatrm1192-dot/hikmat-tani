@@ -39,9 +39,15 @@ async function get(path: string, accept: string): Promise<Response> {
       const chunks: Buffer[] = [];
       response.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
       response.on('end', () => {
+        const responseHeaders = new Headers();
+        for (const [name, value] of Object.entries(response.headers)) {
+          if (value !== undefined) {
+            responseHeaders.set(name, Array.isArray(value) ? value.join(', ') : value);
+          }
+        }
         resolve(new Response(Buffer.concat(chunks), {
           status: response.statusCode || 0,
-          headers: response.headers as Record<string, string | string[] | undefined>,
+          headers: responseHeaders,
         }));
       });
       response.on('error', reject);
