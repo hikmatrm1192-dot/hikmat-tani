@@ -47,14 +47,8 @@ async function runTests() {
     const districtCount = await officialAdministrativeBoundaryService.getJawaBaratDistrictCount();
     const villageCount = await officialAdministrativeBoundaryService.getJawaBaratVillageCount();
 
-    assert.ok(
-      districtCount >= KEMENDAGRI_2025_JABAR_DISTRICTS,
-      `BIG harus menyediakan minimal ${KEMENDAGRI_2025_JABAR_DISTRICTS} kecamatan; diterima ${districtCount}`
-    );
-    assert.ok(
-      villageCount >= KEMENDAGRI_2025_JABAR_VILLAGES,
-      `BIG harus menyediakan minimal ${KEMENDAGRI_2025_JABAR_VILLAGES} desa/kelurahan; diterima ${villageCount}`
-    );
+    assert.ok(districtCount >= KEMENDAGRI_2025_JABAR_DISTRICTS, `BIG harus menyediakan minimal ${KEMENDAGRI_2025_JABAR_DISTRICTS} kecamatan; diterima ${districtCount}`);
+    assert.ok(villageCount >= KEMENDAGRI_2025_JABAR_VILLAGES, `BIG harus menyediakan minimal ${KEMENDAGRI_2025_JABAR_VILLAGES} desa/kelurahan; diterima ${villageCount}`);
 
     if (districtCount !== KEMENDAGRI_2025_JABAR_DISTRICTS) {
       console.warn(`DISCREPANCY: BIG kecamatan=${districtCount}, Kemendagri 2025=${KEMENDAGRI_2025_JABAR_DISTRICTS}. Data BIG tidak dipotong.`);
@@ -64,11 +58,17 @@ async function runTests() {
     }
   });
 
-  await test('Jawa Barat district hierarchy contains complete unique official codes', async () => {
-    const districts = await officialAdministrativeBoundaryService.getJawaBaratDistricts();
-    assert.ok(districts.length >= KEMENDAGRI_2025_JABAR_DISTRICTS);
+  await test('district viewport loading returns unique official hierarchy codes', async () => {
+    const districts = await officialAdministrativeBoundaryService.getJawaBaratDistrictsInBbox({
+      minLat: -6.5,
+      maxLat: -6.1,
+      minLng: 107.0,
+      maxLng: 107.7,
+    });
+    assert.ok(districts.length > 0, 'Viewport Jawa Barat harus mengembalikan kecamatan');
     assert.equal(new Set(districts.map((d) => d.adminCode)).size, districts.length);
     assert.ok(districts.every((d) => d.adminCode.startsWith('32.')));
+    assert.ok(districts.every((d) => d.hierarchy.provinsiCode === '32'));
     assert.ok(districts.every((d) => d.coordinates.length >= 3));
   });
 
