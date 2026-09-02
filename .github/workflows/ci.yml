@@ -40,3 +40,6 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Cloudflare Wrangler dry-run validation
+        run: npx wrangler deploy --dry-run
