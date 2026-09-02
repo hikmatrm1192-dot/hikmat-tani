@@ -27,6 +27,8 @@ const ENDPOINTS: Record<AdminLevel, string> = {
 const JAWA_BARAT_CODE = '32';
 const MAX_RECORD_COUNT = 200;
 const REQUEST_TIMEOUT_MS = 60000;
+const BIG_RETRY_ATTEMPTS = 4;
+const BIG_RETRY_BASE_DELAY_MS = 1000;
 const CACHE_PREFIX = 'hikmat-tani:big-admin:2026-06:';
 const REQUIRED_FIELDS = 'KDPPUM,KDPKAB,KDCPUM,KDEPUM,WADMPR,WADMKK,WADMKC,WADMKD';
 
@@ -129,25 +131,42 @@ function cacheKey(level: AdminLevel, where: string, bbox?: BoundingBox | null): 
   return `${CACHE_PREFIX}${level}:${where}:${bboxKey}`;
 }
 
+function isRetryableBigStatus(status: number): boolean {
+  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+async function wait(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/geo+json, application/json' } });
-    if (!response.ok) throw new Error(`BIG boundary request failed: HTTP ${response.status}`);
-    return (await response.json()) as T;
-  } finally { clearTimeout(timeout); }
+  let lastStatus = 0;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= BIG_RETRY_ATTEMPTS; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/geo+json, application/json' } });
+      if (response.ok) return (await response.json()) as T;
+      lastStatus = response.status;
+      if (!isRetryableBigStatus(response.status) || attempt === BIG_RETRY_ATTEMPTS) {
+        throw new Error(`BIG boundary request failed: HTTP ${response.status}`);
+      }
+    } catch (error) {
+      lastError = error;
+      if (error instanceof Error && error.name === 'AbortError' && attempt === BIG_RETRY_ATTEMPTS) throw error;
+      if (attempt === BIG_RETRY_ATTEMPTS) throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+    await wait(BIG_RETRY_BASE_DELAY_MS * attempt);
+  }
+  throw new Error(`BIG boundary request failed${lastStatus ? `: HTTP ${lastStatus}` : ''}${lastError instanceof Error ? `: ${lastError.message}` : ''}`);
 }
 
 async function fetchCount(url: string): Promise<number> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
-    if (!response.ok) throw new Error(`BIG boundary count request failed: HTTP ${response.status}`);
-    const payload = (await response.json()) as { count?: number };
-    return Number(payload.count || 0);
-  } finally { clearTimeout(timeout); }
+  const payload = await fetchJson<{ count?: number }>(url);
+  return Number(payload.count || 0);
 }
 
 function buildWhere(level: AdminLevel, parentCode?: string): string {
