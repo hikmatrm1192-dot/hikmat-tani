@@ -44,19 +44,5 @@ jobs:
       - name: Cloudflare Wrangler dry-run validation
         run: npx wrangler deploy --dry-run
 
-      - name: Resolve production IPv4 through Cloudflare DNS
-        id: resolve-production-dns
-        shell: bash
-        run: |
-          set -euo pipefail
-          ip="$(curl --fail --silent --show-error \
-            'https://cloudflare-dns.com/dns-query?name=app.hikmattani.id&type=A' \
-            -H 'accept: application/dns-json' \
-            | jq -r '.Answer[]? | select(.type == 1) | .data' \
-            | head -n 1)"
-          test -n "$ip"
-          echo "Resolved app.hikmattani.id to $ip through Cloudflare DNS-over-HTTPS"
-          echo "PROD_IP=$ip" >> "$GITHUB_ENV"
-
       - name: Live production non-mutating smoke
         run: npm run test:live-health
