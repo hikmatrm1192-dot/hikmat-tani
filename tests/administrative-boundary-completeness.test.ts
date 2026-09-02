@@ -4,6 +4,12 @@ import { officialAdministrativeBoundaryService } from '../src/services/officialA
 
 const KEMENDAGRI_2025_JABAR_DISTRICTS = 627;
 const KEMENDAGRI_2025_JABAR_VILLAGES = 5311;
+const REPRESENTATIVE_VIEWPORT = {
+  minLat: -6.35,
+  maxLat: -6.25,
+  minLng: 107.20,
+  maxLng: 107.40,
+};
 
 async function runTests() {
   console.log('=== TEST BATAS ADMINISTRASI JAWA BARAT ===');
@@ -59,13 +65,8 @@ async function runTests() {
   });
 
   await test('district viewport loading returns unique official hierarchy codes', async () => {
-    const districts = await officialAdministrativeBoundaryService.getJawaBaratDistrictsInBbox({
-      minLat: -6.5,
-      maxLat: -6.1,
-      minLng: 107.0,
-      maxLng: 107.7,
-    });
-    assert.ok(districts.length > 0, 'Viewport Jawa Barat harus mengembalikan kecamatan');
+    const districts = await officialAdministrativeBoundaryService.getJawaBaratDistrictsInBbox(REPRESENTATIVE_VIEWPORT);
+    assert.ok(districts.length > 0, 'Viewport representatif harus mengembalikan kecamatan');
     assert.equal(new Set(districts.map((d) => d.adminCode)).size, districts.length);
     assert.ok(districts.every((d) => d.adminCode.startsWith('32.')));
     assert.ok(districts.every((d) => d.hierarchy.provinsiCode === '32'));
@@ -73,13 +74,8 @@ async function runTests() {
   });
 
   await test('sample village viewport returns valid official polygons', async () => {
-    const villages = await officialAdministrativeBoundaryService.getJawaBaratVillages({
-      minLat: -6.5,
-      maxLat: -6.1,
-      minLng: 107.0,
-      maxLng: 107.7,
-    });
-    assert.ok(villages.length > 0, 'Viewport Jawa Barat harus mengembalikan desa/kelurahan');
+    const villages = await officialAdministrativeBoundaryService.getJawaBaratVillages(REPRESENTATIVE_VIEWPORT);
+    assert.ok(villages.length > 0, 'Viewport representatif harus mengembalikan desa/kelurahan');
     for (const feature of villages.slice(0, 50)) {
       assert.ok(feature.adminCode.startsWith('32.'));
       assert.ok(feature.coordinates.length >= 3);
