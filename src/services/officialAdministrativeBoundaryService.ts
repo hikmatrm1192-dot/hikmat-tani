@@ -44,6 +44,7 @@ export const OFFICIAL_ADMIN_METADATA: OfficialGeospatialMetadata = {
 
 interface GeoJsonFeatureCollection {
   type: 'FeatureCollection';
+  exceededTransferLimit?: boolean;
   features: Array<{
     type: 'Feature';
     geometry: { type: string; coordinates: unknown } | null;
@@ -181,7 +182,10 @@ class OfficialAdministrativeBoundaryService {
       const json = await fetchJson(buildQueryUrl(level, where, offset, bbox));
       const page = json.features.map((feature) => toAdministrativeFeature(level, feature)).filter((feature): feature is AdministrativeFeature => Boolean(feature));
       all.push(...page);
-      if (page.length < MAX_RECORD_COUNT) break;
+      // ArcGIS/BIG explicitly exposes this flag for paginated queries. Do not infer
+      // pagination from page length: spatial filtering can return a full page while
+      // the service is already at the end, or fewer records while more remain.
+      if (json.exceededTransferLimit !== true) break;
     }
     const unique = Array.from(new Map(all.map((f) => [f.adminCode, f])).values());
     this.memoryCache.set(key, unique);
